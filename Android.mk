@@ -30,6 +30,8 @@ ARMNN_BACKEND_MAKEFILE_DIRS := $(subst /backend.mk,,$(ARMNN_BACKEND_MAKEFILE_PAT
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libarmnn
+Q_OR_LATER := 1
+CPP_VERSION := c++17
 ifeq ($(Q_OR_LATER),1)
 # "eng" is deprecated in Android Q
 LOCAL_MODULE_TAGS := optional
