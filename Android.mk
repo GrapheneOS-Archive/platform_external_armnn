@@ -227,7 +227,8 @@ LOCAL_CFLAGS := \
         -Wno-unused-parameter \
         -frtti \
         -Wno-ignored-qualifiers \
-        -Wno-macro-redefined
+        -Wno-macro-redefined \
+        -Wno-unreachable-code-loop-increment
 
 # The variable to enable/disable the CL backend (ARMNN_COMPUTE_CL_ENABLED) is declared in android-nn-driver/Android.mk
 ifeq ($(ARMNN_COMPUTE_CL_ENABLED),1)
