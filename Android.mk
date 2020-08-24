@@ -300,11 +300,14 @@ LOCAL_C_INCLUDES := \
         $(ARMNN_PROFILING_HEADER_PATH) \
         $(ARMNN_BACKENDS_HEADER_PATH)
 
+# TODO (b/166133440) remove boost
 LOCAL_CFLAGS := \
         -std=$(CPP_VERSION) \
         -fexceptions \
         -frtti \
-        -isystem vendor/arm/android-nn-driver/boost_1_64_0
+        -isystem vendor/arm/android-nn-driver/boost_1_64_0 \
+        -Wno-unused-local-typedef \
+        -Wno-unused-variable
 
 # The variable to enable/disable the CL backend (ARMNN_COMPUTE_CL_ENABLED) is declared in android-nn-driver/Android.mk
 ifeq ($(ARMNN_COMPUTE_CL_ENABLED),1)
