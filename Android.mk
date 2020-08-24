@@ -7,7 +7,6 @@ LOCAL_PATH := $(call my-dir)
 
 # Configure these paths if you move the source or Khronos headers
 OPENCL_HEADER_PATH := $(LOCAL_PATH)/../clframework/include
-NN_HEADER_PATH := $(LOCAL_PATH)/../../../../frameworks/ml/nn/runtime/include
 ARMNN_HEADER_PATH := $(LOCAL_PATH)/include
 ARMNN_MAIN_HEADER_PATH := $(LOCAL_PATH)/src
 ARMNN_SOURCE_HEADER_PATH := $(LOCAL_PATH)/src/armnn
