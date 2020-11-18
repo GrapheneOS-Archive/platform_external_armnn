@@ -5,9 +5,8 @@
 
 #include "DetectionPostProcess.hpp"
 
-
-#include <boost/assert.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <algorithm>
 #include <numeric>
@@ -67,7 +66,7 @@ std::vector<unsigned int> NonMaxSuppression(unsigned int numBoxes,
     }
 
     // Sort the indices based on scores.
-    unsigned int numAboveThreshold = boost::numeric_cast<unsigned int>(scoresAboveThreshold.size());
+    unsigned int numAboveThreshold = armnn::numeric_cast<unsigned int>(scoresAboveThreshold.size());
     std::vector<unsigned int> sortedIndices = GenerateRangeK(numAboveThreshold);
     TopKSort(numAboveThreshold, sortedIndices.data(), scoresAboveThreshold.data(), numAboveThreshold);
 
@@ -86,14 +85,14 @@ std::vector<unsigned int> NonMaxSuppression(unsigned int numBoxes,
         if (!visited[sortedIndices[i]])
         {
             outputIndices.push_back(indicesAboveThreshold[sortedIndices[i]]);
-        }
-        for (unsigned int j = i + 1; j < numAboveThreshold; ++j)
-        {
-            unsigned int iIndex = indicesAboveThreshold[sortedIndices[i]] * 4;
-            unsigned int jIndex = indicesAboveThreshold[sortedIndices[j]] * 4;
-            if (IntersectionOverUnion(&boxCorners[iIndex], &boxCorners[jIndex]) > nmsIouThreshold)
+            for (unsigned int j = i + 1; j < numAboveThreshold; ++j)
             {
-                visited[sortedIndices[j]] = true;
+                unsigned int iIndex = indicesAboveThreshold[sortedIndices[i]] * 4;
+                unsigned int jIndex = indicesAboveThreshold[sortedIndices[j]] * 4;
+                if (IntersectionOverUnion(&boxCorners[iIndex], &boxCorners[jIndex]) > nmsIouThreshold)
+                {
+                    visited[sortedIndices[j]] = true;
+                }
             }
         }
     }
@@ -119,7 +118,7 @@ void AllocateOutputData(unsigned int numOutput,
             {
                 unsigned int boxCornorIndex = selectedBoxes[outputIndices[i]] * 4;
                 detectionScores[i] = selectedScores[outputIndices[i]];
-                detectionClasses[i] = boost::numeric_cast<float>(selectedClasses[outputIndices[i]]);
+                detectionClasses[i] = armnn::numeric_cast<float>(selectedClasses[outputIndices[i]]);
                 detectionBoxes[boxIndex] = boxCorners[boxCornorIndex];
                 detectionBoxes[boxIndex + 1] = boxCorners[boxCornorIndex + 1];
                 detectionBoxes[boxIndex + 2] = boxCorners[boxCornorIndex + 2];
@@ -135,7 +134,7 @@ void AllocateOutputData(unsigned int numOutput,
                 detectionBoxes[boxIndex + 3] = 0.0f;
             }
         }
-        numDetections[0] = boost::numeric_cast<float>(numSelected);
+        numDetections[0] = armnn::numeric_cast<float>(numSelected);
 }
 
 void DetectionPostProcess(const TensorInfo& boxEncodingsInfo,
@@ -154,7 +153,7 @@ void DetectionPostProcess(const TensorInfo& boxEncodingsInfo,
                           float* detectionScores,
                           float* numDetections)
 {
-    boost::ignore_unused(anchorsInfo, detectionClassesInfo, detectionScoresInfo, numDetectionsInfo);
+    IgnoreUnused(anchorsInfo, detectionClassesInfo, detectionScoresInfo, numDetectionsInfo);
 
     // Transform center-size format which is (ycenter, xcenter, height, width) to box-corner format,
     // which represents the lower left corner and the upper right corner (ymin, xmin, ymax, xmax)
@@ -213,8 +212,8 @@ void DetectionPostProcess(const TensorInfo& boxEncodingsInfo,
         // xmax
         boxCorners[indexW] = xCentre + halfW;
 
-        BOOST_ASSERT(boxCorners[indexY] < boxCorners[indexH]);
-        BOOST_ASSERT(boxCorners[indexX] < boxCorners[indexW]);
+        ARMNN_ASSERT(boxCorners[indexY] < boxCorners[indexH]);
+        ARMNN_ASSERT(boxCorners[indexX] < boxCorners[indexW]);
     }
 
     unsigned int numClassesWithBg = desc.m_NumClasses + 1;
@@ -267,7 +266,7 @@ void DetectionPostProcess(const TensorInfo& boxEncodingsInfo,
         }
 
         // Select max detection numbers of the highest score across all classes
-        unsigned int numSelected = boost::numeric_cast<unsigned int>(selectedBoxesAfterNms.size());
+        unsigned int numSelected = armnn::numeric_cast<unsigned int>(selectedBoxesAfterNms.size());
         unsigned int numOutput = std::min(desc.m_MaxDetections,  numSelected);
 
         // Sort the max scores among the selected indices.
@@ -311,7 +310,7 @@ void DetectionPostProcess(const TensorInfo& boxEncodingsInfo,
                                                                       desc.m_MaxDetections,
                                                                       desc.m_NmsIouThreshold);
 
-        unsigned int numSelected = boost::numeric_cast<unsigned int>(selectedIndices.size());
+        unsigned int numSelected = armnn::numeric_cast<unsigned int>(selectedIndices.size());
         unsigned int numOutput = std::min(desc.m_MaxDetections,  numSelected);
 
         AllocateOutputData(detectionBoxesInfo.GetShape()[1], numOutput, boxCorners, selectedIndices,

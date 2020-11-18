@@ -4,12 +4,8 @@
 //
 #include "ModelAccuracyChecker.hpp"
 
-#include <boost/algorithm/string.hpp>
 #include <boost/test/unit_test.hpp>
 
-#include <boost/filesystem.hpp>
-#include <boost/optional.hpp>
-#include <boost/variant.hpp>
 #include <iostream>
 #include <string>
 
@@ -56,7 +52,7 @@ struct TestHelper
 
 BOOST_AUTO_TEST_SUITE(ModelAccuracyCheckerTest)
 
-using TContainer = boost::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
+using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
 BOOST_FIXTURE_TEST_CASE(TestFloat32OutputTensorAccuracy, TestHelper)
 {

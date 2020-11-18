@@ -1,12 +1,11 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <armnn/MemorySources.hpp>
-
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace armnn
 {
@@ -62,7 +61,7 @@ public:
     /// \return a TensorShape filled with the number of elements for each dimension.
     virtual TensorShape GetShape() const = 0;
 
-    // Testing support to be able to verify and set tensor data content
+    /// Testing support to be able to verify and set tensor data content
     virtual void CopyOutTo(void* memory) const = 0;
     virtual void CopyInFrom(const void* memory) = 0;
 
@@ -75,7 +74,7 @@ public:
     /// \return true on success or false on failure
     virtual bool Import(void* memory, MemorySource source)
     {
-        boost::ignore_unused(memory, source);
+        IgnoreUnused(memory, source);
         return false;
     };
 };

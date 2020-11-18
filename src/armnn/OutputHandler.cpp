@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,8 +8,6 @@
 #include <armnn/backends/ITensorHandle.hpp>
 #include <backendsCommon/WorkloadDataCollector.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
-
-#include <boost/assert.hpp>
 
 namespace armnn
 {
@@ -22,7 +20,9 @@ void OutputHandler::SetTensorInfo(const TensorInfo& tensorInfo)
 
 void OutputHandler::CreateTensorHandles(const IWorkloadFactory& factory, const bool IsMemoryManaged)
 {
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
     m_TensorHandle = factory.CreateTensorHandle(m_TensorInfo, IsMemoryManaged);
+    ARMNN_NO_DEPRECATE_WARN_END
 }
 
 void OutputHandler::CreateTensorHandles(const ITensorHandleFactory& factory, const bool IsMemoryManaged)

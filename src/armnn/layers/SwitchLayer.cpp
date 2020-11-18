@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "SwitchLayer.hpp"
@@ -19,6 +19,8 @@ SwitchLayer::SwitchLayer(const char* name)
 std::unique_ptr<IWorkload> SwitchLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     SwitchQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateSwitch(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -31,24 +33,23 @@ void SwitchLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(2, CHECK_LOCATION());
 
-    BOOST_ASSERT_MSG(GetNumOutputSlots() == 2, "SwitchLayer: The layer should return 2 outputs.");
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
+    ARMNN_ASSERT_MSG(GetNumOutputSlots() == 2, "SwitchLayer: The layer should return 2 outputs.");
 
     // Assuming first input is the Input and second input is the Constant
     std::vector<TensorShape> inferredShapes = InferOutputShapes({
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-        GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape() });
+        GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape()});
 
-    BOOST_ASSERT(inferredShapes.size() == 2);
+    ARMNN_ASSERT(inferredShapes.size() == 2);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "SwitchLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SwitchLayer");
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "SwitchLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(1).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(
+            GetOutputSlot(1).GetTensorInfo().GetShape(), inferredShapes[1], m_ShapeInferenceMethod, "SwitchLayer", 1);
 }
 
 void SwitchLayer::Accept(ILayerVisitor& visitor) const

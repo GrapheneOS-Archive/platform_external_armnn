@@ -28,13 +28,18 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
 
     std::vector<uint8_t> falseData = {0};
     ConstTensor falseTensor(armnn::TensorInfo({1}, armnn::DataType::Boolean), falseData);
-    IConnectableLayer* constLayer = net->AddConstantLayer(falseTensor, "const");    
+    IConnectableLayer* constLayer = net->AddConstantLayer(falseTensor, "const");
     constLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
 
     IConnectableLayer* input = net->AddInputLayer(0);
+    input->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
 
     IConnectableLayer* switchLayer = net->AddSwitchLayer("switch");
+    switchLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
+    switchLayer->GetOutputSlot(1).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
+
     IConnectableLayer* mergeLayer = net->AddMergeLayer("merge");
+    mergeLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
 
     IConnectableLayer* output = net->AddOutputLayer(0);
 
@@ -46,8 +51,18 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
 
     // optimize the network
     std::vector<BackendId> backends = {Compute::CpuRef};
-    IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec());
-    BOOST_CHECK(!optNet); // Should have failed to optimise, as flow control is not yet implemented
+    std::vector<std::string> errMessages;
+
+    try
+    {
+        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptions(), errMessages);
+        BOOST_FAIL("Should have thrown an exception.");
+    }
+    catch (const InvalidArgumentException& e)
+    {
+        // Different exceptions are thrown on different backends
+    }
+    BOOST_TEST(errMessages.size() > 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

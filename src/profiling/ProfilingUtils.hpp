@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,10 +8,12 @@
 #include <armnn/Exceptions.hpp>
 #include <armnn/profiling/ISendTimelinePacket.hpp>
 
+#include <armnn/utility/NumericCast.hpp>
+
 #include "ICounterDirectory.hpp"
 #include "IPacketBuffer.hpp"
 
-#include <boost/numeric/conversion/cast.hpp>
+#include <common/include/Packet.hpp>
 
 #include <algorithm>
 #include <cstring>
@@ -26,114 +28,7 @@ namespace armnn
 namespace profiling
 {
 
-struct SwTraceHeader
-{
-    uint8_t m_StreamVersion;
-    uint8_t m_PointerBytes;
-    uint8_t m_ThreadIdBytes;
-};
-
-struct SwTraceMessage
-{
-    uint32_t m_Id;
-    std::string m_Name;
-    std::string m_UiName;
-    std::vector<char> m_ArgTypes;
-    std::vector<std::string> m_ArgNames;
-};
-
-struct SwTraceCharPolicy
-{
-    static bool IsValidChar(unsigned char c)
-    {
-        // Check that the given character has ASCII 7-bit encoding
-        return c < 128;
-    }
-};
-
-struct SwTraceNameCharPolicy
-{
-    static bool IsValidChar(unsigned char c)
-    {
-        // Check that the given character has ASCII 7-bit encoding, alpha-numeric and underscore only
-        return c < 128 && (std::isalnum(c) || c == '_');
-    }
-};
-
-struct SwTraceTypeCharPolicy
-{
-    static bool IsValidChar(unsigned char c)
-    {
-        // Check that the given character is among the allowed ones
-        switch (c)
-        {
-        case '@':
-        case 't':
-        case 'i':
-        case 'I':
-        case 'l':
-        case 'L':
-        case 'F':
-        case 'p':
-        case 's':
-            return true; // Valid char
-        default:
-            return false; // Invalid char
-        }
-    }
-};
-
-template <typename SwTracePolicy>
-bool IsValidSwTraceString(const std::string& s)
-{
-    // Check that all the characters in the given string conform to the given policy
-    return std::all_of(s.begin(), s.end(), [](unsigned char c) { return SwTracePolicy::IsValidChar(c); });
-}
-
-template <typename SwTracePolicy>
-bool StringToSwTraceString(const std::string& s, std::vector<uint32_t>& outputBuffer)
-{
-    // Converts the given string to an SWTrace "string" (i.e. a string of "chars"), and writes it into
-    // the given buffer including the null-terminator. It also pads it to the next uint32_t if necessary
-
-    // Clear the output buffer
-    outputBuffer.clear();
-
-    // Check that the given string is a valid SWTrace "string" (i.e. a string of "chars")
-    if (!IsValidSwTraceString<SwTracePolicy>(s))
-    {
-        return false;
-    }
-
-    // Prepare the output buffer
-    size_t s_size        = s.size() + 1;    // The size of the string (in chars) plus the null-terminator
-    size_t uint32_t_size = sizeof(uint32_t);
-    size_t outBufferSize = 1 + s_size / uint32_t_size + (s_size % uint32_t_size != 0 ? 1 : 0);
-    outputBuffer.resize(outBufferSize, '\0');
-
-    // Write the SWTrace string to the output buffer
-    outputBuffer[0] = boost::numeric_cast<uint32_t>(s_size);
-    std::memcpy(outputBuffer.data() + 1, s.data(), s_size);
-
-    return true;
-}
-
-template <typename SwTracePolicy,
-          typename SwTraceBuffer = std::vector<uint32_t>>
-bool ConvertDirectoryComponent(const std::string& directoryComponent, SwTraceBuffer& swTraceBuffer)
-{
-    // Convert the directory component using the given policy
-    SwTraceBuffer tempSwTraceBuffer;
-    bool result = StringToSwTraceString<SwTracePolicy>(directoryComponent, tempSwTraceBuffer);
-    if (!result)
-    {
-        return false;
-    }
-
-    swTraceBuffer.insert(swTraceBuffer.end(), tempSwTraceBuffer.begin(), tempSwTraceBuffer.end());
-
-    return true;
-}
+constexpr unsigned int ThreadIdSize = sizeof(int); // Is platform dependent
 
 uint16_t GetNextUid(bool peekOnly = false);
 
@@ -183,6 +78,13 @@ uint16_t ReadUint16(unsigned const char* buffer, unsigned int offset);
 
 uint8_t ReadUint8(unsigned const char* buffer, unsigned int offset);
 
+std::pair<uint32_t, uint32_t> CreateTimelinePacketHeader(uint32_t packetFamily,
+                                                         uint32_t packetClass,
+                                                         uint32_t packetType,
+                                                         uint32_t streamId,
+                                                         uint32_t sequenceNumbered,
+                                                         uint32_t dataLength);
+
 std::string GetSoftwareInfo();
 
 std::string GetSoftwareVersion();
@@ -198,44 +100,42 @@ enum class TimelinePacketStatus
     BufferExhaustion
 };
 
-uint32_t CalculateSizeOfPaddedSwString(const std::string& str);
-
-SwTraceMessage ReadSwTraceMessage(const unsigned char*, unsigned int& offset);
-
 TimelinePacketStatus WriteTimelineLabelBinaryPacket(uint64_t profilingGuid,
                                                     const std::string& label,
                                                     unsigned char* buffer,
                                                     unsigned int bufferSize,
                                                     unsigned int& numberOfBytesWritten);
 
-TimelinePacketStatus WriteTimelineEntityBinaryPacket(uint64_t profilingGuid,
+TimelinePacketStatus WriteTimelineEntityBinary(uint64_t profilingGuid,
+                                               unsigned char* buffer,
+                                               unsigned int bufferSize,
+                                               unsigned int& numberOfBytesWritten);
+
+TimelinePacketStatus WriteTimelineRelationshipBinary(ProfilingRelationshipType relationshipType,
+                                                     uint64_t relationshipGuid,
+                                                     uint64_t headGuid,
+                                                     uint64_t tailGuid,
+                                                     uint64_t attributeGuid,
                                                      unsigned char* buffer,
                                                      unsigned int bufferSize,
                                                      unsigned int& numberOfBytesWritten);
-
-TimelinePacketStatus WriteTimelineRelationshipBinaryPacket(ProfilingRelationshipType relationshipType,
-                                                           uint64_t relationshipGuid,
-                                                           uint64_t headGuid,
-                                                           uint64_t tailGuid,
-                                                           unsigned char* buffer,
-                                                           unsigned int bufferSize,
-                                                           unsigned int& numberOfBytesWritten);
 
 TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
                                                           unsigned int bufferSize,
                                                           unsigned int& numberOfBytesWritten);
 
-TimelinePacketStatus WriteTimelineEventClassBinaryPacket(uint64_t profilingGuid,
-                                                         unsigned char* buffer,
-                                                         unsigned int bufferSize,
-                                                         unsigned int& numberOfBytesWritten);
+TimelinePacketStatus WriteTimelineEventClassBinary(uint64_t profilingGuid,
+                                                   uint64_t nameGuid,
+                                                   unsigned char* buffer,
+                                                   unsigned int bufferSize,
+                                                   unsigned int& numberOfBytesWritten);
 
-TimelinePacketStatus WriteTimelineEventBinaryPacket(uint64_t timestamp,
-                                                    std::thread::id threadId,
-                                                    uint64_t profilingGuid,
-                                                    unsigned char* buffer,
-                                                    unsigned int bufferSize,
-                                                    unsigned int& numberOfBytesWritten);
+TimelinePacketStatus WriteTimelineEventBinary(uint64_t timestamp,
+                                              int threadId,
+                                              uint64_t profilingGuid,
+                                              unsigned char* buffer,
+                                              unsigned int bufferSize,
+                                              unsigned int& numberOfBytesWritten);
 
 std::string CentreAlignFormatting(const std::string& stringToPass, const int spacingWidth);
 
@@ -248,6 +148,8 @@ class BufferExhaustion : public armnn::Exception
 
 uint64_t GetTimestamp();
 
+arm::pipe::Packet ReceivePacket(const unsigned char* buffer, uint32_t length);
+
 } // namespace profiling
 
 } // namespace armnn
@@ -255,6 +157,6 @@ uint64_t GetTimestamp();
 namespace std
 {
 
-bool operator==(const std::vector<uint8_t>& left, std::thread::id right);
+bool operator==(const std::vector<uint8_t>& left, int right);
 
 } // namespace std

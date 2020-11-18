@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -90,7 +90,7 @@ inline auto SetClSliceData(const std::vector<unsigned int>& m_begin,
 inline void InitializeArmComputeClTensorData(arm_compute::CLTensor& clTensor,
                                              const ConstCpuTensorHandle* handle)
 {
-    BOOST_ASSERT(handle);
+    ARMNN_ASSERT(handle);
 
     armcomputetensorutils::InitialiseArmComputeTensorEmpty(clTensor);
     switch(handle->GetTensorInfo().GetDataType())
@@ -101,22 +101,25 @@ inline void InitializeArmComputeClTensorData(arm_compute::CLTensor& clTensor,
         case DataType::Float32:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<float>());
             break;
-        case DataType::QAsymmS8:
         case DataType::QAsymmU8:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<uint8_t>());
             break;
         ARMNN_NO_DEPRECATE_WARN_BEGIN
         case DataType::QuantizedSymm8PerAxis:
             ARMNN_FALLTHROUGH;
+        case DataType::QAsymmS8:
         case DataType::QSymmS8:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int8_t>());
+            break;
+        case DataType::QSymmS16:
+            CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int16_t>());
             break;
         ARMNN_NO_DEPRECATE_WARN_END
         case DataType::Signed32:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int32_t>());
             break;
         default:
-            BOOST_ASSERT_MSG(false, "Unexpected tensor type.");
+            ARMNN_ASSERT_MSG(false, "Unexpected tensor type.");
     }
 };
 

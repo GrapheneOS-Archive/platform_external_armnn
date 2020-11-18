@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,6 +24,7 @@ template <armnn::DataType ArmnnType,
 LayerTestResult<T, OutputDim> GatherTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::TensorInfo& paramsInfo,
     const armnn::TensorInfo& indicesInfo,
     const armnn::TensorInfo& outputInfo,
@@ -31,16 +32,16 @@ LayerTestResult<T, OutputDim> GatherTestImpl(
     const std::vector<int32_t>& indicesData,
     const std::vector<T>& outputData)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     auto params  = MakeTensor<T, ParamsDim>(paramsInfo, paramsData);
     auto indices = MakeTensor<int32_t, IndicesDim>(indicesInfo, indicesData);
 
     LayerTestResult<T, OutputDim> result(outputInfo);
     result.outputExpected = MakeTensor<T, OutputDim>(outputInfo, outputData);
 
-    std::unique_ptr<armnn::ITensorHandle> paramsHandle = workloadFactory.CreateTensorHandle(paramsInfo);
-    std::unique_ptr<armnn::ITensorHandle> indicesHandle = workloadFactory.CreateTensorHandle(indicesInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputInfo);
+    std::unique_ptr<armnn::ITensorHandle> paramsHandle = tensorHandleFactory.CreateTensorHandle(paramsInfo);
+    std::unique_ptr<armnn::ITensorHandle> indicesHandle = tensorHandleFactory.CreateTensorHandle(indicesInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
 
     armnn::GatherQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -69,7 +70,8 @@ struct GatherTestHelper
 {
     static LayerTestResult<T, 1> Gather1dParamsTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         armnn::TensorInfo paramsInfo({ 8 }, ArmnnType);
         armnn::TensorInfo indicesInfo({ 4 }, armnn::DataType::Signed32);
@@ -89,6 +91,7 @@ struct GatherTestHelper
         return GatherTestImpl<ArmnnType, T, 1, 1, 1>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -99,7 +102,8 @@ struct GatherTestHelper
 
     static LayerTestResult<T, 2> GatherMultiDimParamsTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         armnn::TensorInfo paramsInfo({ 5, 2 }, ArmnnType);
         armnn::TensorInfo indicesInfo({ 3 }, armnn::DataType::Signed32);
@@ -120,6 +124,7 @@ struct GatherTestHelper
         return GatherTestImpl<ArmnnType, T, 2, 1, 2>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -130,7 +135,8 @@ struct GatherTestHelper
 
     static LayerTestResult<T, 4> GatherMultiDimParamsMultiDimIndicesTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         armnn::TensorInfo paramsInfo({ 3, 2, 3}, ArmnnType);
         armnn::TensorInfo indicesInfo({ 2, 3 }, armnn::DataType::Signed32);
@@ -178,6 +184,7 @@ struct GatherTestHelper
         return GatherTestImpl<ArmnnType, T, 3, 2, 4>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -192,7 +199,8 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
 {
     static LayerTestResult<T, 1> Gather1dParamsTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         using namespace half_float::literal;
 
@@ -207,6 +215,7 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
         return GatherTestImpl<armnn::DataType::Float16, T, 1, 1, 1>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -217,7 +226,8 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
 
     static LayerTestResult<T, 2> GatherMultiDimParamsTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         using namespace half_float::literal;
 
@@ -233,6 +243,7 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
         return GatherTestImpl<armnn::DataType::Float16, T, 2, 1, 2>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -243,7 +254,8 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
 
     static LayerTestResult<T, 4> GatherMultiDimParamsMultiDimIndicesTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
     {
         using namespace half_float::literal;
 
@@ -285,6 +297,7 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
         return GatherTestImpl<armnn::DataType::Float16, T, 3, 2, 4>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             paramsInfo,
             indicesInfo,
             outputInfo,
@@ -298,90 +311,135 @@ struct GatherTestHelper<armnn::DataType::Float16, T>
 
 LayerTestResult<float, 1> Gather1dParamsFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::Float32>::Gather1dParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::Float32>::Gather1dParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 1> Gather1dParamsFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::Float16>::Gather1dParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::Float16>::Gather1dParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<uint8_t, 1> Gather1dParamsUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::QAsymmU8>::Gather1dParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::QAsymmU8>::Gather1dParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 1> Gather1dParamsInt16Test(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::QSymmS16>::Gather1dParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::QSymmS16>::Gather1dParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 1> Gather1dParamsInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    return GatherTestHelper<armnn::DataType::Signed32>::Gather1dParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<float, 2> GatherMultiDimParamsFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::Float32>::GatherMultiDimParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::Float32>::GatherMultiDimParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 2> GatherMultiDimParamsFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return GatherTestHelper<armnn::DataType::Float16>::GatherMultiDimParamsTestImpl(workloadFactory, memoryManager);
+    return GatherTestHelper<armnn::DataType::Float16>::GatherMultiDimParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<uint8_t, 2> GatherMultiDimParamsUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::QAsymmU8>::GatherMultiDimParamsTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 2> GatherMultiDimParamsInt16Test(
-        armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::QSymmS16>::GatherMultiDimParamsTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 2> GatherMultiDimParamsInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    return GatherTestHelper<armnn::DataType::Signed32>::GatherMultiDimParamsTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<float, 4> GatherMultiDimParamsMultiDimIndicesFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::Float32>::GatherMultiDimParamsMultiDimIndicesTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 4> GatherMultiDimParamsMultiDimIndicesFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::Float16>::GatherMultiDimParamsMultiDimIndicesTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<uint8_t, 4> GatherMultiDimParamsMultiDimIndicesUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::QAsymmU8>::GatherMultiDimParamsMultiDimIndicesTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 4> GatherMultiDimParamsMultiDimIndicesInt16Test(
-        armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return GatherTestHelper<armnn::DataType::QSymmS16>::GatherMultiDimParamsMultiDimIndicesTestImpl(
-        workloadFactory, memoryManager);
+        workloadFactory, memoryManager, tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 4> GatherMultiDimParamsMultiDimIndicesInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    return GatherTestHelper<armnn::DataType::Signed32>::GatherMultiDimParamsMultiDimIndicesTestImpl(
+            workloadFactory, memoryManager, tensorHandleFactory);
 }

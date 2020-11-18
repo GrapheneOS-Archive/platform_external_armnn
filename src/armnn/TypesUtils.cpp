@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 //
 #include <armnn/TypesUtils.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 namespace
 {
@@ -33,8 +32,8 @@ QuantizedType armnn::Quantize(float value, float scale, int32_t offset)
     static_assert(IsQuantizedType<QuantizedType>(), "Not an integer type.");
     constexpr QuantizedType max = std::numeric_limits<QuantizedType>::max();
     constexpr QuantizedType min = std::numeric_limits<QuantizedType>::lowest();
-    BOOST_ASSERT(scale != 0.f);
-    BOOST_ASSERT(!std::isnan(value));
+    ARMNN_ASSERT(scale != 0.f);
+    ARMNN_ASSERT(!std::isnan(value));
 
     float clampedValue = std::min(std::max(static_cast<float>(round(value/scale) + offset), static_cast<float>(min)),
                                   static_cast<float>(max));
@@ -47,10 +46,9 @@ template <typename QuantizedType>
 float armnn::Dequantize(QuantizedType value, float scale, int32_t offset)
 {
     static_assert(IsQuantizedType<QuantizedType>(), "Not an integer type.");
-    BOOST_ASSERT(scale != 0.f);
-    BOOST_ASSERT(!IsNan(value));
-    float dequantized = boost::numeric_cast<float>(value - offset) * scale;
-    return dequantized;
+    ARMNN_ASSERT(scale != 0.f);
+    ARMNN_ASSERT(!IsNan(value));
+    return (armnn::numeric_cast<float>(value - offset)) * scale;
 }
 
 /// Explicit specialization of Quantize for int8_t

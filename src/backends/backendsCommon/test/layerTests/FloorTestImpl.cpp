@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -14,9 +14,10 @@
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> SimpleFloorTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     armnn::TensorInfo inputTensorInfo({1, 3, 2, 3}, ArmnnType);
     inputTensorInfo.SetQuantizationScale(0.1f);
 
@@ -34,8 +35,8 @@ LayerTestResult<T, 4> SimpleFloorTest(
         1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 2.0f, 8.0f, 15.0f, 37.0f },
         outputTensorInfo));
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::FloorQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -63,15 +64,18 @@ LayerTestResult<T, 4> SimpleFloorTest(
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 SimpleFloorTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 SimpleFloorTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 SimpleFloorTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);

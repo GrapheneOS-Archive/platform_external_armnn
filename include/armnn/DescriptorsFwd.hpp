@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -18,9 +18,12 @@ struct DepthwiseConvolution2dDescriptor;
 struct DetectionPostProcessDescriptor;
 struct ElementwiseUnaryDescriptor;
 struct FakeQuantizationDescriptor;
+struct FillDescriptor;
 struct FullyConnectedDescriptor;
+struct GatherDescriptor;
 struct InstanceNormalizationDescriptor;
 struct L2NormalizationDescriptor;
+struct LogicalBinaryDescriptor;
 struct LstmDescriptor;
 struct MeanDescriptor;
 struct NormalizationDescriptor;
@@ -29,6 +32,7 @@ struct PadDescriptor;
 struct PermuteDescriptor;
 struct Pooling2dDescriptor;
 struct PreCompiledDescriptor;
+struct QLstmDescriptor;
 struct ReshapeDescriptor;
 struct ResizeBilinearDescriptor;
 struct ResizeDescriptor;
@@ -40,12 +44,13 @@ struct StackDescriptor;
 struct StandInDescriptor;
 struct StridedSliceDescriptor;
 struct TransposeConvolution2dDescriptor;
+struct TransposeDescriptor;
 struct ViewsDescriptor;
 
 using ConcatDescriptor       = OriginsDescriptor;
 using DepthToSpaceDescriptor = SpaceToDepthDescriptor;
 using LogSoftmaxDescriptor   = SoftmaxDescriptor;
-// MergerDescriptor is deprecated, use ConcatDescriptor instead
+/// MergerDescriptor is deprecated, use ConcatDescriptor instead
 using MergerDescriptor       = OriginsDescriptor;
 using SplitterDescriptor     = ViewsDescriptor;
 

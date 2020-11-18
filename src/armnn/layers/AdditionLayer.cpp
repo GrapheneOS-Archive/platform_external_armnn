@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,6 +22,8 @@ AdditionLayer::AdditionLayer(const char* name)
 std::unique_ptr<IWorkload> AdditionLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     AdditionQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateAddition(descriptor, PrepInfoAndDesc(descriptor));
 }
 

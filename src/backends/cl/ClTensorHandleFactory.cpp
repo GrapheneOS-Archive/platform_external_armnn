@@ -7,11 +7,12 @@
 #include "ClTensorHandleFactory.hpp"
 #include "ClTensorHandle.hpp"
 
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
+
 #include <arm_compute/runtime/CL/CLTensor.h>
 #include <arm_compute/core/Coordinates.h>
 #include <arm_compute/runtime/CL/CLSubTensor.h>
-
-#include <boost/polymorphic_cast.hpp>
 
 
 namespace armnn
@@ -31,18 +32,30 @@ std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateSubTensorHandle(ITen
     {
         // Arm compute indexes tensor coords in reverse order.
         unsigned int revertedIndex = subTensorShape.GetNumDimensions() - i - 1;
-        coords.set(i, boost::numeric_cast<int>(subTensorOrigin[revertedIndex]));
+        coords.set(i, armnn::numeric_cast<int>(subTensorOrigin[revertedIndex]));
     }
 
     const arm_compute::TensorShape parentShape = armcomputetensorutils::BuildArmComputeTensorShape(
             parent.GetShape());
+
+    // In order for ACL to support subtensors the concat axis cannot be on x or y and the values of x and y
+    // must match the parent shapes
+    if (coords.x() != 0 || coords.y() != 0)
+    {
+        return nullptr;
+    }
+    if ((parentShape.x() != shape.x()) || (parentShape.y() != shape.y()))
+    {
+        return nullptr;
+    }
+
     if (!::arm_compute::error_on_invalid_subtensor(__func__, __FILE__, __LINE__, parentShape, coords, shape))
     {
         return nullptr;
     }
 
     return std::make_unique<ClSubTensorHandle>(
-            boost::polymorphic_downcast<IClTensorHandle *>(&parent), shape, coords);
+            PolymorphicDowncast<IClTensorHandle *>(&parent), shape, coords);
 }
 
 std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo) const
@@ -60,10 +73,11 @@ std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateTensorHandle(const T
                                                                          const bool IsMemoryManaged) const
 {
     std::unique_ptr<ClTensorHandle> tensorHandle = std::make_unique<ClTensorHandle>(tensorInfo);
-    if (IsMemoryManaged)
+    if (!IsMemoryManaged)
     {
-        tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
+        ARMNN_LOG(warning) << "ClTensorHandleFactory only has support for memory managed.";
     }
+    tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
     return tensorHandle;
 }
 
@@ -72,10 +86,11 @@ std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateTensorHandle(const T
                                                                          const bool IsMemoryManaged) const
 {
     std::unique_ptr<ClTensorHandle> tensorHandle = std::make_unique<ClTensorHandle>(tensorInfo, dataLayout);
-    if (IsMemoryManaged)
+    if (!IsMemoryManaged)
     {
-        tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
+        ARMNN_LOG(warning) << "ClTensorHandleFactory only has support for memory managed.";
     }
+    tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
     return tensorHandle;
 }
 

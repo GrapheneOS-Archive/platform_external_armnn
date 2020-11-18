@@ -11,5 +11,6 @@
 #include <backendsCommon/WorkloadFactory.hpp>
 
 LayerTestResult<float, 2> FakeQuantizationTest(
-    armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);

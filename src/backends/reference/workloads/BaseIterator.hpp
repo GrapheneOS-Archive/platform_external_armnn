@@ -5,14 +5,12 @@
 
 #pragma once
 
-
 #include <armnn/TypesUtils.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 #include <armnnUtils/FloatingPointConverter.hpp>
 
 #include <ResolveType.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
 
 namespace armnn
 {
@@ -46,6 +44,11 @@ public:
     virtual void Reset(void*) = 0;
 
     virtual IType Get() const = 0;
+
+    virtual std::vector<float>
+    DecodeTensor(const TensorShape &tensorShape,
+                 const unsigned int channelMultiplier = 1,
+                 bool isDepthwise = false) = 0;
 };
 
 template<typename IType>
@@ -79,36 +82,36 @@ public:
 
     TypedIterator& operator++() override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         ++m_Iterator;
         return *this;
     }
 
     TypedIterator& operator+=(const unsigned int increment) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator += increment;
         return *this;
     }
 
     TypedIterator& operator-=(const unsigned int increment) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator -= increment;
         return *this;
     }
 
     TypedIterator& operator[](const unsigned int index) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator = m_Start + index;
         return *this;
     }
 
     TypedIterator& SetIndex(unsigned int index, unsigned int axisIndex = 0) override
     {
-        boost::ignore_unused(axisIndex);
-        BOOST_ASSERT(m_Iterator);
+        IgnoreUnused(axisIndex);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator = m_Start + index;
         return *this;
     }
@@ -131,8 +134,27 @@ public:
     {
         return armnn::Dequantize(*m_Iterator, m_Scale, m_Offset);
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scale, m_Offset));
+        }
+
+        return decodedTensor;
+    }
 
 private:
+
     const float m_Scale;
     const int32_t m_Offset;
 };
@@ -150,10 +172,29 @@ public:
     {
         return armnn::Dequantize(*m_Iterator, m_Scale, m_Offset);
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scale, m_Offset));
+        }
+
+        return decodedTensor;
+    }
 
 private:
     const float m_Scale;
     const int32_t m_Offset;
+
 };
 
 class QSymmS8Decoder : public TypedIterator<const int8_t, Decoder<float>>
@@ -169,10 +210,29 @@ public:
     {
         return armnn::Dequantize(*m_Iterator, m_Scale, m_Offset);
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scale, m_Offset));
+        }
+
+        return decodedTensor;
+    }
 
 private:
     const float m_Scale;
     const int32_t m_Offset;
+
 };
 
 class QSymm16Decoder : public TypedIterator<const int16_t, Decoder<float>>
@@ -188,10 +248,68 @@ public:
     {
         return armnn::Dequantize(*m_Iterator, m_Scale, m_Offset);
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scale, m_Offset));
+        }
+
+        return decodedTensor;
+    }
 
 private:
     const float m_Scale;
     const int32_t m_Offset;
+
+};
+
+class BFloat16Decoder : public TypedIterator<const BFloat16, Decoder<float>>
+{
+public:
+    BFloat16Decoder(const BFloat16* data)
+        : TypedIterator(data) {}
+
+    BFloat16Decoder()
+        : BFloat16Decoder(nullptr) {}
+
+    float Get() const override
+    {
+        float val = 0.f;
+        armnnUtils::FloatingPointConverter::ConvertBFloat16ToFloat32(m_Iterator, 1, &val);
+        return val;
+    }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+
+            float val = 0.f;
+            armnnUtils::FloatingPointConverter::ConvertBFloat16ToFloat32(m_Iterator, 1, &val);
+            decodedTensor.emplace_back(val);
+        }
+
+        return decodedTensor;
+    }
+
 };
 
 class Float16Decoder : public TypedIterator<const Half, Decoder<float>>
@@ -209,6 +327,28 @@ public:
         armnnUtils::FloatingPointConverter::ConvertFloat16To32(m_Iterator, 1, &val);
         return val;
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            float val = 0.f;
+            this->operator[](i);
+            armnnUtils::FloatingPointConverter::ConvertFloat16To32(m_Iterator, 1, &val);
+            decodedTensor.emplace_back(val);
+        }
+
+        return decodedTensor;
+    }
+
+
 };
 
 class Float32Decoder : public TypedIterator<const float, Decoder<float>>
@@ -223,6 +363,19 @@ public:
     float Get() const override
     {
         return *m_Iterator;
+    }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+
+        decodedTensor.reserve(size);
+        decodedTensor.assign(m_Start, m_Start + size);
+
+        return decodedTensor;
     }
 };
 
@@ -239,9 +392,28 @@ public:
     {
         return static_cast<float>(*m_Iterator) * m_Scale;
     }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(static_cast<float>(*m_Iterator) * m_Scale);
+        }
+
+        return decodedTensor;
+    }
 
 private:
     const float m_Scale;
+
 };
 
 class Int32Decoder : public TypedIterator<const int32_t, Decoder<float>>
@@ -256,6 +428,124 @@ public:
     float Get() const override
     {
         return static_cast<float>(*m_Iterator);
+    }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(static_cast<float>(*m_Iterator));
+        }
+
+        return decodedTensor;
+    }
+};
+
+class Int32ToInt32tDecoder : public TypedIterator<const int32_t, Decoder<int32_t>>
+{
+public:
+    Int32ToInt32tDecoder(const int32_t* data)
+            : TypedIterator(data){}
+
+    Int32ToInt32tDecoder()
+            : Int32ToInt32tDecoder(nullptr) {}
+
+    int32_t Get() const override
+    {
+        return *m_Iterator;
+    }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(*m_Iterator);
+        }
+
+        return decodedTensor;
+    }
+};
+
+class BooleanDecoder : public TypedIterator<const uint8_t, Decoder<float>>
+{
+public:
+    BooleanDecoder(const uint8_t* data)
+            : TypedIterator(data) {}
+
+    BooleanDecoder()
+            : BooleanDecoder(nullptr) {}
+
+    float Get() const override
+    {
+        return *m_Iterator;
+    }
+    std::vector<float> DecodeTensor (const TensorShape& tensorShape,
+                                     const unsigned int channelMultiplier,
+                                     const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(*m_Iterator);
+        }
+
+        return decodedTensor;
+    }
+};
+
+class BooleanDecoderBool : public TypedIterator<const uint8_t, Decoder<bool>>
+{
+public:
+    BooleanDecoderBool(const uint8_t* data)
+        : TypedIterator(data) {}
+
+    BooleanDecoderBool()
+        : BooleanDecoderBool(nullptr) {}
+
+    bool Get() const override
+    {
+        return *m_Iterator;
+    }
+
+    std::vector<float> DecodeTensor(const TensorShape& tensorShape,
+                                    const unsigned int channelMultiplier,
+                                    const bool isDepthwise) override
+    {
+        IgnoreUnused(channelMultiplier, isDepthwise);
+
+        const unsigned int size = tensorShape.GetNumElements();
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        for (uint32_t i = 0; i < size; ++i)
+        {
+            this->operator[](i);
+            decodedTensor.emplace_back(*m_Iterator);
+        }
+
+        return decodedTensor;
     }
 };
 
@@ -355,6 +645,28 @@ private:
     const int32_t m_Offset;
 };
 
+class BFloat16Encoder : public TypedIterator<armnn::BFloat16, Encoder<float>>
+{
+public:
+    BFloat16Encoder(armnn::BFloat16* data)
+        : TypedIterator(data) {}
+
+    BFloat16Encoder()
+        : BFloat16Encoder(nullptr) {}
+
+    void Set(float right) override
+    {
+        armnnUtils::FloatingPointConverter::ConvertFloat32ToBFloat16(&right, 1, m_Iterator);
+    }
+
+    float Get() const override
+    {
+        float val = 0.f;
+        armnnUtils::FloatingPointConverter::ConvertBFloat16ToFloat32(m_Iterator, 1, &val);
+        return val;
+    }
+};
+
 class Float16Encoder : public TypedIterator<Half, Encoder<float>>
 {
 public:
@@ -417,6 +729,26 @@ public:
     }
 };
 
+class Int32ToInt32tEncoder : public TypedIterator<int32_t, Encoder<int32_t>>
+{
+public:
+    Int32ToInt32tEncoder(int32_t* data)
+        : TypedIterator(data){}
+
+    Int32ToInt32tEncoder()
+        : Int32ToInt32tEncoder(nullptr) {}
+
+    void Set(int32_t right) override
+    {
+        *m_Iterator = right;
+    }
+
+    int32_t Get() const override
+    {
+        return *m_Iterator;
+    }
+};
+
 class BooleanEncoder : public TypedIterator<uint8_t, Encoder<bool>>
 {
 public:
@@ -442,7 +774,7 @@ template<typename T, typename Base>
 class PerAxisIterator : public Base
 {
 public:
-    // axisFactor is used to calculate axisIndex
+    // axisFactor is used to calculate channelStep
     PerAxisIterator(T* data = nullptr, unsigned int axisFactor = 0)
         : m_Iterator(data), m_Start(data), m_AxisIndex(0), m_AxisFactor(axisFactor)
     {}
@@ -450,7 +782,7 @@ public:
     // This should be called to set index for per-axis Encoder/Decoder
     PerAxisIterator& SetIndex(unsigned int index, unsigned int axisIndex) override
     {
-         BOOST_ASSERT(m_Iterator);
+         ARMNN_ASSERT(m_Iterator);
          m_Iterator = m_Start + index;
          m_AxisIndex = axisIndex;
          return *this;
@@ -465,7 +797,7 @@ public:
 
     PerAxisIterator& operator++() override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         ++m_Iterator;
         m_AxisIndex = static_cast<unsigned int>(*m_Iterator) % m_AxisFactor;
         return *this;
@@ -473,7 +805,7 @@ public:
 
     PerAxisIterator& operator+=(const unsigned int increment) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator += increment;
         m_AxisIndex = static_cast<unsigned int>(*m_Iterator) % m_AxisFactor;
         return *this;
@@ -481,7 +813,7 @@ public:
 
     PerAxisIterator& operator-=(const unsigned int decrement) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator -= decrement;
         m_AxisIndex = static_cast<unsigned int>(*m_Iterator) % m_AxisFactor;
         return *this;
@@ -489,7 +821,7 @@ public:
 
     PerAxisIterator& operator[](const unsigned int index) override
     {
-        BOOST_ASSERT(m_Iterator);
+        ARMNN_ASSERT(m_Iterator);
         m_Iterator = m_Start + index;
         m_AxisIndex = static_cast<unsigned int>(*m_Iterator) % m_AxisFactor;
         return *this;
@@ -506,21 +838,57 @@ class QSymm8PerAxisDecoder : public PerAxisIterator<const int8_t, Decoder<float>
 {
 public:
     QSymm8PerAxisDecoder(const int8_t* data, const std::vector<float>& scale, unsigned int axisFactor)
-        : PerAxisIterator(data, axisFactor), m_Scale(scale) {}
+        : PerAxisIterator(data, axisFactor), m_Scales(scale) {}
 
     float Get() const override
     {
-        return armnn::Dequantize(*m_Iterator, m_Scale[m_AxisIndex], 0);
+        return armnn::Dequantize(*m_Iterator, m_Scales[m_AxisIndex], 0);
     }
 
     // Get scale of the current value
     float GetScale() const
     {
-        return m_Scale[m_AxisIndex];
+        return m_Scales[m_AxisIndex];
+    }
+
+    std::vector<float> DecodeTensor(const TensorShape &tensorShape,
+                                    const unsigned int channelMultiplier,
+                                    bool isDepthwise) override
+    {
+        const uint32_t size = tensorShape.GetNumElements();
+        const uint32_t scaleSize = static_cast<uint32_t>(m_Scales.size());
+
+        const uint32_t stepSize = isDepthwise ?
+                                  tensorShape[2] * tensorShape[3] : tensorShape.GetNumElements() / tensorShape[0];
+
+        const uint32_t stepNum = size / (stepSize * channelMultiplier);
+        uint32_t scale;
+
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        // channelMultiplier is only used in depthwise convolutions and in other cases will have no effect
+        // stepSize is the length of a contiguous area sharing a quantization scale within a tensor
+        // stepNum is the number of those steps/blocks in the tensor
+        for (uint32_t mult = 0; mult < channelMultiplier; ++mult)
+        {
+            for (uint32_t step = 0; step < stepNum; ++step)
+            {
+                scale = (channelMultiplier * step + mult) % scaleSize;
+                for (uint32_t i = 0; i < stepSize; ++i)
+                {
+                    unsigned int index = mult * stepSize * channelMultiplier +
+                                         step * stepSize + i;
+                    this->operator[](index);
+                    decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scales[scale], 0));
+                }
+            }
+        }
+        return decodedTensor;
     }
 
 private:
-    std::vector<float> m_Scale;
+    std::vector<float> m_Scales;
 };
 
 class QSymm8PerAxisEncoder : public PerAxisIterator<int8_t, Encoder<float>>
@@ -564,6 +932,42 @@ public:
     float GetScale() const
     {
         return m_Scales[m_AxisIndex];
+    }
+
+    std::vector<float> DecodeTensor(const TensorShape &tensorShape,
+                                    const unsigned int channelMultiplier,
+                                    bool isDepthwise) override
+    {
+        const uint32_t size = tensorShape.GetNumElements();
+        const uint32_t scaleSize = static_cast<uint32_t>(m_Scales.size());
+
+        const uint32_t stepSize = isDepthwise ?
+                                  tensorShape[2] * tensorShape[3] : tensorShape.GetNumElements() / tensorShape[0];
+
+        const uint32_t stepNum = size / (stepSize * channelMultiplier);
+        uint32_t scale;
+
+        std::vector<float> decodedTensor;
+        decodedTensor.reserve(size);
+
+        // channelMultiplier is only used in depthwise convolutions and in other cases will have no effect
+        // stepSize is the length of a contiguous area sharing a quantization scale within a tensor
+        // stepNum is the number of those steps/blocks in the tensor
+        for (uint32_t mult = 0; mult < channelMultiplier; ++mult)
+        {
+            for (uint32_t step = 0; step < stepNum; ++step)
+            {
+                scale = (channelMultiplier * step + mult) % scaleSize;
+                for (uint32_t i = 0; i < stepSize; ++i)
+                {
+                    unsigned int index = mult * stepSize * channelMultiplier +
+                                         step * stepSize + i;
+                    this->operator[](index);
+                    decodedTensor.emplace_back(armnn::Dequantize(*m_Iterator, m_Scales[scale], 0));
+                }
+            }
+        }
+        return decodedTensor;
     }
 
 private:

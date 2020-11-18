@@ -1,10 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include "LayerWithParameters.hpp"
+
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -25,6 +27,7 @@ public:
 
     /// Check if the input tensor shape(s)
     /// will lead to a valid configuration of @ref ReshapeLayer.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     /// By default returns inputShapes if the number of inputs are equal to number of outputs,
@@ -39,7 +42,7 @@ public:
     bool IsEqual(const Layer& other) const
     {
         return (other.GetType() == LayerType::Reshape) &&
-               m_Param.m_TargetShape == boost::polymorphic_downcast<const ReshapeLayer*>(&other)->m_Param.m_TargetShape;
+               m_Param.m_TargetShape == PolymorphicDowncast<const ReshapeLayer*>(&other)->m_Param.m_TargetShape;
     }
 
     void Accept(ILayerVisitor& visitor) const override;

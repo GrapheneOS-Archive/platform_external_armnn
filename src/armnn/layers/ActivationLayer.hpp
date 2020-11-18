@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -23,6 +23,7 @@ public:
     ActivationLayer* Clone(Graph& graph) const override;
 
     /// Check if the input tensor shape(s) will lead to a valid configuration of @ref ActivationLayer.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     void Accept(ILayerVisitor& visitor) const override;

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -20,7 +20,7 @@ struct VisitorNoThrowPolicy
     static void Apply(const std::string&) {}
 };
 
-// Visitor base class with empty implementations.
+/// Visitor base class with empty implementations.
 template<typename DefaultPolicy>
 class LayerVisitorBase : public ILayerVisitor
 {
@@ -101,6 +101,10 @@ public:
     void VisitEqualLayer(const IConnectableLayer*,
                          const char*) override { DefaultPolicy::Apply(__func__); }
 
+    void VisitFillLayer(const IConnectableLayer*,
+                        const FillDescriptor&,
+                        const char*) override { DefaultPolicy::Apply(__func__); }
+
     void VisitFloorLayer(const IConnectableLayer*,
                          const char*) override { DefaultPolicy::Apply(__func__); }
 
@@ -110,7 +114,12 @@ public:
                                   const Optional<ConstTensor>&,
                                   const char*) override { DefaultPolicy::Apply(__func__); }
 
+    ARMNN_DEPRECATED_MSG("Use VisitGatherLayer with descriptor instead")
     void VisitGatherLayer(const IConnectableLayer*,
+                          const char*) override { DefaultPolicy::Apply(__func__); }
+
+    void VisitGatherLayer(const IConnectableLayer*,
+                          const GatherDescriptor&,
                           const char*) override { DefaultPolicy::Apply(__func__); }
 
     void VisitGreaterLayer(const IConnectableLayer*,
@@ -131,6 +140,10 @@ public:
     void VisitLogSoftmaxLayer(const IConnectableLayer*,
                               const LogSoftmaxDescriptor&,
                               const char*) override { DefaultPolicy::Apply(__func__); }
+
+    void VisitLogicalBinaryLayer(const IConnectableLayer*,
+                                 const LogicalBinaryDescriptor&,
+                                 const char*) override {DefaultPolicy::Apply(__func__); }
 
     void VisitLstmLayer(const IConnectableLayer*,
                         const LstmDescriptor&,
@@ -183,9 +196,17 @@ public:
     void VisitQuantizeLayer(const IConnectableLayer*,
                             const char*) override { DefaultPolicy::Apply(__func__); }
 
+    void VisitQLstmLayer(const IConnectableLayer*,
+                         const QLstmDescriptor&,
+                         const LstmInputParams&,
+                         const char*) override { DefaultPolicy::Apply(__func__); }
+
     void VisitQuantizedLstmLayer(const IConnectableLayer*,
                                  const QuantizedLstmInputParams&,
                                  const char*) override { DefaultPolicy::Apply(__func__); }
+
+    void VisitRankLayer(const IConnectableLayer*,
+                        const char*) override { DefaultPolicy::Apply(__func__); }
 
     void VisitReshapeLayer(const IConnectableLayer*,
                            const ReshapeDescriptor&,
@@ -245,6 +266,10 @@ public:
                                           const ConstTensor&,
                                           const Optional<ConstTensor>&,
                                           const char*) override { DefaultPolicy::Apply(__func__); }
+
+    void VisitTransposeLayer(const IConnectableLayer*,
+                             const TransposeDescriptor&,
+                             const char*) override { DefaultPolicy::Apply(__func__); }
 
 };
 

@@ -22,6 +22,8 @@ list(APPEND armnnBackendsCommon_sources
     LayerSupportBase.hpp
     LayerSupportRules.hpp
     MakeWorkloadHelper.hpp
+    MapWorkload.cpp
+    MapWorkload.hpp
     MemCopyWorkload.cpp
     MemCopyWorkload.hpp
     MemImportWorkload.cpp
@@ -32,6 +34,8 @@ list(APPEND armnnBackendsCommon_sources
     OptimizationViews.hpp
     TensorHandleFactoryRegistry.cpp
     TensorHandleFactoryRegistry.hpp
+    UnmapWorkload.cpp
+    UnmapWorkload.hpp
     WorkloadDataCollector.hpp
     Workload.hpp
     WorkloadData.cpp
@@ -54,3 +58,4 @@ target_include_directories(armnnBackendsCommon PRIVATE ${PROJECT_SOURCE_DIR}/src
 target_include_directories(armnnBackendsCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/armnnUtils)
 target_include_directories(armnnBackendsCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnBackendsCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
+target_include_directories(armnnBackendsCommon PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -23,6 +23,7 @@ ElementwiseUnaryLayer::ElementwiseUnaryLayer(const ElementwiseUnaryDescriptor& p
 std::unique_ptr<IWorkload> ElementwiseUnaryLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     ElementwiseUnaryQueueDescriptor descriptor;
+
     return factory.CreateElementwiseUnary(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -34,7 +35,7 @@ ElementwiseUnaryLayer* ElementwiseUnaryLayer::Clone(Graph& graph) const
 std::vector<TensorShape> ElementwiseUnaryLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
     // Should return the shape of the input tensor
-    BOOST_ASSERT(inputShapes.size() == 1);
+    ARMNN_ASSERT(inputShapes.size() == 1);
     const TensorShape& input = inputShapes[0];
 
     return std::vector<TensorShape>({ input });
@@ -44,14 +45,15 @@ void ElementwiseUnaryLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     std::vector<TensorShape> inferredShapes = InferOutputShapes({
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape()});
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "ElementwiseUnaryLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, GetLayerTypeAsCString(GetType()));
 }
 
 void ElementwiseUnaryLayer::Accept(ILayerVisitor& visitor) const

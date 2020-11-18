@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,6 +24,8 @@ std::unique_ptr<IWorkload> DetectionPostProcessLayer::CreateWorkload(const armnn
 {
     DetectionPostProcessQueueDescriptor descriptor;
     descriptor.m_Anchors = m_Anchors.get();
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateDetectionPostProcess(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -38,10 +40,14 @@ void DetectionPostProcessLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(2, CHECK_LOCATION());
 
-    // on this level constant data should not be released.
-    BOOST_ASSERT_MSG(m_Anchors != nullptr, "DetectionPostProcessLayer: Anchors data should not be null.");
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
 
-    BOOST_ASSERT_MSG(GetNumOutputSlots() == 4, "DetectionPostProcessLayer: The layer should return 4 outputs.");
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
+    // on this level constant data should not be released.
+    ARMNN_ASSERT_MSG(m_Anchors != nullptr, "DetectionPostProcessLayer: Anchors data should not be null.");
+
+    ARMNN_ASSERT_MSG(GetNumOutputSlots() == 4, "DetectionPostProcessLayer: The layer should return 4 outputs.");
 
     unsigned int detectedBoxes = m_Param.m_MaxDetections * m_Param.m_MaxClassesPerDetection;
 
@@ -49,22 +55,22 @@ void DetectionPostProcessLayer::ValidateTensorShapesFromInputs()
     const TensorShape& inferredDetectionScores = TensorShape({ 1, detectedBoxes });
     const TensorShape& inferredNumberDetections = TensorShape({ 1 });
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "DetectionPostProcessLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredDetectionBoxes);
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "DetectionPostProcessLayer: TensorShape set on OutputSlot[1] does not match the inferred shape.",
-        GetOutputSlot(1).GetTensorInfo().GetShape(),
-        inferredDetectionScores);
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "DetectionPostProcessLayer: TensorShape set on OutputSlot[2] does not match the inferred shape.",
-        GetOutputSlot(2).GetTensorInfo().GetShape(),
-        inferredDetectionScores);
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "DetectionPostProcessLayer: TensorShape set on OutputSlot[3] does not match the inferred shape.",
-        GetOutputSlot(3).GetTensorInfo().GetShape(),
-        inferredNumberDetections);
+    ValidateAndCopyShape(outputShape, inferredDetectionBoxes, m_ShapeInferenceMethod, "DetectionPostProcessLayer");
+
+    ValidateAndCopyShape(GetOutputSlot(1).GetTensorInfo().GetShape(),
+                         inferredDetectionScores,
+                         m_ShapeInferenceMethod,
+                         "DetectionPostProcessLayer", 1);
+
+    ValidateAndCopyShape(GetOutputSlot(2).GetTensorInfo().GetShape(),
+                         inferredDetectionScores,
+                         m_ShapeInferenceMethod,
+                         "DetectionPostProcessLayer", 2);
+
+    ValidateAndCopyShape(GetOutputSlot(3).GetTensorInfo().GetShape(),
+                         inferredNumberDetections,
+                         m_ShapeInferenceMethod,
+                         "DetectionPostProcessLayer", 3);
 }
 
 Layer::ConstantTensors DetectionPostProcessLayer::GetConstantTensorsByRef()

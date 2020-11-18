@@ -1,8 +1,10 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
+
+#include <armnn/backends/IBackendInternal.hpp>
 
 #include <backendsCommon/LayerSupportBase.hpp>
 
@@ -12,6 +14,10 @@ namespace armnn
 class ClLayerSupport : public LayerSupportBase
 {
 public:
+    explicit ClLayerSupport(const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr);
+    ClLayerSupport();
+    ~ClLayerSupport() {}
+
     ARMNN_DEPRECATED_MSG("Use IsElementwiseUnarySupported instead")
     bool IsAbsSupported(const TensorInfo& input,
                         const TensorInfo& output,
@@ -108,6 +114,11 @@ public:
                                      const ElementwiseUnaryDescriptor& descriptor,
                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    bool IsFillSupported(const TensorInfo& input,
+                         const TensorInfo& output,
+                         const FillDescriptor& descriptor,
+                         Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsFloorSupported(const TensorInfo& input,
                           const TensorInfo& output,
                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
@@ -118,6 +129,12 @@ public:
                                    const TensorInfo& biases,
                                    const FullyConnectedDescriptor& descriptor,
                                    Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsGatherSupported(const TensorInfo& input0,
+                           const TensorInfo& input1,
+                           const TensorInfo& output,
+                           const GatherDescriptor& descriptor,
+                           Optional<std::string&> reasonIfUnsupported) const override;
 
     ARMNN_DEPRECATED_MSG("Use IsComparisonSupported instead")
     bool IsGreaterSupported(const TensorInfo& input0,
@@ -137,6 +154,11 @@ public:
                                     const TensorInfo& output,
                                     const L2NormalizationDescriptor& descriptor,
                                     Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsLogSoftmaxSupported(const TensorInfo& input,
+                               const TensorInfo& output,
+                               const LogSoftmaxDescriptor& descriptor,
+                               Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsLstmSupported(const TensorInfo& input,
                          const TensorInfo& outputStateIn,
@@ -201,6 +223,16 @@ public:
     bool IsPreluSupported(const TensorInfo& input,
                           const TensorInfo& alpha,
                           const TensorInfo& output,
+                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsQLstmSupported(const TensorInfo& input,
+                          const TensorInfo& previousOutputIn,
+                          const TensorInfo& previousCellStateIn,
+                          const TensorInfo& outputStateOut,
+                          const TensorInfo& cellStateOut,
+                          const TensorInfo& output,
+                          const QLstmDescriptor& descriptor,
+                          const LstmInputParamsInfo& paramsInfo,
                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsQuantizedLstmSupported(const TensorInfo& input,
@@ -286,6 +318,15 @@ public:
                                            const TensorInfo& weights,
                                            const Optional<TensorInfo>& biases,
                                            Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsTransposeSupported(const TensorInfo& input,
+                              const TensorInfo& output,
+                              const TransposeDescriptor& descriptor,
+                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+private:
+    const IBackendInternal::IBackendSpecificModelContextPtr m_ModelContextPtr;
+
 };
 
 } // namespace armnn

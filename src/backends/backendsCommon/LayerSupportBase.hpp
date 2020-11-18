@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -61,7 +61,15 @@ public:
     bool IsConstantSupported(const TensorInfo& output,
                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    bool IsConvertBf16ToFp32Supported(const TensorInfo& input,
+                                      const TensorInfo& output,
+                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsConvertFp16ToFp32Supported(const TensorInfo& input,
+                                      const TensorInfo& output,
+                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsConvertFp32ToBf16Supported(const TensorInfo& input,
                                       const TensorInfo& output,
                                       Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
@@ -135,6 +143,11 @@ public:
                                      const FakeQuantizationDescriptor& descriptor,
                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    virtual bool IsFillSupported(const TensorInfo& input,
+                                 const TensorInfo& output,
+                                 const FillDescriptor& descriptor,
+                                 Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsFloorSupported(const TensorInfo& input,
                           const TensorInfo& output,
                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
@@ -146,9 +159,16 @@ public:
                                    const FullyConnectedDescriptor& descriptor,
                                    Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    ARMNN_DEPRECATED_MSG("Use IsGatherSupported with descriptor instead")
     bool IsGatherSupported(const TensorInfo& input0,
                            const TensorInfo& input1,
                            const TensorInfo& output,
+                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsGatherSupported(const TensorInfo& input0,
+                           const TensorInfo& input1,
+                           const TensorInfo& output,
+                           const GatherDescriptor& descriptor,
                            Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     ARMNN_DEPRECATED_MSG("Use IsComparisonSupported instead")
@@ -170,6 +190,17 @@ public:
                                     const TensorInfo& output,
                                     const L2NormalizationDescriptor& descriptor,
                                     Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsLogicalBinarySupported(const TensorInfo& input0,
+                                  const TensorInfo& input1,
+                                  const TensorInfo& output,
+                                  const LogicalBinaryDescriptor& descriptor,
+                                  Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsLogicalUnarySupported(const TensorInfo& input,
+                                 const TensorInfo& output,
+                                 const ElementwiseUnaryDescriptor& descriptor,
+                                 Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsLogSoftmaxSupported(const TensorInfo& input,
                                const TensorInfo& output,
@@ -262,6 +293,16 @@ public:
                              const TensorInfo& output,
                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    bool IsQLstmSupported(const TensorInfo& input,
+                          const TensorInfo& previousOutputIn,
+                          const TensorInfo& previousCellStateIn,
+                          const TensorInfo& outputStateOut,
+                          const TensorInfo& cellStateOut,
+                          const TensorInfo& output,
+                          const QLstmDescriptor& descriptor,
+                          const LstmInputParamsInfo& paramsInfo,
+                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsQuantizedLstmSupported(const TensorInfo& input,
                                   const TensorInfo& previousCellStateIn,
                                   const TensorInfo& previousOutputIn,
@@ -269,6 +310,10 @@ public:
                                   const TensorInfo& output,
                                   const QuantizedLstmInputParamsInfo& paramsInfo,
                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsRankSupported(const TensorInfo& input,
+                         const TensorInfo& output,
+                         Optional<std::string&> reasonIfUnsupported) const override;
 
     bool IsReshapeSupported(const TensorInfo& input,
                             const TensorInfo& output,
@@ -353,6 +398,12 @@ public:
         const TensorInfo& weights,
         const Optional<TensorInfo>& biases,
         Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    bool IsTransposeSupported(const TensorInfo& input,
+                              const TensorInfo& output,
+                              const TransposeDescriptor& descriptor,
+                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
 };
 
 } // namespace armnn

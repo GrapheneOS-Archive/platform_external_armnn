@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,6 +22,9 @@
 #include <armnn/TypesUtils.hpp>
 #include <armnn/BackendRegistry.hpp>
 #include <armnn/Logging.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <ProfilingService.hpp>
 
@@ -32,32 +35,27 @@
 #include <vector>
 #include <algorithm>
 
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-#include <boost/numeric/conversion/converter_policies.hpp>
-#include <boost/cast.hpp>
-
 namespace armnn
 {
 
-armnn::INetwork* INetwork::CreateRaw()
+armnn::INetwork* INetwork::CreateRaw(NetworkOptions networkOptions)
 {
-    return new Network();
+    return new Network(networkOptions);
 }
 
-armnn::INetworkPtr INetwork::Create()
+armnn::INetworkPtr INetwork::Create(NetworkOptions networkOptions)
 {
-    return INetworkPtr(CreateRaw(), &INetwork::Destroy);
+    return INetworkPtr(CreateRaw(networkOptions), &INetwork::Destroy);
 }
 
 void INetwork::Destroy(INetwork* network)
 {
-    delete boost::polymorphic_downcast<Network*>(network);
+    delete PolymorphicDowncast<Network*>(network);
 }
 
 void IOptimizedNetwork::Destroy(IOptimizedNetwork* network)
 {
-    delete boost::polymorphic_downcast<OptimizedNetwork*>(network);
+    delete PolymorphicDowncast<OptimizedNetwork*>(network);
 }
 
 Status OptimizedNetwork::PrintGraph()
@@ -95,6 +93,21 @@ void ReportWarning(const std::string& warningMessage,
     }
 }
 
+OptimizationResult ReturnWithError(OptimizationResult res,
+                                   const Layer* layer,
+                                   const BackendSettings& backendSettings,
+                                   Optional<std::vector<std::string>&> errMessages)
+{
+    std::stringstream failureMsg;
+    failureMsg << "Layer of type " << GetLayerTypeAsCString(layer->GetType())
+               << " is not supported on any preferred backend " << backendSettings.m_PreferredBackends;
+    ReportError(failureMsg.str(), errMessages);
+
+    res.m_Error = true;
+    return res;
+}
+
+
 bool CheckScaleSetOnQuantizedType(Layer* layer, Optional<std::vector<std::string>&> errMessages)
 {
     bool noErrors = true;
@@ -130,6 +143,238 @@ bool CheckScaleSetOnQuantizedType(Layer* layer, Optional<std::vector<std::string
     return noErrors;
 }
 
+template <typename LayerT>
+LayerT* ConvertBf16ToFp32Weight(Layer* l)
+{
+    LayerT* layer = PolymorphicDowncast<LayerT*>(l);
+    if ((layer->GetType() == LayerType::Convolution2d || layer->GetType() == LayerType::FullyConnected)
+         && layer->m_Weight)
+    {
+        const TensorInfo& info = layer->m_Weight->GetTensorInfo();
+
+        if (info.GetDataType() == DataType::BFloat16)
+        {
+            std::vector<float> newValues(info.GetNumElements());
+
+            armnnUtils::FloatingPointConverter::ConvertBFloat16ToFloat32(
+                layer->m_Weight->template GetTensor<armnn::BFloat16>(), info.GetNumElements(), newValues.data());
+
+            TensorInfo newInfo(info.GetShape(), DataType::Float32);
+            ConstTensor newInput(newInfo, newValues);
+            layer->m_Weight.reset(new ScopedCpuTensorHandle(newInput));
+        }
+    }
+    return layer;
+}
+
+OptimizationResult AttemptBackendAssignment(BackendSettings& backendSettings,
+                                            Graph& graph,
+                                            Layer* layer,
+                                            BackendId backend,
+                                            DataType dataTypeIn,
+                                            DataType dataTypeOut,
+                                            const std::vector<BackendId>& availablePreferredBackends,
+                                            std::string& reasonIfUnsupported,
+                                            Optional<std::vector<std::string>&> errMessages)
+{
+    OptimizationResult result;
+
+    // Helper lambda to compose meaningful error message before returning with error
+    auto ReturnError = [&](const Layer* layer)
+        {
+            return ReturnWithError(result, layer, backendSettings, errMessages);
+        };
+
+    // need to set the compute device on the layer
+    // before we can check if it is supported
+    layer->SetBackendId(backend);
+    if (!IWorkloadFactory::IsLayerSupported(*layer, EmptyOptional(), reasonIfUnsupported))
+    {
+        if (dataTypeIn == DataType::Float16 || dataTypeOut == DataType::Float16)
+        {
+            if (IWorkloadFactory::IsLayerSupported(*layer, DataType::Float32, reasonIfUnsupported)
+                && layer->GetType() != LayerType::ConvertFp32ToFp16
+                && layer->GetType() != LayerType::ConvertFp16ToFp32)
+            {
+                // Insert FP16 -> FP32 conversion layer before current layer
+                std::vector<ConvertFp16ToFp32Layer*> convertFp16ToFp32Layers;
+                if (dataTypeIn == DataType::Float16)
+                {
+                    convertFp16ToFp32Layers =
+                        InsertConvertFp16ToFp32LayersBefore(graph, *layer);
+                }
+
+                // Insert FP32 -> FP16 conversion layer after current layer
+                std::vector<ConvertFp32ToFp16Layer*> convertFp32ToFp16Layers;
+                if (dataTypeOut == DataType::Float16)
+                {
+                    convertFp32ToFp16Layers =
+                        InsertConvertFp32ToFp16LayersAfter(graph, *layer);
+                }
+
+                // Assign a supported backend to the newly introduced conversion layers
+                auto AssignFirstSupportedBackend = [&](Layer* layer, BackendId preferredBackend)
+                    {
+                        bool supportedBackendFound = false;
+                        std::string reasonIfUnsupported;
+
+                        // Try preferred backend first
+                        layer->SetBackendId(preferredBackend);
+                        if (IWorkloadFactory::IsLayerSupported(*layer,
+                                                               EmptyOptional(),
+                                                               reasonIfUnsupported))
+                        {
+                            supportedBackendFound = true;
+                        }
+                        else
+                        {
+                            for (const auto& backend : availablePreferredBackends)
+                            {
+                                // Skip preferred backend (we already determined that it is not supported)
+                                if (backend == preferredBackend)
+                                {
+                                    continue;
+                                }
+
+                                layer->SetBackendId(backend);
+                                if (IWorkloadFactory::IsLayerSupported(*layer,
+                                                                       EmptyOptional(),
+                                                                       reasonIfUnsupported))
+                                {
+                                    supportedBackendFound = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        return supportedBackendFound;
+                    };
+
+                for (ConvertFp16ToFp32Layer* convertLayer : convertFp16ToFp32Layers)
+                {
+                    if (!AssignFirstSupportedBackend(convertLayer, backend))
+                    {
+                        return ReturnError(convertLayer);
+                    }
+                }
+
+                for (ConvertFp32ToFp16Layer* convertLayer : convertFp32ToFp16Layers)
+                {
+                    if (!AssignFirstSupportedBackend(convertLayer, backend))
+                    {
+                        return ReturnError(convertLayer);
+                    }
+                }
+
+                return result;
+            }
+        }
+        else if (dataTypeIn == DataType::BFloat16 || dataTypeOut == DataType::BFloat16)
+        {
+            if (IWorkloadFactory::IsLayerSupported(*layer, DataType::Float32, reasonIfUnsupported)
+                && layer->GetType() != LayerType::ConvertFp32ToBf16
+                && layer->GetType() != LayerType::ConvertBf16ToFp32)
+            {
+                // Insert BF16 -> FP32 conversion layer before current layer
+                std::vector<ConvertBf16ToFp32Layer*> convertBf16ToFp32Layers;
+                if (dataTypeIn == DataType::BFloat16)
+                {
+                    convertBf16ToFp32Layers =
+                        InsertConvertBf16ToFp32LayersBefore(graph, *layer);
+                    if (layer->GetType() == LayerType::Convolution2d)
+                    {
+                        ConvertBf16ToFp32Weight<Convolution2dLayer>(layer);
+                    }
+                    else if (layer->GetType() == LayerType::FullyConnected)
+                    {
+                        ConvertBf16ToFp32Weight<FullyConnectedLayer>(layer);
+                    }
+                }
+
+                // Insert FP32 -> BF16 conversion layer after current layer
+                std::vector<ConvertFp32ToBf16Layer*> convertFp32ToBf16Layers;
+                if (dataTypeOut == DataType::BFloat16)
+                {
+                    convertFp32ToBf16Layers =
+                        InsertConvertFp32ToBf16LayersAfter(graph, *layer);
+                }
+
+                // Assign a supported backend to the newly introduced conversion layers
+                auto AssignFirstSupportedBackend = [&](Layer* layer, BackendId preferredBackend)
+                    {
+                        bool supportedBackendFound = false;
+                        std::string reasonIfUnsupported;
+
+                        // Try preferred backend first
+                        layer->SetBackendId(preferredBackend);
+                        if (IWorkloadFactory::IsLayerSupported(*layer,
+                                                               EmptyOptional(),
+                                                               reasonIfUnsupported))
+                        {
+                            supportedBackendFound = true;
+                        }
+                        else
+                        {
+                            for (const auto& backend : availablePreferredBackends)
+                            {
+                                // Skip preferred backend (we already determined that it is not supported)
+                                if (backend == preferredBackend)
+                                {
+                                    continue;
+                                }
+
+                                layer->SetBackendId(backend);
+                                if (IWorkloadFactory::IsLayerSupported(*layer,
+                                                                       EmptyOptional(),
+                                                                       reasonIfUnsupported))
+                                {
+                                    supportedBackendFound = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        return supportedBackendFound;
+                    };
+
+                for (ConvertBf16ToFp32Layer* convertLayer : convertBf16ToFp32Layers)
+                {
+                    if (!AssignFirstSupportedBackend(convertLayer, backend))
+                    {
+                        return ReturnError(convertLayer);
+                    }
+                }
+
+                for (ConvertFp32ToBf16Layer* convertLayer : convertFp32ToBf16Layers)
+                {
+                    if (!AssignFirstSupportedBackend(convertLayer, backend))
+                    {
+                        return ReturnError(convertLayer);
+                    }
+                }
+
+                return result;
+            }
+        }
+
+        std::stringstream warningMsg;
+        warningMsg << "Layer of type " << GetLayerTypeAsCString(layer->GetType())
+                   << " is not supported on requested backend " << layer->GetBackendId().Get()
+                   << " for input data type " << GetDataTypeName(dataTypeIn)
+                   << " and output data type " << GetDataTypeName(dataTypeOut)
+                   << " (reason: " << reasonIfUnsupported
+                   << "), falling back to the next backend.";
+        ReportWarning(warningMsg.str(), errMessages);
+
+        return OptimizationResult(true, false);
+    }
+    else
+    {
+        return result;
+    }
+}
+
+
 OptimizationResult AssignBackends(OptimizedNetwork* optNetObjPtr,
                                   BackendSettings& backendSettings,
                                   Graph::Iterator& firstLayer,
@@ -139,16 +384,11 @@ OptimizationResult AssignBackends(OptimizedNetwork* optNetObjPtr,
     OptimizationResult result;
 
     // Helper lambda to compose meaningful error message before returning with error
-    auto ReturnWithError = [&](const Layer* layer)
-    {
-        std::stringstream failureMsg;
-        failureMsg << "Layer of type " << GetLayerTypeAsCString(layer->GetType())
-                   << " is not supported on any preferred backend " << backendSettings.m_PreferredBackends;
-        ReportError(failureMsg.str(), errMessages);
+    auto ReturnError = [&](const Layer* layer)
+        {
+            return ReturnWithError(result, layer, backendSettings, errMessages);
+        };
 
-        result.m_Error = true;
-        return result;
-    };
 
     auto availablePreferredBackends = backendSettings.GetAvailablePreferredBackends();
     if (availablePreferredBackends.empty())
@@ -179,107 +419,59 @@ OptimizationResult AssignBackends(OptimizedNetwork* optNetObjPtr,
             result.m_Error = true;
         }
 
-        for (const auto& backend : availablePreferredBackends)
+        // First try assign layer to hint backend
+        if (layer->GetBackendHint().has_value() &&
+            backendSettings.IsBackendSupported(layer->GetBackendHint().value()) &&
+            AttemptBackendAssignment(backendSettings,
+                                     optNetObjPtr->GetGraph(),
+                                     layer,
+                                     layer->GetBackendHint().value(),
+                                     dataTypeIn,
+                                     dataTypeOut,
+                                     availablePreferredBackends,
+                                     reasonIfUnsupported,
+                                     errMessages).IsOk())
         {
-            // need to set the compute device on the layer
-            // before we can check if it is supported
-            layer->SetBackendId(backend);
-            if (!IWorkloadFactory::IsLayerSupported(*layer, EmptyOptional(), reasonIfUnsupported))
+            found = true;
+            backendSettings.m_SelectedBackends.insert(layer->GetBackendHint().value());
+        }
+        else
+        {
+            // Try assign layer to prefered list of backends
+            for (const auto& backend : availablePreferredBackends)
             {
-                if (dataTypeIn == DataType::Float16 || dataTypeOut == DataType::Float16)
+                if (layer->GetBackendHint().has_value() &&
+                    layer->GetBackendHint().value() == backend)
                 {
-                    if (IWorkloadFactory::IsLayerSupported(*layer, DataType::Float32, reasonIfUnsupported)
-                        && layer->GetType() != LayerType::ConvertFp32ToFp16
-                        && layer->GetType() != LayerType::ConvertFp16ToFp32)
-                    {
-                        // Insert FP16 -> FP32 conversion layer before current layer
-                        std::vector<ConvertFp16ToFp32Layer*> convertFp16ToFp32Layers;
-                        if (dataTypeIn == DataType::Float16)
-                        {
-                            convertFp16ToFp32Layers =
-                                InsertConvertFp16ToFp32LayersBefore(optNetObjPtr->GetGraph(), *layer);
-                        }
-
-                        // Insert FP32 -> FP16 conversion layer after current layer
-                        std::vector<ConvertFp32ToFp16Layer*> convertFp32ToFp16Layers;
-                        if (dataTypeOut == DataType::Float16)
-                        {
-                            convertFp32ToFp16Layers =
-                                InsertConvertFp32ToFp16LayersAfter(optNetObjPtr->GetGraph(), *layer);
-                        }
-
-                        // Assign a supported backend to the newly introduced conversion layers
-                        auto AssignFirstSupportedBackend = [&](Layer* layer, BackendId preferredBackend)
-                        {
-                            bool supportedBackendFound = false;
-                            std::string reasonIfUnsupported;
-
-                            // Try preferred backend first
-                            layer->SetBackendId(preferredBackend);
-                            if (IWorkloadFactory::IsLayerSupported(*layer,
-                                                                   EmptyOptional(),
-                                                                   reasonIfUnsupported))
-                            {
-                                supportedBackendFound = true;
-                            }
-                            else
-                            {
-                                for (const auto& backend : availablePreferredBackends)
-                                {
-                                    // Skip preferred backend (we already determined that it is not supported)
-                                    if (backend == preferredBackend)
-                                    {
-                                        continue;
-                                    }
-
-                                    layer->SetBackendId(backend);
-                                    if (IWorkloadFactory::IsLayerSupported(*layer,
-                                                                           EmptyOptional(),
-                                                                           reasonIfUnsupported))
-                                    {
-                                        supportedBackendFound = true;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            return supportedBackendFound;
-                        };
-
-                        for (ConvertFp16ToFp32Layer* convertLayer : convertFp16ToFp32Layers)
-                        {
-                            if (!AssignFirstSupportedBackend(convertLayer, backend))
-                            {
-                                return ReturnWithError(convertLayer);
-                            }
-                        }
-
-                        for (ConvertFp32ToFp16Layer* convertLayer : convertFp32ToFp16Layers)
-                        {
-                            if (!AssignFirstSupportedBackend(convertLayer, backend))
-                            {
-                                return ReturnWithError(convertLayer);
-                            }
-                        }
-
-                        found = true;
-                        break;
-                    }
+                    continue; //Don't re-test the backend hint
                 }
-                std::stringstream warningMsg;
-                warningMsg << "Layer of type " << GetLayerTypeAsCString(layer->GetType())
-                           << " is not supported on requested backend " << layer->GetBackendId().Get()
-                           << " for input data type " << GetDataTypeName(dataTypeIn)
-                           << " and output data type " << GetDataTypeName(dataTypeOut)
-                           << " (reason: " << reasonIfUnsupported
-                           << "), falling back to the next backend.";
-                ReportWarning(warningMsg.str(), errMessages);
-            }
-            else
-            {
-                found = true;
-                backendSettings.m_SelectedBackends.insert(backend);
-                break;
+
+                OptimizationResult res = AttemptBackendAssignment(backendSettings,
+                                                                  optNetObjPtr->GetGraph(),
+                                                                  layer,
+                                                                  backend,
+                                                                  dataTypeIn,
+                                                                  dataTypeOut,
+                                                                  availablePreferredBackends,
+                                                                  reasonIfUnsupported,
+                                                                  errMessages);
+
+                if (res.IsOk())
+                {
+                    found = true;
+                    backendSettings.m_SelectedBackends.insert(backend);
+                    break;
+                }
+                else if (res.IsError())
+                {
+                   return res;  // Cannot continue.
+                   // Note: we don't need to log the error as it would already
+                   // be logged in AttemptBackendAssignment().
+                }
+                else
+                {
+                    ARMNN_ASSERT_MSG(res.IsWarningOnly(), "OptimizationResult in unexpected state.");
+                }
             }
         }
 
@@ -301,7 +493,7 @@ OptimizationResult AssignBackends(OptimizedNetwork* optNetObjPtr,
             }
             else
             {
-                return ReturnWithError(layer);
+                return ReturnError(layer);
             }
         }
     }
@@ -332,7 +524,7 @@ BackendsMap CreateSupportedBackends(TensorHandleFactoryRegistry& handleFactoryRe
     {
         auto backendFactory = backendRegistry.GetFactory(selectedBackend);
         auto backendObjPtr = backendFactory();
-        BOOST_ASSERT(backendObjPtr);
+        ARMNN_ASSERT(backendObjPtr);
 
         backendObjPtr->RegisterTensorHandleFactories(handleFactoryRegistry);
 
@@ -345,9 +537,10 @@ BackendsMap CreateSupportedBackends(TensorHandleFactoryRegistry& handleFactoryRe
 OptimizationResult ApplyBackendOptimizations(OptimizedNetwork* optNetObjPtr,
                                              BackendSettings& backendSettings,
                                              BackendsMap& backends,
+                                             const ModelOptions& modelOptions,
                                              Optional<std::vector<std::string>&> errMessages)
 {
-    BOOST_ASSERT(optNetObjPtr);
+    ARMNN_ASSERT(optNetObjPtr);
 
     OptimizationResult result;
 
@@ -358,7 +551,7 @@ OptimizationResult ApplyBackendOptimizations(OptimizedNetwork* optNetObjPtr,
     for (auto&& selectedBackend : backendSettings.m_SelectedBackends)
     {
         auto backendObjPtr = backends.find(selectedBackend)->second.get();
-        BOOST_ASSERT(backendObjPtr);
+        ARMNN_ASSERT(backendObjPtr);
 
         // Select sub-graphs based on backend
         SubgraphViewSelector::Subgraphs subgraphs =
@@ -380,8 +573,8 @@ OptimizationResult ApplyBackendOptimizations(OptimizedNetwork* optNetObjPtr,
         for (auto& subgraph : subgraphs)
         {
             // Try to optimize the current sub-graph
-            OptimizationViews optimizationViews = backendObjPtr->OptimizeSubgraphView(*subgraph);
-            BOOST_ASSERT(optimizationViews.Validate(*subgraph));
+            OptimizationViews optimizationViews = backendObjPtr->OptimizeSubgraphView(*subgraph, modelOptions);
+            ARMNN_ASSERT(optimizationViews.Validate(*subgraph));
 
             // Optimization attempted, check the resulting optimized sub-graph
             for (auto& substitution : optimizationViews.GetSubstitutions())
@@ -394,7 +587,7 @@ OptimizationResult ApplyBackendOptimizations(OptimizedNetwork* optNetObjPtr,
                 // Assign the current backend to the optimized sub-graph
                 std::for_each(replacementSubgraph.begin(), replacementSubgraph.end(), [&selectedBackend](Layer* l)
                     {
-                        BOOST_ASSERT(l);
+                        ARMNN_ASSERT(l);
                         l->SetBackendId(selectedBackend);
                     });
             }
@@ -465,7 +658,7 @@ ITensorHandleFactory::FactoryId CalculateSlotOptionForInput(BackendsMap& backend
                                                             TensorHandleFactoryRegistry& registry)
 {
     Layer& layer = slot.GetOwningLayer();
-    BOOST_ASSERT(layer.GetType() == LayerType::Input);
+    ARMNN_ASSERT(layer.GetType() == LayerType::Input);
 
     // Explicitly select the tensorhandle factory for InputLayer because the rules for it are slightly different. It
     // doesn't matter which backend it is assigned to because they all use the same implementation, which
@@ -491,7 +684,7 @@ ITensorHandleFactory::FactoryId CalculateSlotOptionForInput(BackendsMap& backend
         const Layer& connectedLayer = connection->GetOwningLayer();
 
         auto toBackend = backends.find(connectedLayer.GetBackendId());
-        BOOST_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
+        ARMNN_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
 
         if (!toBackend->second.get()->SupportsTensorAllocatorAPI())
         {
@@ -546,7 +739,7 @@ ITensorHandleFactory::FactoryId CalculateSlotOptionForOutput(BackendsMap& backen
                                                             OutputSlot& slot,
                                                             TensorHandleFactoryRegistry& registry)
 {
-    boost::ignore_unused(backends, slot, registry);
+    IgnoreUnused(backends, slot, registry);
     return ITensorHandleFactory::DeferredFactoryId;
 }
 
@@ -607,7 +800,7 @@ ITensorHandleFactory::FactoryId CalculateSlotOption(BackendsMap& backends,
         const Layer& connectedLayer = connection->GetOwningLayer();
 
         auto toBackend = backends.find(connectedLayer.GetBackendId());
-        BOOST_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
+        ARMNN_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
 
         auto dstPrefs = toBackend->second.get()->GetHandleFactoryPreferences();
         for (auto&& src : srcPrefs)
@@ -665,10 +858,11 @@ EdgeStrategy CalculateEdgeStrategy(BackendsMap& backends,
                                    ITensorHandleFactory::FactoryId srcFactoryId,
                                    const Layer& layer,
                                    const Layer& connectedLayer,
-                                   TensorHandleFactoryRegistry& registry)
+                                   TensorHandleFactoryRegistry& registry,
+                                   bool importEnabled)
 {
     auto toBackend = backends.find(connectedLayer.GetBackendId());
-    BOOST_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
+    ARMNN_ASSERT_MSG(toBackend != backends.end(), "Backend id not found for the connected layer");
 
     auto dstPrefs = toBackend->second.get()->GetHandleFactoryPreferences();
 
@@ -703,7 +897,7 @@ EdgeStrategy CalculateEdgeStrategy(BackendsMap& backends,
 
     // Search for export/import options
     ITensorHandleFactory* srcFactory = registry.GetFactory(srcFactoryId);
-    if (srcFactory->GetExportFlags() != 0)
+    if (srcFactory->GetExportFlags() != 0 && importEnabled)
     {
         for (auto&& pref : dstPrefs)
         {
@@ -716,7 +910,15 @@ EdgeStrategy CalculateEdgeStrategy(BackendsMap& backends,
 
             if ((dstFactory->GetImportFlags() & srcFactory->GetExportFlags()) != 0)
             {
-                return EdgeStrategy::ExportToTarget;
+                auto srcCapability = srcFactory->GetCapabilities(&layer, &layer, CapabilityClass::PaddingRequired);
+                auto dstCapability = dstFactory->GetCapabilities(&connectedLayer,
+                                                                 &connectedLayer,
+                                                                 CapabilityClass::PaddingRequired);
+                // Do not require memory copy if the source and destination do not require padding.
+                if (srcCapability.empty() && dstCapability.empty())
+                {
+                    return EdgeStrategy::ExportToTarget;
+                }
             }
         }
     }
@@ -741,17 +943,18 @@ EdgeStrategy CalculateEdgeStrategy(BackendsMap& backends,
 OptimizationResult SelectTensorHandleStrategy(Graph& optGraph,
                                               BackendsMap& backends,
                                               TensorHandleFactoryRegistry& registry,
+                                              bool importEnabled,
                                               Optional<std::vector<std::string>&> errMessages)
 {
     OptimizationResult result;
 
-    optGraph.ForEachLayer([&backends, &registry, &result, &errMessages](Layer* layer)
+    optGraph.ForEachLayer([&backends, &registry, &result, &errMessages, importEnabled](Layer* layer)
     {
-        BOOST_ASSERT(layer);
+        ARMNN_ASSERT(layer);
 
         // Lets make sure the backend is in our list of supported backends. Something went wrong during backend
         // assignment if this check fails
-        BOOST_ASSERT(backends.find(layer->GetBackendId()) != backends.end());
+        ARMNN_ASSERT(backends.find(layer->GetBackendId()) != backends.end());
 
         // Check each output separately
         for (unsigned int slotIdx = 0; slotIdx < layer->GetNumOutputSlots(); slotIdx++)
@@ -781,7 +984,8 @@ OptimizationResult SelectTensorHandleStrategy(Graph& optGraph,
             {
                 const Layer& connectedLayer = connection->GetOwningLayer();
 
-                EdgeStrategy strategy = CalculateEdgeStrategy(backends, slotOption, *layer, connectedLayer, registry);
+                EdgeStrategy strategy = CalculateEdgeStrategy(backends, slotOption, *layer, connectedLayer,
+                                                              registry, importEnabled);
 
                 if (strategy == EdgeStrategy::Undefined)
                 {
@@ -812,38 +1016,64 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
 {
     if (backendPreferences.empty())
     {
-        throw armnn::InvalidArgumentException("Invoked Optimize with no backends specified");
+        throw InvalidArgumentException("Invoked Optimize with no backends specified");
     }
 
-    const Network& network = *boost::polymorphic_downcast<const Network*>(&inNetwork);
+    if (options.m_ReduceFp32ToFp16 && options.m_ReduceFp32ToBf16)
+    {
+        throw InvalidArgumentException("BFloat16 and Float16 optimization cannot be enabled at the same time.");
+    }
+
+    const Network& network = *PolymorphicDowncast<const Network*>(&inNetwork);
     std::unique_ptr<Graph> graph = std::make_unique<Graph>(network.GetGraph());
 
-    auto optNet = IOptimizedNetworkPtr(new OptimizedNetwork(std::move(graph)), &IOptimizedNetwork::Destroy);
+    auto optNet = IOptimizedNetworkPtr(new OptimizedNetwork(std::move(graph), options.m_ModelOptions),
+                                       &IOptimizedNetwork::Destroy);
 
-    OptimizedNetwork* optNetObjPtr = boost::polymorphic_downcast<OptimizedNetwork*>(optNet.get());
+    OptimizedNetwork* optNetObjPtr = PolymorphicDowncast<OptimizedNetwork*>(optNet.get());
 
     // Get the optimized graph
     Graph& optGraph = optNetObjPtr->GetGraph();
 
-    // Perform optimisation passes
+    // Perform AddBroadcastReshapeLayer optimisation
     using namespace optimizations;
-    Optimizer::Pass(optGraph, MakeOptimizations(SquashEqualPermuteSiblings(),
-                                                SquashEqualReshapeSiblings(),
-                                                OptimizeInversePermutes(),
-                                                MovePermuteUp(),
-                                                PermuteAsReshape(),
-                                                OptimizeConsecutiveReshapes(),
-                                                FoldPadIntoConvolution2d(),
-                                                PermuteAndBatchToSpaceAsDepthToSpace()));
+    Optimizer::Pass(optGraph, MakeOptimizations(AddBroadcastReshapeLayer()));
 
     // Infer the tensor infos for all output slots. Throws an exception on failure
     optGraph.InferTensorInfos();
+
+    // Perform optimisation passes
+    Optimizer::Pass(optGraph, MakeOptimizations(SquashEqualPermuteSiblings(),
+                                                SquashEqualTransposeSiblings(),
+                                                SquashEqualReshapeSiblings(),
+                                                OptimizeInversePermutes(),
+                                                OptimizeInverseTransposes(),
+                                                MovePermuteUp(),
+                                                MoveTransposeUp(),
+                                                PermuteAsReshape(),
+                                                TransposeAsReshape(),
+                                                OptimizeConsecutiveReshapes(),
+                                                FoldPadIntoConvolution2d(),
+                                                PermuteAndBatchToSpaceAsDepthToSpace(),
+                                                TransposeAndBatchToSpaceAsDepthToSpace(),
+                                                FuseBatchNormIntoConvolution2DFloat32(),
+                                                FuseBatchNormIntoConvolution2DFloat16(),
+                                                FuseBatchNormIntoDepthwiseConvolution2DFloat32(),
+                                                FuseBatchNormIntoDepthwiseConvolution2DFloat16()));
 
     // If Fp32 to Fp16 optimization is set convert Fp32 network to Fp16
     if (options.m_ReduceFp32ToFp16)
     {
         Optimizer::Pass(optGraph, MakeOptimizations(Fp32NetworkToFp16Converter()));
         Optimizer::Pass(optGraph, MakeOptimizations(ConvertConstantsFloatToHalf()));
+    }
+
+    // If Fp32 to Bf16 optimization is set convert Fp32 network to Bf16
+    // Convert input of Convolution2d and FullyConnected from Fp32 to Bf16
+    // Only Constant weight of Convolution2d and FullyConnected are converted from Fp32 to Bf16
+    if (options.m_ReduceFp32ToBf16)
+    {
+        Optimizer::Pass(optGraph, MakeOptimizations(Fp32NetworkToBf16Converter()));
     }
 
     // Initialize backend settings
@@ -854,7 +1084,7 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
         failureMsg << "None of the preferred backends " << backendPreferences
                    << " are supported. Current platform provides " << backendSettings.m_SupportedBackends;
         ReportError(failureMsg.str(), messages);
-        return IOptimizedNetworkPtr(nullptr, &IOptimizedNetwork::Destroy);
+        throw InvalidArgumentException(failureMsg.str());
     }
 
     // Create a map to temporarily hold initialized backend objects
@@ -872,7 +1102,7 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
     if (assignBackendsResult.m_Error)
     {
         // Failed to assign a backend to each layer
-        return IOptimizedNetworkPtr(nullptr, &IOptimizedNetwork::Destroy);
+        throw InvalidArgumentException("Failed to assign a backend to each layer");
     }
 
     Optimizer::Pass(optGraph, MakeOptimizations(OptimizeInverseConversionsFp16(),
@@ -882,11 +1112,12 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
     OptimizationResult backendOptimizationResult = ApplyBackendOptimizations(optNetObjPtr,
                                                                              backendSettings,
                                                                              backends,
+                                                                             options.m_ModelOptions,
                                                                              messages);
     if (backendOptimizationResult.m_Error)
     {
         // Failed to apply the backend-specific optimizations
-        return IOptimizedNetworkPtr(nullptr, &IOptimizedNetwork::Destroy);
+        throw InvalidArgumentException("Failed to apply the backend-specific optimizations");
     }
 
     // If the debug flag is set, then insert a DebugLayer after each layer
@@ -900,6 +1131,7 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
     OptimizationResult strategyResult = SelectTensorHandleStrategy(optGraph,
                                                                    backends,
                                                                    tensorHandleFactoryRegistry,
+                                                                   options.m_ImportEnabled,
                                                                    messages);
     if (strategyResult.m_Error)
     {
@@ -919,7 +1151,7 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
     {
         auto factoryFun = BackendRegistryInstance().GetFactory(chosenBackend);
         auto backendPtr = factoryFun();
-        BOOST_ASSERT(backendPtr.get() != nullptr);
+        ARMNN_ASSERT(backendPtr.get() != nullptr);
 
         ARMNN_NO_DEPRECATE_WARN_BEGIN
         auto backendSpecificOptimizations = backendPtr->GetOptimizations();
@@ -933,12 +1165,19 @@ IOptimizedNetworkPtr Optimize(const INetwork& inNetwork,
 
     return optNet;
 }
-
-Network::Network()
-: m_Graph(std::make_unique<Graph>()),
-  m_Guid(profiling::ProfilingService::Instance().NextGuid())
+bool Network::GetShapeInferenceMethod()
 {
+    if (m_NetworkOptions.size() > 0 && m_NetworkOptions[0].GetBackendId().Get() == "ShapeInferenceMethod")
+    {
+        return m_NetworkOptions[0].GetOption(0).GetValue().AsBool();
+    }
+
+    return false;
 }
+Network::Network(NetworkOptions networkOptions)
+: m_NetworkOptions(networkOptions),
+  m_Graph(std::make_unique<Graph>(GetShapeInferenceMethod()))
+{}
 
 Network::~Network()
 {
@@ -971,6 +1210,12 @@ IConnectableLayer* Network::AddElementwiseUnaryLayer(const ElementwiseUnaryDescr
                                                      const char* name)
 {
     return m_Graph->AddLayer<ElementwiseUnaryLayer>(elementwiseUnaryDescriptor, name);
+}
+
+IConnectableLayer* Network::AddFillLayer(const FillDescriptor& fillDescriptor,
+                                         const char* name)
+{
+    return m_Graph->AddLayer<FillLayer>(fillDescriptor, name);
 }
 
 IConnectableLayer* Network::AddFullyConnectedLayerImpl(const FullyConnectedDescriptor& fullyConnectedDescriptor,
@@ -1241,14 +1486,21 @@ IConnectableLayer* Network::AddBatchNormalizationLayer(const BatchNormalizationD
     return layer;
 }
 
+IConnectableLayer* Network::AddRankLayer(const char* name)
+{
+    return m_Graph->AddLayer<RankLayer>(name);
+}
+
 IConnectableLayer* Network::AddResizeBilinearLayer(const ResizeBilinearDescriptor& descriptor,
                                                    const char* name)
 {
     ResizeDescriptor resizeDescriptor;
-    resizeDescriptor.m_Method       = ResizeMethod::Bilinear;
-    resizeDescriptor.m_DataLayout   = descriptor.m_DataLayout;
-    resizeDescriptor.m_TargetWidth  = descriptor.m_TargetWidth;
-    resizeDescriptor.m_TargetHeight = descriptor.m_TargetHeight;
+    resizeDescriptor.m_Method           = ResizeMethod::Bilinear;
+    resizeDescriptor.m_DataLayout       = descriptor.m_DataLayout;
+    resizeDescriptor.m_TargetWidth      = descriptor.m_TargetWidth;
+    resizeDescriptor.m_TargetHeight     = descriptor.m_TargetHeight;
+    resizeDescriptor.m_AlignCorners     = descriptor.m_AlignCorners;
+    resizeDescriptor.m_HalfPixelCenters = descriptor.m_HalfPixelCenters;
 
     return m_Graph->AddLayer<ResizeLayer>(resizeDescriptor, name);
 }
@@ -1340,27 +1592,24 @@ IConnectableLayer* Network::AddLstmLayer(const LstmDescriptor&  descriptor,
     {
         if(params.m_InputToInputWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Input To Input Weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Input To Input Weights cannot be NULL "
+                                           "when CIFG is disabled.");
         }
         if(params.m_RecurrentToInputWeights == nullptr)
         {
             throw InvalidArgumentException(
-                    "AddLstmLayer: Recurrent To Input Weights cannot be NULL");
+                    "AddLstmLayer: Recurrent To Input Weights cannot be NULL "
+                    "when CIFG is disabled.");
         }
         if(params.m_InputGateBias == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Input Gate Bias cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Input Gate Bias cannot be NULL "
+                                           "when CIFG is disabled.");
         }
         layer->m_CifgParameters.m_InputToInputWeights =
             std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputToInputWeights));
         layer->m_CifgParameters.m_RecurrentToInputWeights =
             std::make_unique<ScopedCpuTensorHandle>(*(params.m_RecurrentToInputWeights));
-        // In the VTS tests, cell-to-input weights may be null, even if the other CIFG params are not.
-        if(params.m_CellToInputWeights != nullptr)
-        {
-            layer->m_CifgParameters.m_CellToInputWeights =
-                    std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToInputWeights));
-        }
         layer->m_CifgParameters.m_InputGateBias =
             std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputGateBias));
     }
@@ -1370,7 +1619,8 @@ IConnectableLayer* Network::AddLstmLayer(const LstmDescriptor&  descriptor,
     {
         if(params.m_ProjectionWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Projection Weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Projection Weights cannot be NULL "
+                                           "when projection is enabled.");
         }
         layer->m_ProjectionParameters.m_ProjectionWeights =
             std::make_unique<ScopedCpuTensorHandle>(*(params.m_ProjectionWeights));
@@ -1384,14 +1634,29 @@ IConnectableLayer* Network::AddLstmLayer(const LstmDescriptor&  descriptor,
     //Lstm Peephole params
     if(descriptor.m_PeepholeEnabled)
     {
+        if(!descriptor.m_CifgEnabled)
+        {
+            if(params.m_CellToInputWeights == nullptr)
+            {
+                throw InvalidArgumentException("AddLstmLayer: Cell To Input Weights cannot be NULL "
+                                               "when Peephole is enabled and CIFG disabled.");
+            }
+
+            layer->m_PeepholeParameters.m_CellToInputWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToInputWeights));
+        }
+
         if(params.m_CellToForgetWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Cell To Forget Weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Cell To Forget Weights cannot be NULL "
+                                           "when Peephole is enabled.");
         }
         if(params.m_CellToOutputWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Cell To Output Weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Cell To Output Weights cannot be NULL "
+                                           "when Peephole is enabled.");
         }
+
         layer->m_PeepholeParameters.m_CellToForgetWeights =
             std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToForgetWeights));
         layer->m_PeepholeParameters.m_CellToOutputWeights =
@@ -1405,7 +1670,8 @@ IConnectableLayer* Network::AddLstmLayer(const LstmDescriptor&  descriptor,
         {
             if(params.m_InputLayerNormWeights == nullptr)
             {
-                throw InvalidArgumentException("AddLstmLayer: Input layer normalization weights cannot be NULL");
+                throw InvalidArgumentException("AddLstmLayer: Input layer normalization weights cannot be NULL "
+                                               "when layer normalization is enabled and CIFG disabled.");
             }
             layer->m_LayerNormParameters.m_InputLayerNormWeights =
                     std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputLayerNormWeights));
@@ -1413,15 +1679,18 @@ IConnectableLayer* Network::AddLstmLayer(const LstmDescriptor&  descriptor,
 
         if(params.m_ForgetLayerNormWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Forget layer normalization weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Forget layer normalization weights cannot be NULL "
+                                           "when layer normalization is enabled.");
         }
         if(params.m_CellLayerNormWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Cell layer normalization weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Cell layer normalization weights cannot be NULL "
+                                           "when layer normalization is enabled.");
         }
         if(params.m_OutputLayerNormWeights == nullptr)
         {
-            throw InvalidArgumentException("AddLstmLayer: Output layer normalization weights cannot be NULL");
+            throw InvalidArgumentException("AddLstmLayer: Output layer normalization weights cannot be NULL "
+                                           "when layer normalization is enabled.");
         }
         layer->m_LayerNormParameters.m_ForgetLayerNormWeights =
                 std::make_unique<ScopedCpuTensorHandle>(*(params.m_ForgetLayerNormWeights));
@@ -1486,7 +1755,14 @@ IConnectableLayer* Network::AddRsqrtLayer(const char * name)
 
 IConnectableLayer* Network::AddGatherLayer(const char* name)
 {
-    return m_Graph->AddLayer<GatherLayer>(name);
+    GatherDescriptor gatherDescriptor{};
+    return AddGatherLayer(gatherDescriptor, name);
+}
+
+IConnectableLayer* Network::AddGatherLayer(const GatherDescriptor& gatherDescriptor,
+                                           const char* name)
+{
+    return m_Graph->AddLayer<GatherLayer>(gatherDescriptor, name);
 }
 
 IConnectableLayer* Network::AddMergeLayer(const char* name)
@@ -1524,6 +1800,12 @@ IConnectableLayer* Network::AddTransposeConvolution2dLayer(const TransposeConvol
     }
 
     return layer;
+}
+
+IConnectableLayer* Network::AddTransposeLayer(const TransposeDescriptor& transposeDescriptor,
+                                              const char* name)
+{
+    return m_Graph->AddLayer<TransposeLayer>(transposeDescriptor, name);
 }
 
 IConnectableLayer* Network::AddStackLayer(const StackDescriptor& stackDescriptor,
@@ -1577,6 +1859,154 @@ IConnectableLayer* Network::AddQuantizedLstmLayer(const QuantizedLstmInputParams
     return layer;
 }
 
+IConnectableLayer* Network::AddQLstmLayer(const QLstmDescriptor&  descriptor,
+                                          const LstmInputParams& params,
+                                          const char* name)
+{
+    const auto layer = m_Graph->AddLayer<QLstmLayer>(descriptor, name);
+
+    // QLstm Basic Parameters
+    layer->m_BasicParameters.m_InputToForgetWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputToForgetWeights));
+    layer->m_BasicParameters.m_InputToCellWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputToCellWeights));
+    layer->m_BasicParameters.m_InputToOutputWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputToOutputWeights));
+    layer->m_BasicParameters.m_RecurrentToForgetWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_RecurrentToForgetWeights));
+    layer->m_BasicParameters.m_RecurrentToCellWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_RecurrentToCellWeights));
+    layer->m_BasicParameters.m_RecurrentToOutputWeights =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_RecurrentToOutputWeights));
+    layer->m_BasicParameters.m_ForgetGateBias =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_ForgetGateBias));
+    layer->m_BasicParameters.m_CellBias =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellBias));
+    layer->m_BasicParameters.m_OutputGateBias =
+            std::make_unique<ScopedCpuTensorHandle>(*(params.m_OutputGateBias));
+
+    // QLstm Cifg parameters
+    if(!descriptor.m_CifgEnabled)
+    {
+        if(params.m_InputToInputWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Input To Input Weights cannot be NULL");
+        }
+
+        if(params.m_RecurrentToInputWeights == nullptr)
+        {
+            throw InvalidArgumentException(
+                    "AddQLstmLayer: Recurrent To Input Weights cannot be NULL");
+        }
+
+        if(params.m_InputGateBias == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Input Gate Bias cannot be NULL");
+        }
+
+        layer->m_CifgParameters.m_InputToInputWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputToInputWeights));
+        layer->m_CifgParameters.m_RecurrentToInputWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_RecurrentToInputWeights));
+        layer->m_CifgParameters.m_InputGateBias =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputGateBias));
+    }
+
+    // QLstm Projection parameters
+    if(descriptor.m_ProjectionEnabled)
+    {
+        if(params.m_ProjectionWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Projection Weights cannot be NULL");
+        }
+
+        layer->m_ProjectionParameters.m_ProjectionWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_ProjectionWeights));
+
+        // Projection bias is optional even if projection is enabled
+        if(params.m_ProjectionWeights != nullptr)
+        {
+            layer->m_ProjectionParameters.m_ProjectionBias =
+                    std::make_unique<ScopedCpuTensorHandle>(*(params.m_ProjectionBias));
+        }
+
+    }
+
+    // QLstm Peephole params
+    if(descriptor.m_PeepholeEnabled)
+    {
+        if(params.m_CellToForgetWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Cell To Forget Weights cannot be NULL");
+        }
+
+        if(params.m_CellToOutputWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Cell To Output Weights cannot be NULL");
+        }
+
+        if(!descriptor.m_CifgEnabled)
+        {
+            if(params.m_CellToInputWeights == nullptr)
+            {
+                throw InvalidArgumentException("AddQLstmLayer: Cell To Input Weights cannot be NULL");
+            }
+
+            layer->m_PeepholeParameters.m_CellToInputWeights =
+                    std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToInputWeights));
+        }
+
+        layer->m_PeepholeParameters.m_CellToForgetWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToForgetWeights));
+        layer->m_PeepholeParameters.m_CellToOutputWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellToOutputWeights));
+    }
+
+    // QLstm Layer Normalization params
+    if(descriptor.m_LayerNormEnabled)
+    {
+        if(params.m_ForgetLayerNormWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Forget layer normalization weights cannot be NULL");
+        }
+
+        if(params.m_CellLayerNormWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Cell layer normalization weights cannot be NULL");
+        }
+
+        if(params.m_OutputLayerNormWeights == nullptr)
+        {
+            throw InvalidArgumentException("AddQLstmLayer: Output layer normalization weights cannot be NULL");
+        }
+
+        if(!descriptor.m_CifgEnabled)
+        {
+            if(params.m_InputLayerNormWeights == nullptr)
+            {
+                throw InvalidArgumentException("AddQLstmLayer: Input layer normalization weights cannot be NULL");
+            }
+
+            layer->m_LayerNormParameters.m_InputLayerNormWeights =
+                    std::make_unique<ScopedCpuTensorHandle>(*(params.m_InputLayerNormWeights));
+        }
+
+        layer->m_LayerNormParameters.m_ForgetLayerNormWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_ForgetLayerNormWeights));
+        layer->m_LayerNormParameters.m_CellLayerNormWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_CellLayerNormWeights));
+        layer->m_LayerNormParameters.m_OutputLayerNormWeights =
+                std::make_unique<ScopedCpuTensorHandle>(*(params.m_OutputLayerNormWeights));
+    }
+    return layer;
+}
+
+IConnectableLayer* Network::AddLogicalBinaryLayer(const LogicalBinaryDescriptor& logicalBinaryDescriptor,
+                                                  const char* name)
+{
+    return m_Graph->AddLayer<LogicalBinaryLayer>(logicalBinaryDescriptor, name);
+}
+
 void Network::Accept(ILayerVisitor& visitor) const
 {
     for (auto layer : GetGraph())
@@ -1586,8 +2016,12 @@ void Network::Accept(ILayerVisitor& visitor) const
 }
 
 OptimizedNetwork::OptimizedNetwork(std::unique_ptr<Graph> graph)
-    : m_Graph(std::move(graph)),
-      m_Guid(profiling::ProfilingService::Instance().NextGuid())
+    : m_Graph(std::move(graph)), m_Guid(profiling::ProfilingService::GetNextGuid())
+{
+}
+
+OptimizedNetwork::OptimizedNetwork(std::unique_ptr<Graph> graph, const ModelOptions& modelOptions)
+    : m_Graph(std::move(graph)), m_Guid(profiling::ProfilingService::GetNextGuid()), m_ModelOptions(modelOptions)
 {
 }
 

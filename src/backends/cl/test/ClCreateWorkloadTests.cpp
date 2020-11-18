@@ -1,11 +1,14 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClContextControlFixture.hpp"
 #include "ClWorkloadFactoryHelper.hpp"
 
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/MemCopyWorkload.hpp>
 
 #include <aclCommon/test/CreateWorkloadClNeon.hpp>
@@ -35,8 +38,8 @@ static void ClCreateActivationWorkloadTest()
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateActivationWorkloadTest).
     ActivationQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {1, 1}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {1, 1}));
@@ -66,9 +69,9 @@ static void ClCreateElementwiseWorkloadTest()
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateElementwiseWorkloadTest).
     DescriptorType queueDescriptor = workload->GetData();
-    auto inputHandle1 = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto inputHandle2 = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle1 = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto inputHandle2 = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle1, {2, 3}));
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle2, {2, 3}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {2, 3}));
@@ -159,8 +162,8 @@ static void ClCreateElementwiseUnaryWorkloadTest(armnn::UnaryOperation op)
 
     DescriptorType queueDescriptor = workload->GetData();
 
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {2, 3}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {2, 3}));
@@ -184,8 +187,8 @@ static void ClCreateBatchNormalizationWorkloadTest(DataLayout dataLayout)
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateBatchNormalizationWorkloadTest).
     BatchNormalizationQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
      switch (dataLayout)
     {
@@ -232,8 +235,8 @@ BOOST_AUTO_TEST_CASE(CreateConvertFp16ToFp32Workload)
     auto workload = CreateConvertFp16ToFp32WorkloadTest<ClConvertFp16ToFp32Workload>(factory, graph);
 
     ConvertFp16ToFp32QueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {1, 3, 2, 3}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {1, 3, 2, 3}));
@@ -250,8 +253,8 @@ BOOST_AUTO_TEST_CASE(CreateConvertFp32ToFp16Workload)
     auto workload = CreateConvertFp32ToFp16WorkloadTest<ClConvertFp32ToFp16Workload>(factory, graph);
 
     ConvertFp32ToFp16QueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {1, 3, 2, 3}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {1, 3, 2, 3}));
@@ -277,8 +280,8 @@ static void ClConvolution2dWorkloadTest(DataLayout dataLayout)
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateConvolution2dWorkloadTest).
     Convolution2dQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST((inputHandle->GetShape() == inputShape));
     BOOST_TEST((outputHandle->GetShape() == outputShape));
 }
@@ -303,6 +306,34 @@ BOOST_AUTO_TEST_CASE(CreateConvolution2dFloat16NhwcWorkload)
     ClConvolution2dWorkloadTest<ClConvolution2dWorkload, armnn::DataType::Float16>(DataLayout::NHWC);
 }
 
+BOOST_AUTO_TEST_CASE(CreateConvolution2dFastMathEnabledWorkload)
+{
+    Graph graph;
+
+    using ModelOptions = std::vector<BackendOptions>;
+    ModelOptions modelOptions = {};
+    BackendOptions gpuAcc("GpuAcc",
+    {
+        { "FastMathEnabled", true }
+    });
+    modelOptions.push_back(gpuAcc);
+
+    ClWorkloadFactory factory =
+        ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager(), modelOptions);
+
+    auto workload =
+        CreateConvolution2dWorkloadFastMathTest<ClConvolution2dWorkload, armnn::DataType::Float32>(factory,
+                                                                                           graph,
+                                                                                           DataLayout::NCHW,
+                                                                                           modelOptions);
+
+    ARMNN_ASSERT(workload != nullptr);
+    auto conv2dWorkload = PolymorphicDowncast<ClConvolution2dWorkload*>(workload.get());
+    IgnoreUnused(conv2dWorkload);
+    ARMNN_ASSERT(conv2dWorkload != nullptr);
+    ARMNN_ASSERT(conv2dWorkload->GetConvolutionMethod() == arm_compute::ConvolutionMethod::WINOGRAD);
+}
+
 template <typename DepthwiseConvolutionWorkloadType, typename armnn::DataType DataType>
 static void ClDepthwiseConvolutionWorkloadTest(DataLayout dataLayout)
 {
@@ -315,8 +346,8 @@ static void ClDepthwiseConvolutionWorkloadTest(DataLayout dataLayout)
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateDepthwiseConvolution2dWorkloadTest).
     DepthwiseConvolution2dQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     TensorShape inputShape  = (dataLayout == DataLayout::NCHW) ? std::initializer_list<unsigned int>({ 2, 2, 5, 5 })
                                                                : std::initializer_list<unsigned int>({ 2, 5, 5, 2 });
@@ -343,8 +374,8 @@ static void ClDirectConvolution2dWorkloadTest()
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateDirectConvolution2dWorkloadTest).
     Convolution2dQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {2, 3, 6, 6}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {2, 2, 6, 6}));
 }
@@ -376,8 +407,8 @@ static void ClCreateFullyConnectedWorkloadTest()
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateFullyConnectedWorkloadTest).
     FullyConnectedQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {3, 1, 4, 5}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {3, 7}));
 }
@@ -404,8 +435,8 @@ static void ClNormalizationWorkloadTest(DataLayout dataLayout)
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateNormalizationWorkloadTest).
     NormalizationQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     TensorShape inputShape  = (dataLayout == DataLayout::NCHW) ? std::initializer_list<unsigned int>({3, 5, 5, 1})
                                                                : std::initializer_list<unsigned int>({3, 1, 5, 5});
@@ -452,8 +483,8 @@ static void ClPooling2dWorkloadTest(DataLayout dataLayout)
 
     // Check that inputs/outputs are as we expect them (see definition of CreatePooling2dWorkloadTest).
     Pooling2dQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST((inputHandle->GetShape() == inputShape));
     BOOST_TEST((outputHandle->GetShape() == outputShape));
@@ -497,9 +528,9 @@ static void ClCreatePreluWorkloadTest(const armnn::TensorShape& inputShape,
 
     // Checks that outputs and inputs are as we expect them (see definition of CreatePreluWorkloadTest).
     PreluQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto alphaHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto alphaHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST((inputHandle->GetShape() == inputShape));
     BOOST_TEST((alphaHandle->GetShape() == alphaShape));
@@ -532,8 +563,8 @@ static void ClCreateReshapeWorkloadTest()
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateReshapeWorkloadTest).
     ReshapeQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {4, 1}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {1, 4}));
@@ -565,22 +596,44 @@ static void ClSoftmaxWorkloadTest()
 
     // Checks that inputs/outputs are as we expect them (see definition of ClSoftmaxFloatWorkload).
     SoftmaxQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+
+    armnn::TensorInfo tensorInfo({4, 1}, DataType);
+    if (DataType == armnn::DataType::QAsymmU8)
+    {
+        tensorInfo.SetQuantizationOffset(0);
+        tensorInfo.SetQuantizationScale(1.f / 256);
+    }
+    else if (DataType == armnn::DataType::QAsymmS8)
+    {
+        tensorInfo.SetQuantizationOffset(-128);
+        tensorInfo.SetQuantizationScale(1.f / 256);
+    }
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {4, 1}));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {4, 1}));
 }
 
 
-BOOST_AUTO_TEST_CASE(CreateSoftmaxFloatWorkloadTest)
+BOOST_AUTO_TEST_CASE(CreateSoftmaxFloat32WorkloadTest)
 {
-    ClSoftmaxWorkloadTest<ClSoftmaxFloatWorkload, armnn::DataType::Float32>();
+    ClSoftmaxWorkloadTest<ClSoftmaxWorkload, armnn::DataType::Float32>();
 }
 
 BOOST_AUTO_TEST_CASE(CreateSoftmaxFloat16WorkloadTest)
 {
-    ClSoftmaxWorkloadTest<ClSoftmaxFloatWorkload, armnn::DataType::Float16>();
+    ClSoftmaxWorkloadTest<ClSoftmaxWorkload, armnn::DataType::Float16>();
+}
+
+BOOST_AUTO_TEST_CASE(CreateSoftmaxQAsymmU8Workload)
+{
+    ClSoftmaxWorkloadTest<ClSoftmaxWorkload, armnn::DataType::QAsymmU8>();
+}
+
+BOOST_AUTO_TEST_CASE(CreateSoftmaxQAsymmS8Workload)
+{
+    ClSoftmaxWorkloadTest<ClSoftmaxWorkload, armnn::DataType::QAsymmS8>();
 }
 
 template <typename armnn::DataType DataType>
@@ -594,16 +647,16 @@ static void ClSplitterWorkloadTest()
 
     // Checks that outputs are as we expect them (see definition of CreateSplitterWorkloadTest).
     SplitterQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {5, 7, 7}));
 
-    auto outputHandle1 = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[1]);
+    auto outputHandle1 = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[1]);
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle1, {2, 7, 7}));
 
-    auto outputHandle2 = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[2]);
+    auto outputHandle2 = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[2]);
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle2, {2, 7, 7}));
 
-    auto outputHandle0 = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto outputHandle0 = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle0, {1, 7, 7}));
 }
 
@@ -738,8 +791,8 @@ static void ClL2NormalizationWorkloadTest(DataLayout dataLayout)
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateNormalizationWorkloadTest).
     L2NormalizationQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     TensorShape inputShape  = (dataLayout == DataLayout::NCHW) ? std::initializer_list<unsigned int>({ 5, 20, 50, 67 })
                                                                : std::initializer_list<unsigned int>({ 5, 50, 67, 20 });
@@ -770,6 +823,29 @@ BOOST_AUTO_TEST_CASE(CreateL2NormalizationFloat16NhwcWorkload)
     ClL2NormalizationWorkloadTest<ClL2NormalizationFloatWorkload, armnn::DataType::Float16>(DataLayout::NHWC);
 }
 
+template <typename LogSoftmaxWorkloadType, typename armnn::DataType DataType>
+static void ClCreateLogSoftmaxWorkloadTest()
+{
+    Graph graph;
+    ClWorkloadFactory factory =
+            ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
+
+    auto workload = CreateLogSoftmaxWorkloadTest<LogSoftmaxWorkloadType, DataType>(factory, graph);
+
+    // Checks that outputs and inputs are as we expect them (see definition of CreateLogSoftmaxWorkloadTest).
+    LogSoftmaxQueueDescriptor queueDescriptor = workload->GetData();
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+
+    BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {4, 1}));
+    BOOST_TEST(CompareIClTensorHandleShape(outputHandle, {4, 1}));
+}
+
+BOOST_AUTO_TEST_CASE(CreateLogSoftmaxFloat32WorkloadTest)
+{
+    ClCreateLogSoftmaxWorkloadTest<ClLogSoftmaxWorkload, armnn::DataType::Float32>();
+}
+
 template <typename LstmWorkloadType>
 static void ClCreateLstmWorkloadTest()
 {
@@ -780,8 +856,8 @@ static void ClCreateLstmWorkloadTest()
     auto workload = CreateLstmWorkloadTest<LstmWorkloadType>(factory, graph);
 
     LstmQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[1]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[1]);
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, { 2, 2 }));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, { 2, 4 }));
 }
@@ -802,8 +878,8 @@ static void ClResizeWorkloadTest(DataLayout dataLayout)
 
     auto queueDescriptor = workload->GetData();
 
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     switch (dataLayout)
     {
@@ -859,8 +935,8 @@ static void ClMeanWorkloadTest()
 
     // Checks that inputs/outputs are as we expect them (see definition of CreateMeanWorkloadTest).
     MeanQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     // The first dimension (batch size) in both input and output is singular thus it has been reduced by ACL.
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, {  1, 3, 7, 4 }));
@@ -893,9 +969,9 @@ static void ClCreateConcatWorkloadTest(std::initializer_list<unsigned int> outpu
     auto workload = CreateConcatWorkloadTest<ConcatWorkloadType, DataType>(factory, graph, outputShape, concatAxis);
 
     ConcatQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle0  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto inputHandle1  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle0  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto inputHandle1  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[1]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle0, { 2, 3, 2, 5 }));
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle1, { 2, 3, 2, 5 }));
@@ -942,8 +1018,8 @@ static void ClSpaceToDepthWorkloadTest()
     auto workload = CreateSpaceToDepthWorkloadTest<SpaceToDepthWorkloadType, DataType>(factory, graph);
 
     SpaceToDepthQueueDescriptor queueDescriptor = workload->GetData();
-    auto inputHandle  = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto inputHandle  = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
 
     BOOST_TEST(CompareIClTensorHandleShape(inputHandle, { 1, 2, 2, 1 }));
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, { 1, 1, 1, 4 }));
@@ -990,10 +1066,10 @@ static void ClCreateStackWorkloadTest(const std::initializer_list<unsigned int>&
     StackQueueDescriptor queueDescriptor = workload->GetData();
     for (unsigned int i = 0; i < numInputs; ++i)
     {
-        auto inputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Inputs[i]);
+        auto inputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Inputs[i]);
         BOOST_TEST(CompareIClTensorHandleShape(inputHandle, inputShape));
     }
-    auto outputHandle = boost::polymorphic_downcast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    auto outputHandle = PolymorphicDowncast<IClTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST(CompareIClTensorHandleShape(outputHandle, outputShape));
 }
 
@@ -1012,11 +1088,38 @@ BOOST_AUTO_TEST_CASE(CreateStackUint8Workload)
     ClCreateStackWorkloadTest<armnn::DataType::QAsymmU8>({ 3, 4, 5 }, { 3, 4, 2, 5 }, 2, 2);
 }
 
+
+template <typename QLstmWorkloadType>
+static void ClCreateQLstmWorkloadTest()
+{
+    Graph graph;
+    ClWorkloadFactory factory = ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
+
+    auto workload = CreateQLstmWorkloadTest<QLstmWorkloadType>(factory, graph);
+    QLstmQueueDescriptor queueDescriptor = workload->GetData();
+
+    IAclTensorHandle* inputHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    BOOST_TEST((inputHandle->GetShape() == TensorShape({2, 4})));
+    BOOST_TEST((inputHandle->GetDataType() == arm_compute::DataType::QASYMM8_SIGNED));
+
+    IAclTensorHandle* cellStateOutHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Outputs[1]);
+    BOOST_TEST((cellStateOutHandle->GetShape() == TensorShape({2, 4})));
+    BOOST_TEST((cellStateOutHandle->GetDataType() == arm_compute::DataType::QSYMM16));
+
+    IAclTensorHandle* outputHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Outputs[2]);
+    BOOST_TEST((outputHandle->GetShape() == TensorShape({2, 4})));
+    BOOST_TEST((outputHandle->GetDataType() == arm_compute::DataType::QASYMM8_SIGNED));
+}
+
+BOOST_AUTO_TEST_CASE(CreateQLstmWorkloadTest)
+{
+    ClCreateQLstmWorkloadTest<ClQLstmWorkload>();
+}
+
 template <typename QuantizedLstmWorkloadType>
 static void ClCreateQuantizedLstmWorkloadTest()
 {
     using namespace armnn::armcomputetensorutils;
-    using boost::polymorphic_downcast;
 
     Graph graph;
     ClWorkloadFactory factory =
@@ -1026,23 +1129,23 @@ static void ClCreateQuantizedLstmWorkloadTest()
 
     QuantizedLstmQueueDescriptor queueDescriptor = workload->GetData();
 
-    IAclTensorHandle* inputHandle = polymorphic_downcast<IAclTensorHandle*>(queueDescriptor.m_Inputs[0]);
+    IAclTensorHandle* inputHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Inputs[0]);
     BOOST_TEST((inputHandle->GetShape() == TensorShape({2, 2})));
     BOOST_TEST((inputHandle->GetDataType() == arm_compute::DataType::QASYMM8));
 
-    IAclTensorHandle* cellStateInHandle = polymorphic_downcast<IAclTensorHandle*>(queueDescriptor.m_Inputs[1]);
+    IAclTensorHandle* cellStateInHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Inputs[1]);
     BOOST_TEST((cellStateInHandle->GetShape() == TensorShape({2, 4})));
     BOOST_TEST((cellStateInHandle->GetDataType() == arm_compute::DataType::QSYMM16));
 
-    IAclTensorHandle* outputStateInHandle = polymorphic_downcast<IAclTensorHandle*>(queueDescriptor.m_Inputs[2]);
+    IAclTensorHandle* outputStateInHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Inputs[2]);
     BOOST_TEST((outputStateInHandle->GetShape() == TensorShape({2, 4})));
     BOOST_TEST((outputStateInHandle->GetDataType() == arm_compute::DataType::QASYMM8));
 
-    IAclTensorHandle* cellStateOutHandle = polymorphic_downcast<IAclTensorHandle*>(queueDescriptor.m_Outputs[0]);
+    IAclTensorHandle* cellStateOutHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Outputs[0]);
     BOOST_TEST((cellStateOutHandle->GetShape() == TensorShape({2, 4})));
     BOOST_TEST((cellStateOutHandle->GetDataType() == arm_compute::DataType::QSYMM16));
 
-    IAclTensorHandle* outputStateOutHandle = polymorphic_downcast<IAclTensorHandle*>(queueDescriptor.m_Outputs[1]);
+    IAclTensorHandle* outputStateOutHandle = PolymorphicDowncast<IAclTensorHandle*>(queueDescriptor.m_Outputs[1]);
     BOOST_TEST((outputStateOutHandle->GetShape() == TensorShape({2, 4})));
     BOOST_TEST((outputStateOutHandle->GetDataType() == arm_compute::DataType::QASYMM8));
 }

@@ -7,10 +7,9 @@
 #include "InferenceTest.hpp"
 #include "DeepSpeechV1Database.hpp"
 
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/test/tools/floating_point_comparison.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnnUtils/FloatingPointComparison.hpp>
 
 #include <vector>
 
@@ -30,27 +29,26 @@ public:
                                           testCaseData.m_InputData.m_StateH,
                                           testCaseData.m_InputData.m_StateC},
                                         { k_OutputSize1, k_OutputSize2, k_OutputSize3 })
-        , m_FloatComparer(boost::math::fpc::percent_tolerance(1.0f))
         , m_ExpectedOutputs({testCaseData.m_ExpectedOutputData.m_InputSeq, testCaseData.m_ExpectedOutputData.m_StateH,
                              testCaseData.m_ExpectedOutputData.m_StateC})
     {}
 
     TestCaseResult ProcessResult(const InferenceTestOptions& options) override
     {
-        boost::ignore_unused(options);
-        const std::vector<float>& output1 = boost::get<std::vector<float>>(this->GetOutputs()[0]); // logits
-        BOOST_ASSERT(output1.size() == k_OutputSize1);
+        armnn::IgnoreUnused(options);
+        const std::vector<float>& output1 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[0]); // logits
+        ARMNN_ASSERT(output1.size() == k_OutputSize1);
 
-        const std::vector<float>& output2 = boost::get<std::vector<float>>(this->GetOutputs()[1]); // new_state_c
-        BOOST_ASSERT(output2.size() == k_OutputSize2);
+        const std::vector<float>& output2 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[1]); // new_state_c
+        ARMNN_ASSERT(output2.size() == k_OutputSize2);
 
-        const std::vector<float>& output3 = boost::get<std::vector<float>>(this->GetOutputs()[2]); // new_state_h
-        BOOST_ASSERT(output3.size() == k_OutputSize3);
+        const std::vector<float>& output3 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[2]); // new_state_h
+        ARMNN_ASSERT(output3.size() == k_OutputSize3);
 
         // Check each output to see whether it is the expected value
         for (unsigned int j = 0u; j < output1.size(); j++)
         {
-            if(!m_FloatComparer(output1[j], m_ExpectedOutputs.m_InputSeq[j]))
+            if(!armnnUtils::within_percentage_tolerance(output1[j], m_ExpectedOutputs.m_InputSeq[j]))
             {
                 ARMNN_LOG(error) << "InputSeq for Lstm " << this->GetTestCaseId() <<
                                          " is incorrect at" << j;
@@ -60,7 +58,7 @@ public:
 
         for (unsigned int j = 0u; j < output2.size(); j++)
         {
-            if(!m_FloatComparer(output2[j], m_ExpectedOutputs.m_StateH[j]))
+            if(!armnnUtils::within_percentage_tolerance(output2[j], m_ExpectedOutputs.m_StateH[j]))
             {
                 ARMNN_LOG(error) << "StateH for Lstm " << this->GetTestCaseId() <<
                                          " is incorrect";
@@ -70,7 +68,7 @@ public:
 
         for (unsigned int j = 0u; j < output3.size(); j++)
         {
-            if(!m_FloatComparer(output3[j], m_ExpectedOutputs.m_StateC[j]))
+            if(!armnnUtils::within_percentage_tolerance(output3[j], m_ExpectedOutputs.m_StateC[j]))
             {
                 ARMNN_LOG(error) << "StateC for Lstm " << this->GetTestCaseId() <<
                                          " is incorrect";
@@ -86,7 +84,6 @@ private:
     static constexpr unsigned int k_OutputSize2 = 2048u;
     static constexpr unsigned int k_OutputSize3 = 2048u;
 
-    boost::math::fpc::close_at_tolerance<float> m_FloatComparer;
     LstmInput m_ExpectedOutputs;
 };
 
@@ -99,31 +96,28 @@ public:
         : m_ConstructModel(constructModel)
     {}
 
-    virtual void AddCommandLineOptions(boost::program_options::options_description& options) override
+    virtual void AddCommandLineOptions(cxxopts::Options& options, std::vector<std::string>& required) override
     {
-        namespace po = boost::program_options;
+        options
+            .allow_unrecognised_options()
+            .add_options()
+                ("s,input-seq-dir", "Path to directory containing test data for m_InputSeq",
+                 cxxopts::value<std::string>(m_InputSeqDir))
+                ("h,prev-state-h-dir", "Path to directory containing test data for m_PrevStateH",
+                 cxxopts::value<std::string>(m_PrevStateHDir))
+                ("c,prev-state-c-dir", "Path to directory containing test data for m_PrevStateC",
+                 cxxopts::value<std::string>(m_PrevStateCDir))
+                ("l,logits-dir", "Path to directory containing test data for m_Logits",
+                 cxxopts::value<std::string>(m_LogitsDir))
+                ("H,new-state-h-dir", "Path to directory containing test data for m_NewStateH",
+                 cxxopts::value<std::string>(m_NewStateHDir))
+                ("C,new-state-c-dir", "Path to directory containing test data for m_NewStateC",
+                 cxxopts::value<std::string>(m_NewStateCDir));
 
-        options.add_options()
-                ("input-seq-dir,s", po::value<std::string>(&m_InputSeqDir)->required(),
-                 "Path to directory containing test data for m_InputSeq");
-        options.add_options()
-                ("prev-state-h-dir,h", po::value<std::string>(&m_PrevStateHDir)->required(),
-                 "Path to directory containing test data for m_PrevStateH");
-        options.add_options()
-                ("prev-state-c-dir,c", po::value<std::string>(&m_PrevStateCDir)->required(),
-                 "Path to directory containing test data for m_PrevStateC");
-        options.add_options()
-                ("logits-dir,l", po::value<std::string>(&m_LogitsDir)->required(),
-                 "Path to directory containing test data for m_Logits");
-        options.add_options()
-                ("new-state-h-dir,H", po::value<std::string>(&m_NewStateHDir)->required(),
-                 "Path to directory containing test data for m_NewStateH");
-        options.add_options()
-                ("new-state-c-dir,C", po::value<std::string>(&m_NewStateCDir)->required(),
-                 "Path to directory containing test data for m_NewStateC");
+        required.insert(required.end(), {"input-seq-dir", "prev-state-h-dir", "prev-state-c-dir", "logits-dir",
+                                         "new-state-h-dir", "new-state-c-dir"});
 
-
-        Model::AddCommandLineOptions(options, m_ModelCommandLineOptions);
+        Model::AddCommandLineOptions(options, m_ModelCommandLineOptions, required);
     }
 
     virtual bool ProcessCommandLineOptions(const InferenceTestOptions &commonOptions) override

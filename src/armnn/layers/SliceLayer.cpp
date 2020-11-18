@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,12 +8,10 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/numeric/conversion/cast.hpp>
 
 namespace armnn
 {
@@ -26,6 +24,8 @@ SliceLayer::SliceLayer(const SliceDescriptor& param, const char* name)
 std::unique_ptr<IWorkload> SliceLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     SliceQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateSlice(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -38,22 +38,23 @@ void SliceLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "SliceLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-            GetOutputSlot(0).GetTensorInfo().GetShape(),
-            inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SliceLayer");
 }
 
 std::vector<TensorShape> SliceLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    boost::ignore_unused(inputShapes);
-    BOOST_ASSERT(inputShapes.size() == 1);
+    IgnoreUnused(inputShapes);
+    ARMNN_ASSERT(inputShapes.size() == 1);
 
-    TensorShape outputShape(boost::numeric_cast<unsigned int>(m_Param.m_Size.size()), m_Param.m_Size.data());
+    TensorShape outputShape(armnn::numeric_cast<unsigned int>(m_Param.m_Size.size()), m_Param.m_Size.data());
 
     return std::vector<TensorShape>({ outputShape });
 }

@@ -9,12 +9,12 @@
 
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
-
-#include <boost/polymorphic_pointer_cast.hpp>
 
 namespace armnn
 {
@@ -28,8 +28,8 @@ arm_compute::Status ClSpaceToBatchNdWorkloadValidate(const TensorInfo& input,
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output, descriptor.m_DataLayout);
 
     // ArmNN blockShape is [H, W] Cl asks for W, H
-    int32_t blockHeight = boost::numeric_cast<int32_t>(descriptor.m_BlockShape[0]);
-    int32_t blockWidth  = boost::numeric_cast<int32_t>(descriptor.m_BlockShape[1]);
+    int32_t blockHeight = armnn::numeric_cast<int32_t>(descriptor.m_BlockShape[0]);
+    int32_t blockWidth  = armnn::numeric_cast<int32_t>(descriptor.m_BlockShape[1]);
 
     arm_compute::Size2D paddingLeftTop = BuildArmComputeSize2D(
         descriptor.m_PadList[1].first, descriptor.m_PadList[0].first);
@@ -51,13 +51,13 @@ ClSpaceToBatchNdWorkload::ClSpaceToBatchNdWorkload(
     m_Data.ValidateInputsOutputs("ClSpaceToBatchNdWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  =
-        boost::polymorphic_pointer_downcast<IClTensorHandle>(m_Data.m_Inputs[0])->GetTensor();
+        armnn::PolymorphicPointerDowncast<IClTensorHandle>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& output =
-        boost::polymorphic_pointer_downcast<IClTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
+        armnn::PolymorphicPointerDowncast<IClTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
 
     // ArmNN blockShape is [H, W] Cl asks for W, H
-    int32_t blockHeight = boost::numeric_cast<int32_t>(m_Data.m_Parameters.m_BlockShape[0]);
-    int32_t blockWidth  = boost::numeric_cast<int32_t>(m_Data.m_Parameters.m_BlockShape[1]);
+    int32_t blockHeight = armnn::numeric_cast<int32_t>(m_Data.m_Parameters.m_BlockShape[0]);
+    int32_t blockWidth  = armnn::numeric_cast<int32_t>(m_Data.m_Parameters.m_BlockShape[1]);
 
     arm_compute::Size2D paddingLeftTop = BuildArmComputeSize2D(
         m_Data.m_Parameters.m_PadList[1].first, m_Data.m_Parameters.m_PadList[0].first);

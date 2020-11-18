@@ -18,9 +18,10 @@ std::unique_ptr<armnn::IWorkload> CreateWorkload<armnn::MinimumQueueDescriptor>(
 
 LayerTestResult<float, 4> MinimumBroadcast1ElementTest1(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     unsigned int shape0[] = { 1, 2, 2, 2 };
     unsigned int shape1[] = { 1, 1, 1, 1 };
 
@@ -38,12 +39,14 @@ LayerTestResult<float, 4> MinimumBroadcast1ElementTest1(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<float, 4> MinimumBroadcast1ElementTest2(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     unsigned int shape0[] = { 1, 2, 2, 2 };
     unsigned int shape1[] = { 1, 1, 1, 1 };
@@ -62,12 +65,14 @@ LayerTestResult<float, 4> MinimumBroadcast1ElementTest2(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<uint8_t, 4> MinimumBroadcast1DVectorUint8Test(
     armnn::IWorkloadFactory & workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr & memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr & memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int shape0[] = { 1, 2, 2, 3 };
     const unsigned int shape1[] = { 1, 1, 1, 3 };
@@ -94,12 +99,14 @@ LayerTestResult<uint8_t, 4> MinimumBroadcast1DVectorUint8Test(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 4> MinimumFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     using namespace half_float::literal;
 
@@ -131,12 +138,14 @@ LayerTestResult<armnn::Half, 4> MinimumFloat16Test(
         shape,
         input1,
         shape,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 4> MinimumBroadcast1ElementFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     using namespace half_float::literal;
 
@@ -165,15 +174,16 @@ LayerTestResult<armnn::Half, 4> MinimumBroadcast1ElementFloat16Test(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<armnn::Half, 4> MinimumBroadcast1DVectorFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     using namespace half_float::literal;
-    
     const unsigned int shape0[] = { 1, 2, 2, 3 };
     const unsigned int shape1[] = { 1, 1, 1, 3 };
 
@@ -199,12 +209,14 @@ LayerTestResult<armnn::Half, 4> MinimumBroadcast1DVectorFloat16Test(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 4> MinimumInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     unsigned int shape[] = { 2, 2, 2, 2 };
 
@@ -234,12 +246,14 @@ LayerTestResult<int16_t, 4> MinimumInt16Test(
         shape,
         input1,
         shape,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 4> MinimumBroadcast1ElementInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int shape0[] = { 1, 2, 2, 3 };
     const unsigned int shape1[] = { 1, 1, 1, 1 };
@@ -266,12 +280,14 @@ LayerTestResult<int16_t, 4> MinimumBroadcast1ElementInt16Test(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 4> MinimumBroadcast1DVectorInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int shape0[] = { 1, 2, 2, 3 };
     const unsigned int shape1[] = { 1, 1, 1, 3 };
@@ -298,5 +314,111 @@ LayerTestResult<int16_t, 4> MinimumBroadcast1DVectorInt16Test(
         shape1,
         input1,
         shape0,
-        output);
+        output,
+        tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 4> MinimumInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    unsigned int shape[] = { 2, 2, 2, 2 };
+
+    std::vector<int32_t> input0 =
+    {
+        1, 1, 1, 1, 6, 6, 6, 6,
+        3, 3, 3, 3, 4, 4, 4, 4
+    };
+
+    std::vector<int32_t> input1 =
+    {
+        2, 2, 2, 2, 3, 3, 3, 3,
+        4, 4, 4, 4, 5, 5, 5, 5
+    };
+
+    std::vector<int32_t> output
+    {
+        1, 1, 1, 1, 3, 3, 3, 3,
+        3, 3, 3, 3, 4, 4, 4, 4
+    };
+
+    return ElementwiseTestHelper<4, armnn::MinimumQueueDescriptor, armnn::DataType::Signed32>(
+        workloadFactory,
+        memoryManager,
+        shape,
+        input0,
+        shape,
+        input1,
+        shape,
+        output,
+        tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 4> MinimumBroadcast1ElementInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    const unsigned int shape0[] = { 1, 2, 2, 3 };
+    const unsigned int shape1[] = { 1, 1, 1, 1 };
+
+    std::vector<int32_t> input0 =
+    {
+        1, 2, 3,  4,  5,  6,
+        7, 8, 9, 10, 11, 12
+    };
+
+    std::vector<int32_t> input1 = { 2 };
+
+    std::vector<int32_t> output =
+    {
+        1, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2
+    };
+
+    return ElementwiseTestHelper<4, armnn::MinimumQueueDescriptor, armnn::DataType::Signed32>(
+        workloadFactory,
+        memoryManager,
+        shape0,
+        input0,
+        shape1,
+        input1,
+        shape0,
+        output,
+        tensorHandleFactory);
+}
+
+LayerTestResult<int32_t, 4> MinimumBroadcast1DVectorInt32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    const unsigned int shape0[] = { 1, 2, 2, 3 };
+    const unsigned int shape1[] = { 1, 1, 1, 3 };
+
+    std::vector<int32_t> input0 =
+    {
+        1, 2, 3,  4,  5,  6,
+        7, 8, 9, 10, 11, 12
+    };
+
+    std::vector<int32_t> input1 = { 1, 10, 3 };
+
+    std::vector<int32_t> output =
+    {
+        1, 2, 3, 1,  5, 3,
+        1, 8, 3, 1, 10, 3
+    };
+
+    return ElementwiseTestHelper<4, armnn::MinimumQueueDescriptor, armnn::DataType::Signed32>(
+        workloadFactory,
+        memoryManager,
+        shape0,
+        input0,
+        shape1,
+        input1,
+        shape0,
+        output,
+        tensorHandleFactory);
 }

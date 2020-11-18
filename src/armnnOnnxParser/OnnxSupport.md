@@ -18,9 +18,22 @@ See the ONNX [AveragePool documentation](https://github.com/onnx/onnx/blob/maste
 
 See the ONNX [Constant documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Constant) for more information.
 
+**Clip**
+
+See the ONNX [Clip documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Clip) for more information.
+
+**Flatten**
+
+See the ONNX [Flatten documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Flatten) for more information.
+
 **GlobalAveragePool**
 
 See the ONNX [GlobalAveragePool documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#GlobalAveragePool) for more information.
+
+**LeakyRelu**
+
+See the ONNX [LeakyRelu documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#LeakyRelu) for more information.
+
 
 **MaxPool**
 
@@ -33,6 +46,16 @@ See the ONNX [Relu documentation](https://github.com/onnx/onnx/blob/master/docs/
 **Reshape**
 
 See the ONNX [Reshape documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Reshape) for more information.
+
+**Sigmoid**
+
+See the ONNX [Sigmoid documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Sigmoid) for more information.
+
+
+**Tanh**
+
+See the ONNX [Tanh documentation](https://github.com/onnx/onnx/blob/master/docs/Operators.md#Tanh) for more information.
+
 
 ## Partially supported
 
@@ -53,8 +76,8 @@ The parser only supports constant weights in a fully connected layer.
 
 Arm tested these operators with the following ONNX fp32 neural networks:
 
-* Simple MNIST. See the ONNX [MNIST documentation](https://github.com/onnx/models/tree/master/mnist) for more information.
+* Mobilenet_v2. See the ONNX [MobileNet documentation](https://github.com/onnx/models/tree/master/vision/classification/mobilenet) for more information.
 
-* Mobilenet_v2. See the ONNX [MobileNet documentation](https://github.com/onnx/models/tree/master/models/image_classification/mobilenet) for more information.
+* Simple MNIST. This is no longer directly documented by ONNX. The model and test data may be downloaded [from the ONNX model zoo](https://onnxzoo.blob.core.windows.net/models/opset_8/mnist/mnist.tar.gz).
 
-More machine learning operators will be supported in future releases.
+More machine learning operators will be supported in future releases as time allows. If you require specific operator support contribution are welcome.

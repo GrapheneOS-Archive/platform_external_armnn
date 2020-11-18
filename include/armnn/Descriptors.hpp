@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -25,15 +25,23 @@ struct ActivationDescriptor
         , m_B(0)
     {}
 
+    ActivationDescriptor(armnn::ActivationFunction activation,
+                         float a = 0,
+                         float b = 0)
+            : m_Function(activation)
+            , m_A(a)
+            , m_B(b)
+    {}
+
     bool operator ==(const ActivationDescriptor &rhs) const
     {
         return m_Function == rhs.m_Function && m_A == rhs.m_B && m_B == rhs.m_B;
     }
 
     /// @brief The activation function to use
-    /// (Sigmoid, TanH, Linear, ReLu, BoundedReLu, SoftReLu, LeakyReLu, Abs, Sqrt, Square).
+    /// (Sigmoid, TanH, Linear, ReLu, BoundedReLu, SoftReLu, LeakyReLu, Abs, Sqrt, Square, Elu).
     ActivationFunction m_Function;
-    /// Alpha upper bound value used by the activation functions. (BoundedReLu, Linear, TanH).
+    /// Alpha upper bound value used by the activation functions. (BoundedReLu, Linear, TanH, Elu).
     float              m_A;
     /// Beta lower bound value used by the activation functions. (BoundedReLu, Linear, TanH).
     float              m_B;
@@ -45,17 +53,20 @@ struct ArgMinMaxDescriptor
     ArgMinMaxDescriptor()
         : m_Function(ArgMinMaxFunction::Min)
         , m_Axis(-1)
+        , m_Output_Type(armnn::DataType::Signed32)
     {}
 
     bool operator ==(const ArgMinMaxDescriptor &rhs) const
     {
-        return m_Function == rhs.m_Function && m_Axis == rhs.m_Axis;
+        return m_Function == rhs.m_Function && m_Axis == rhs.m_Axis && m_Output_Type == rhs.m_Output_Type;
     }
 
     /// Specify if the function is to find Min or Max.
     ArgMinMaxFunction m_Function;
     /// Axis to reduce across the input tensor.
     int m_Axis;
+    // Tensor data type and this could be int32 or int64. Default type is int64.
+    armnn::DataType m_Output_Type;
 };
 
 /// A ComparisonDescriptor for the ComparisonLayer
@@ -703,6 +714,45 @@ struct FakeQuantizationDescriptor
     float m_Max;
 };
 
+/// A FillDescriptor for the FillLayer
+struct FillDescriptor
+{
+    FillDescriptor()
+    : m_Value(0)
+    {}
+
+    FillDescriptor(const float& value)
+    : m_Value(value)
+    {}
+
+    bool operator ==(const FillDescriptor& rhs) const
+    {
+        return m_Value == rhs.m_Value;
+    }
+
+    float m_Value;
+};
+
+/// A GatherDescriptor for the GatherLayer.
+struct GatherDescriptor
+{
+    GatherDescriptor()
+        : m_Axis(0)
+    {}
+
+    GatherDescriptor(int32_t axis)
+        : m_Axis(axis)
+    {}
+
+    bool operator ==(const GatherDescriptor& rhs) const
+    {
+        return m_Axis == rhs.m_Axis;
+    }
+
+    /// The axis in params to gather indices from
+    int32_t m_Axis;
+};
+
 /// A ResizeBilinearDescriptor for the ResizeBilinearLayer.
 struct ResizeBilinearDescriptor
 {
@@ -710,6 +760,8 @@ struct ResizeBilinearDescriptor
         : m_TargetWidth(0)
         , m_TargetHeight(0)
         , m_DataLayout(DataLayout::NCHW)
+        , m_AlignCorners(false)
+        , m_HalfPixelCenters(false)
     {}
 
     /// Target width value.
@@ -718,6 +770,10 @@ struct ResizeBilinearDescriptor
     uint32_t          m_TargetHeight;
     /// The data layout to be used (NCHW, NHWC).
     DataLayout m_DataLayout;
+    /// Aligned corners
+    bool m_AlignCorners;
+    /// Half Pixel Centers
+    bool m_HalfPixelCenters;
 };
 
 /// A ResizeDescriptor for the ResizeLayer.
@@ -728,7 +784,8 @@ struct ResizeDescriptor
         , m_TargetHeight(0)
         , m_Method(ResizeMethod::NearestNeighbor)
         , m_DataLayout(DataLayout::NCHW)
-        , m_BilinearAlignCorners(false)
+        , m_AlignCorners(false)
+        , m_HalfPixelCenters(false)
     {}
 
     bool operator ==(const ResizeDescriptor& rhs) const
@@ -737,7 +794,8 @@ struct ResizeDescriptor
                m_TargetHeight         == rhs.m_TargetHeight &&
                m_Method               == rhs.m_Method &&
                m_DataLayout           == rhs.m_DataLayout &&
-               m_BilinearAlignCorners == rhs.m_BilinearAlignCorners;
+               m_AlignCorners         == rhs.m_AlignCorners &&
+               m_HalfPixelCenters     == rhs.m_HalfPixelCenters;
     }
 
     /// Target width value.
@@ -749,8 +807,10 @@ struct ResizeDescriptor
     ResizeMethod m_Method;
     /// The data layout to be used (NCHW, NHWC).
     DataLayout m_DataLayout;
-    /// Aligned corners for bilinear method
-    bool m_BilinearAlignCorners;
+    /// Aligned corners
+    bool m_AlignCorners;
+    /// Half Pixel Centers
+    bool m_HalfPixelCenters;
 };
 
 
@@ -1075,6 +1135,66 @@ struct PreCompiledDescriptor
     unsigned int m_NumOutputSlots;
 };
 
+/// A QLstmDescriptor for the QLstmLayer.
+struct QLstmDescriptor
+{
+    QLstmDescriptor()
+            : m_CellClip(0.0)
+            , m_ProjectionClip(0.0)
+            , m_CifgEnabled(true)
+            , m_PeepholeEnabled(false)
+            , m_ProjectionEnabled(false)
+            , m_LayerNormEnabled(false)
+            , m_InputIntermediateScale(0.0)
+            , m_ForgetIntermediateScale(0.0)
+            , m_CellIntermediateScale(0.0)
+            , m_OutputIntermediateScale(0.0)
+            , m_HiddenStateZeroPoint(0)
+            , m_HiddenStateScale(0.0)
+    {}
+
+    bool operator ==(const QLstmDescriptor& rhs) const
+    {
+        return m_CellClip          == rhs.m_CellClip &&
+               m_ProjectionClip    == rhs.m_ProjectionClip &&
+               m_CifgEnabled       == rhs.m_CifgEnabled &&
+               m_PeepholeEnabled   == rhs.m_PeepholeEnabled &&
+               m_ProjectionEnabled == rhs.m_ProjectionEnabled &&
+               m_LayerNormEnabled  == rhs.m_LayerNormEnabled &&
+               m_InputIntermediateScale == rhs.m_InputIntermediateScale &&
+               m_ForgetIntermediateScale == rhs.m_ForgetIntermediateScale &&
+               m_CellIntermediateScale == rhs.m_CellIntermediateScale &&
+               m_OutputIntermediateScale == rhs.m_OutputIntermediateScale &&
+               m_HiddenStateZeroPoint == rhs.m_HiddenStateZeroPoint &&
+               m_HiddenStateScale == rhs.m_HiddenStateScale;
+    }
+
+    /// Clipping threshold value for the cell state
+    float m_CellClip;
+    /// Clipping threshold value for the projection
+    float m_ProjectionClip;
+    /// Enable/disable CIFG (coupled input & forget gate).
+    bool m_CifgEnabled;
+    /// Enable/disable peephole
+    bool m_PeepholeEnabled;
+    /// Enable/disable the projection layer
+    bool m_ProjectionEnabled;
+    /// Enable/disable layer normalization
+    bool m_LayerNormEnabled;
+    /// Input intermediate quantization scale
+    float m_InputIntermediateScale;
+    /// Forget intermediate quantization scale
+    float m_ForgetIntermediateScale;
+    /// Cell intermediate quantization scale
+    float m_CellIntermediateScale;
+    /// Output intermediate quantization scale
+    float m_OutputIntermediateScale;
+    /// Hidden State zero point
+    int32_t m_HiddenStateZeroPoint;
+    /// Hidden State quantization scale
+    float m_HiddenStateScale;
+};
+
 /// A TransposeConvolution2dDescriptor for the TransposeConvolution2dLayer.
 struct TransposeConvolution2dDescriptor
 {
@@ -1086,37 +1206,84 @@ struct TransposeConvolution2dDescriptor
         m_StrideX(0),
         m_StrideY(0),
         m_BiasEnabled(false),
-        m_DataLayout(DataLayout::NCHW)
+        m_DataLayout(DataLayout::NCHW),
+        m_OutputShapeEnabled(false)
     {}
 
     bool operator ==(const TransposeConvolution2dDescriptor& rhs) const
     {
-        return m_PadLeft     == rhs.m_PadLeft &&
-               m_PadRight    == rhs.m_PadRight &&
-               m_PadTop      == rhs.m_PadTop &&
-               m_PadBottom   == rhs.m_PadBottom &&
-               m_StrideX     == rhs.m_StrideX &&
-               m_StrideY     == rhs.m_StrideY &&
-               m_BiasEnabled == rhs.m_BiasEnabled &&
-               m_DataLayout  == rhs.m_DataLayout;
+        return m_PadLeft            == rhs.m_PadLeft &&
+               m_PadRight           == rhs.m_PadRight &&
+               m_PadTop             == rhs.m_PadTop &&
+               m_PadBottom          == rhs.m_PadBottom &&
+               m_StrideX            == rhs.m_StrideX &&
+               m_StrideY            == rhs.m_StrideY &&
+               m_BiasEnabled        == rhs.m_BiasEnabled &&
+               m_DataLayout         == rhs.m_DataLayout &&
+               m_OutputShapeEnabled == rhs.m_OutputShapeEnabled &&
+               m_OutputShape        == rhs.m_OutputShape;
     }
 
     /// Padding left value in the width dimension.
-    uint32_t   m_PadLeft;
+    uint32_t                  m_PadLeft;
     /// Padding right value in the width dimension.
-    uint32_t   m_PadRight;
+    uint32_t                  m_PadRight;
     /// Padding top value in the height dimension.
-    uint32_t   m_PadTop;
+    uint32_t                  m_PadTop;
     /// Padding bottom value in the height dimension.
-    uint32_t   m_PadBottom;
+    uint32_t                  m_PadBottom;
     /// Stride value when proceeding through input for the width dimension.
-    uint32_t   m_StrideX;
+    uint32_t                  m_StrideX;
     /// Stride value when proceeding through input for the height dimension.
-    uint32_t   m_StrideY;
+    uint32_t                  m_StrideY;
     /// Enable/disable bias.
-    bool       m_BiasEnabled;
+    bool                      m_BiasEnabled;
     /// The data layout to be used (NCHW, NHWC).
-    DataLayout m_DataLayout;
+    DataLayout                m_DataLayout;
+    /// Output shape if it has been specified.
+    bool                      m_OutputShapeEnabled;
+    std::vector<unsigned int> m_OutputShape;
+};
+
+/// A TransposeDescriptor for the TransposeLayer.
+struct TransposeDescriptor
+{
+    TransposeDescriptor()
+            : m_DimMappings{}
+    {}
+
+    TransposeDescriptor(const PermutationVector& dimMappings)
+            : m_DimMappings(dimMappings)
+    {}
+
+    bool operator ==(const TransposeDescriptor &rhs) const
+    {
+        return m_DimMappings.IsEqual(rhs.m_DimMappings);
+    }
+
+    /// @brief Indicates how to translate tensor elements from a given source into the target destination, when
+    /// source and target potentially have different memory layouts e.g. {0U, 3U, 1U, 2U}.
+    PermutationVector m_DimMappings;
+};
+
+/// A LogicalBinaryDescriptor for the LogicalBinaryLayer
+struct LogicalBinaryDescriptor
+{
+    LogicalBinaryDescriptor()
+        : LogicalBinaryDescriptor(LogicalBinaryOperation::LogicalAnd)
+    {}
+
+    LogicalBinaryDescriptor(LogicalBinaryOperation operation)
+        : m_Operation(operation)
+    {}
+
+    bool operator ==(const LogicalBinaryDescriptor &rhs) const
+    {
+        return m_Operation == rhs.m_Operation;
+    }
+
+    /// Specifies the logical operation to execute
+    LogicalBinaryOperation m_Operation;
 };
 
 } // namespace armnn

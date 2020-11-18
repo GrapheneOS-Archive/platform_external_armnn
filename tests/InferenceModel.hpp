@@ -1,12 +1,16 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
 #include <armnn/ArmNN.hpp>
+#include <armnn/Logging.hpp>
+#include <armnn/utility/Timer.hpp>
 #include <armnn/BackendRegistry.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #if defined(ARMNN_SERIALIZER)
 #include "armnnDeserializer/IDeserializer.hpp"
@@ -18,20 +22,17 @@
 #include <armnnOnnxParser/IOnnxParser.hpp>
 #endif
 
+#include <Filesystem.hpp>
 #include <HeapProfiling.hpp>
 #include <TensorIOUtils.hpp>
 
-#include <boost/algorithm/string/join.hpp>
-#include <boost/exception/exception.hpp>
-#include <boost/exception/diagnostic_information.hpp>
-#include <boost/format.hpp>
-#include <boost/program_options.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/variant.hpp>
+#include "armnn/utility/StringUtils.hpp"
+#include <cxxopts/cxxopts.hpp>
+#include "CxxoptsUtils.hpp"
+#include <fmt/format.h>
+#include <mapbox/variant.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <iterator>
 #include <fstream>
 #include <map>
@@ -91,8 +92,11 @@ struct Params
     bool                            m_IsModelBinary;
     bool                            m_VisualizePostOptimizationModel;
     bool                            m_EnableFp16TurboMode;
+    bool                            m_EnableBf16TurboMode;
     bool                            m_PrintIntermediateLayers;
     bool                            m_ParseUnsupported;
+    bool                            m_InferOutputShape;
+    bool                            m_EnableFastMath;
 
     Params()
         : m_ComputeDevices{}
@@ -100,8 +104,11 @@ struct Params
         , m_IsModelBinary(true)
         , m_VisualizePostOptimizationModel(false)
         , m_EnableFp16TurboMode(false)
+        , m_EnableBf16TurboMode(false)
         , m_PrintIntermediateLayers(false)
         , m_ParseUnsupported(false)
+        , m_InferOutputShape(false)
+        , m_EnableFastMath(false)
     {}
 };
 
@@ -129,9 +136,9 @@ public:
             const size_t numInputBindings = params.m_InputBindings.size();
             if (numInputShapes < numInputBindings)
             {
-                throw armnn::Exception(boost::str(boost::format(
-                    "Not every input has its tensor shape specified: expected=%1%, got=%2%")
-                    % numInputBindings % numInputShapes));
+                throw armnn::Exception(fmt::format(
+                    "Not every input has its tensor shape specified: expected={0}, got={1}",
+                    numInputBindings, numInputShapes));
             }
 
             for (size_t i = 0; i < numInputShapes; i++)
@@ -178,21 +185,20 @@ public:
                                      std::vector<armnn::BindingPointInfo>& outputBindings)
     {
         auto parser(IParser::Create());
-        BOOST_ASSERT(parser);
+        ARMNN_ASSERT(parser);
 
         armnn::INetworkPtr network{nullptr, [](armnn::INetwork *){}};
 
         {
             ARMNN_SCOPED_HEAP_PROFILING("Parsing");
 
-            boost::system::error_code errorCode;
-            boost::filesystem::path pathToFile(params.m_ModelPath);
-            if (!boost::filesystem::exists(pathToFile, errorCode))
+            std::error_code errorCode;
+            fs::path pathToFile(params.m_ModelPath);
+            if (!fs::exists(pathToFile, errorCode))
             {
-                throw armnn::FileNotFoundException(boost::str(
-                                                   boost::format("Cannot find the file (%1%) errorCode: %2% %3%") %
-                                                   params.m_ModelPath %
-                                                   errorCode %
+                throw armnn::FileNotFoundException(fmt::format("Cannot find the file ({0}) errorCode: {1} {2}",
+                                                   params.m_ModelPath,
+                                                   errorCode.message(),
                                                    CHECK_LOCATION().AsString()));
             }
             std::ifstream file(params.m_ModelPath, std::ios::binary);
@@ -200,7 +206,7 @@ public:
             network = parser->CreateNetworkFromBinary(file);
         }
 
-        unsigned int subgraphId = boost::numeric_cast<unsigned int>(params.m_SubgraphId);
+        unsigned int subgraphId = armnn::numeric_cast<unsigned int>(params.m_SubgraphId);
 
         for (const std::string& inputLayerName : params.m_InputBindings)
         {
@@ -238,6 +244,7 @@ public:
         // Create a network from a file on disk
         IParser::TfLiteParserOptions options;
         options.m_StandInLayerForUnsupported = params.m_ParseUnsupported;
+        options.m_InferAndValidate           = params.m_InferOutputShape;
         auto parser(IParser::Create(options));
 
         armnn::INetworkPtr network{nullptr, [](armnn::INetwork *){}};
@@ -319,7 +326,7 @@ public:
     using DataType           = TDataType;
     using Params             = InferenceModelInternal::Params;
     using QuantizationParams = InferenceModelInternal::QuantizationParams;
-    using TContainer         = boost::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
+    using TContainer         = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
     struct CommandLineOptions
     {
@@ -328,6 +335,7 @@ public:
         std::string m_DynamicBackendsPath;
         bool m_VisualizePostOptimizationModel;
         bool m_EnableFp16TurboMode;
+        bool m_EnableBf16TurboMode;
         std::string m_Labels;
 
         std::vector<armnn::BackendId> GetComputeDevicesAsBackendIds()
@@ -338,34 +346,42 @@ public:
         }
     };
 
-    static void AddCommandLineOptions(boost::program_options::options_description& desc, CommandLineOptions& options)
+    static void AddCommandLineOptions(cxxopts::Options& options,
+                                      CommandLineOptions& cLineOptions, std::vector<std::string>& required)
     {
-        namespace po = boost::program_options;
-
         const std::vector<std::string> defaultComputes = { "CpuAcc", "CpuRef" };
 
         const std::string backendsMessage = "Which device to run layers on by default. Possible choices: "
                                           + armnn::BackendRegistryInstance().GetBackendIdsAsString();
 
-        desc.add_options()
-            ("model-dir,m", po::value<std::string>(&options.m_ModelDir)->required(),
-                "Path to directory containing model files (.caffemodel/.prototxt/.tflite)")
-            ("compute,c", po::value<std::vector<std::string>>(&options.m_ComputeDevices)->
-                default_value(defaultComputes, boost::algorithm::join(defaultComputes, ", "))->
-                multitoken(), backendsMessage.c_str())
-            ("dynamic-backends-path,b", po::value(&options.m_DynamicBackendsPath),
-                "Path where to load any available dynamic backend from. "
-                "If left empty (the default), dynamic backends will not be used.")
-            ("labels,l", po::value<std::string>(&options.m_Labels),
-                "Text file containing one image filename - correct label pair per line, "
-                "used to test the accuracy of the network.")
-            ("visualize-optimized-model,v",
-                po::value<bool>(&options.m_VisualizePostOptimizationModel)->default_value(false),
-             "Produce a dot file useful for visualizing the graph post optimization."
-                "The file will have the same name as the model with the .dot extention.")
-            ("fp16-turbo-mode", po::value<bool>(&options.m_EnableFp16TurboMode)->default_value(false),
-                "If this option is enabled FP32 layers, weights and biases will be converted "
-                "to FP16 where the backend supports it.");
+        options
+            .allow_unrecognised_options()
+            .add_options()
+                ("m,model-dir", "Path to directory containing model files (.caffemodel/.prototxt/.tflite)",
+                 cxxopts::value<std::string>(cLineOptions.m_ModelDir))
+                ("c,compute", backendsMessage.c_str(),
+                 cxxopts::value<std::vector<std::string>>(cLineOptions.m_ComputeDevices)->default_value("CpuRef"))
+                ("b,dynamic-backends-path",
+                 "Path where to load any available dynamic backend from. "
+                 "If left empty (the default), dynamic backends will not be used.",
+                 cxxopts::value(cLineOptions.m_DynamicBackendsPath))
+                ("l,labels",
+                 "Text file containing one image filename - correct label pair per line, "
+                 "used to test the accuracy of the network.", cxxopts::value<std::string>(cLineOptions.m_Labels))
+                ("v,visualize-optimized-model",
+                 "Produce a dot file useful for visualizing the graph post optimization."
+                 "The file will have the same name as the model with the .dot extention.",
+                 cxxopts::value<bool>(cLineOptions.m_VisualizePostOptimizationModel)->default_value("false"))
+                ("fp16-turbo-mode",
+                 "If this option is enabled FP32 layers, weights and biases will be converted "
+                 "to FP16 where the backend supports it.",
+                 cxxopts::value<bool>(cLineOptions.m_EnableFp16TurboMode)->default_value("false"))
+                ("bf16-turbo-mode",
+                 "If this option is enabled FP32 layers, weights and biases will be converted "
+                 "to BF16 where the backend supports it.",
+                 cxxopts::value<bool>(cLineOptions.m_EnableBf16TurboMode)->default_value("false"));
+
+        required.emplace_back("model-dir");
     }
 
     InferenceModel(const Params& params,
@@ -393,7 +409,11 @@ public:
             throw armnn::Exception("Some backend IDs are invalid: " + invalidBackends);
         }
 
+        const auto parsing_start_time = armnn::GetTimeNow();
         armnn::INetworkPtr network = CreateNetworkImpl<IParser>::Create(params, m_InputBindings, m_OutputBindings);
+
+        ARMNN_LOG(info) << "Network parsing time: " << std::setprecision(2)
+                        << std::fixed << armnn::GetTimeDuration(parsing_start_time).count() << " ms\n";
 
         armnn::IOptimizedNetworkPtr optNet{nullptr, [](armnn::IOptimizedNetwork*){}};
         {
@@ -401,9 +421,26 @@ public:
 
             armnn::OptimizerOptions options;
             options.m_ReduceFp32ToFp16 = params.m_EnableFp16TurboMode;
+            options.m_ReduceFp32ToBf16 = params.m_EnableBf16TurboMode;
             options.m_Debug = params.m_PrintIntermediateLayers;
 
+            armnn::BackendOptions gpuAcc("GpuAcc",
+            {
+                { "FastMathEnabled", params.m_EnableFastMath }
+            });
+            armnn::BackendOptions cpuAcc("CpuAcc",
+            {
+                { "FastMathEnabled", params.m_EnableFastMath }
+            });
+            options.m_ModelOptions.push_back(gpuAcc);
+            options.m_ModelOptions.push_back(cpuAcc);
+
+            const auto optimization_start_time = armnn::GetTimeNow();
             optNet = armnn::Optimize(*network, params.m_ComputeDevices, m_Runtime->GetDeviceSpec(), options);
+
+            ARMNN_LOG(info) << "Optimization time: " << std::setprecision(2)
+                            << std::fixed << armnn::GetTimeDuration(optimization_start_time).count() << " ms\n";
+
             if (!optNet)
             {
                 throw armnn::Exception("Optimize returned nullptr");
@@ -412,7 +449,7 @@ public:
 
         if (params.m_VisualizePostOptimizationModel)
         {
-            boost::filesystem::path filename = params.m_ModelPath;
+            fs::path filename = params.m_ModelPath;
             filename.replace_extension("dot");
             std::fstream file(filename.c_str(), std::ios_base::out);
             optNet->SerializeToDot(file);
@@ -434,7 +471,7 @@ public:
     {
         if (m_InputBindings.size() < inputIndex + 1)
         {
-            throw armnn::Exception(boost::str(boost::format("Input index out of range: %1%") % inputIndex));
+            throw armnn::Exception(fmt::format("Input index out of range: {}", inputIndex));
         }
     }
 
@@ -442,7 +479,7 @@ public:
     {
         if (m_OutputBindings.size() < outputIndex + 1)
         {
-            throw armnn::Exception(boost::str(boost::format("Output index out of range: %1%") % outputIndex));
+            throw armnn::Exception(fmt::format("Output index out of range: {}", outputIndex));
         }
     }
 
@@ -466,15 +503,15 @@ public:
         {
             const unsigned int expectedOutputDataSize = GetOutputSize(i);
 
-            boost::apply_visitor([expectedOutputDataSize, i](auto&& value)
+            mapbox::util::apply_visitor([expectedOutputDataSize, i](auto&& value)
             {
-                const unsigned int actualOutputDataSize   = boost::numeric_cast<unsigned int>(value.size());
+                const unsigned int actualOutputDataSize   = armnn::numeric_cast<unsigned int>(value.size());
                 if (actualOutputDataSize < expectedOutputDataSize)
                 {
-                    unsigned int outputIndex = boost::numeric_cast<unsigned int>(i);
+                    unsigned int outputIndex = i;
                     throw armnn::Exception(
-                            boost::str(boost::format("Not enough data for output #%1%: expected "
-                            "%2% elements, got %3%") % outputIndex % expectedOutputDataSize % actualOutputDataSize));
+                            fmt::format("Not enough data for output #{0}: expected "
+                            "{1} elements, got {2}", outputIndex, expectedOutputDataSize, actualOutputDataSize));
                 }
             },
             outputContainers[i]);
@@ -487,13 +524,13 @@ public:
         }
 
         // Start timer to record inference time in EnqueueWorkload (in milliseconds)
-        const auto start_time = GetCurrentTime();
+        const auto start_time = armnn::GetTimeNow();
 
         armnn::Status ret = m_Runtime->EnqueueWorkload(m_NetworkIdentifier,
                                                        MakeInputTensors(inputContainers),
                                                        MakeOutputTensors(outputContainers));
 
-        const auto end_time = GetCurrentTime();
+        const auto duration = armnn::GetTimeDuration(start_time);
 
         // if profiling is enabled print out the results
         if (profiler && profiler->IsProfilingEnabled())
@@ -507,7 +544,7 @@ public:
         }
         else
         {
-            return std::chrono::duration<double, std::milli>(end_time - start_time);
+            return duration;
         }
     }
 
@@ -577,17 +614,4 @@ private:
     {
         return armnnUtils::MakeOutputTensors(m_OutputBindings, outputDataContainers);
     }
-
-    std::chrono::high_resolution_clock::time_point GetCurrentTime()
-    {
-        return std::chrono::high_resolution_clock::now();
-    }
-
-    std::chrono::duration<double, std::milli> GetTimeDuration(
-            std::chrono::high_resolution_clock::time_point& start_time,
-            std::chrono::high_resolution_clock::time_point& end_time)
-    {
-        return std::chrono::duration<double, std::milli>(end_time - start_time);
-    }
-
 };

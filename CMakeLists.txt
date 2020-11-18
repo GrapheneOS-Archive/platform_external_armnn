@@ -1,5 +1,6 @@
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+# Copyright 2020 NXP
 # SPDX-License-Identifier: MIT
 #
 cmake_minimum_required (VERSION 3.0.2) # 3.0.2 required for return() statement used in AddDllCopyCommands.cmake
@@ -16,6 +17,16 @@ foreach(cmake_file ${additional_cmake_files})
     include(${cmake_file})
 endforeach()
 
+cmake_policy(SET CMP0057 NEW)
+
+set(as_subproject Armnn)
+
+macro(find_package)
+    if(NOT ${ARGV0} IN_LIST as_subproject)
+        _find_package(${ARGV})
+    endif()
+endmacro()
+
 if (DYNAMIC_BACKEND_PATHS)
     # It's expected to have the format: DYNAMIC_BACKEND_PATHS="PATH_1:PATH_2...:PATH_N"
     add_definitions('-DDYNAMIC_BACKEND_PATHS="${DYNAMIC_BACKEND_PATHS}"')
@@ -26,6 +37,16 @@ include(GNUInstallDirs)
 add_subdirectory(samples)
 add_subdirectory(src/armnnTfLiteParser)
 add_subdirectory(src/armnnSerializer)
+add_subdirectory(src/armnnDeserializer)
+
+
+if (BUILD_ARMNN_TFLITE_DELEGATE)
+
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/delegate/cmake/Modules)
+    add_subdirectory(delegate)
+
+    add_definitions(-DARMNN_TF_LITE_DELEGATE)
+endif()
 
 if (BUILD_TESTS)
     add_subdirectory(tests)
@@ -38,12 +59,13 @@ set(armnnUtils_sources)
 list(APPEND armnnUtils_sources
     include/armnnUtils/DataLayoutIndexed.hpp
     include/armnnUtils/Permute.hpp
+    include/armnnUtils/FloatingPointComparison.hpp
     include/armnnUtils/FloatingPointConverter.hpp
     include/armnnUtils/TensorUtils.hpp
+    include/armnnUtils/Transpose.hpp
+    src/armnnUtils/BFloat16.hpp
     src/armnnUtils/Filesystem.hpp
     src/armnnUtils/Filesystem.cpp
-    src/armnnUtils/Processes.hpp
-    src/armnnUtils/Processes.cpp
     src/armnnUtils/GraphTopologicalSort.hpp
     src/armnnUtils/Half.hpp
     src/armnnUtils/Permute.cpp
@@ -56,21 +78,22 @@ list(APPEND armnnUtils_sources
     src/armnnUtils/LeakChecking.hpp
     src/armnnUtils/ModelAccuracyChecker.cpp
     src/armnnUtils/ModelAccuracyChecker.hpp
-    src/armnnUtils/CsvReader.cpp
-    src/armnnUtils/CsvReader.hpp
     src/armnnUtils/FloatingPointConverter.cpp
     src/armnnUtils/VerificationHelpers.hpp
     src/armnnUtils/VerificationHelpers.cpp
     src/armnnUtils/ParserHelper.hpp
     src/armnnUtils/ParserHelper.cpp
     src/armnnUtils/ParserPrototxtFixture.hpp
+    src/armnnUtils/Processes.hpp
+    src/armnnUtils/Processes.cpp
     src/armnnUtils/PrototxtConversions.hpp
     src/armnnUtils/PrototxtConversions.cpp
     src/armnnUtils/QuantizeHelper.hpp
     src/armnnUtils/TensorIOUtils.hpp
     src/armnnUtils/TensorUtils.cpp
-    src/armnnUtils/NetworkSockets.hpp
-    src/armnnUtils/NetworkSockets.cpp
+    src/armnnUtils/Threads.hpp
+    src/armnnUtils/Threads.cpp
+    src/armnnUtils/Transpose.cpp
     )
 
 add_library_ex(armnnUtils STATIC ${armnnUtils_sources})
@@ -96,8 +119,6 @@ if(BUILD_CAFFE_PARSER)
     set_target_properties(armnnCaffeParser PROPERTIES COMPILE_FLAGS "${CAFFE_PARSER_ADDITIONAL_COMPILE_FLAGS}")
 
     target_include_directories(armnnCaffeParser PRIVATE src/armnnUtils)
-
-    target_link_libraries(armnnCaffeParser ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY})
 
     target_link_libraries(armnnCaffeParser armnn)
     target_link_libraries(armnnCaffeParser ${PROTOBUF_LIBRARIES})
@@ -139,7 +160,7 @@ if(BUILD_TF_PARSER)
         )
     # The generated tensorflow protobuf .cc files are not warning clean and we can't fix them.
     if(COMPILER_IS_GNU_LIKE)
-        set_source_files_properties(${TF_PROTOBUFS} PROPERTIES COMPILE_FLAGS "-Wno-unused-variable -Wno-unused-parameter -Wno-conversion -Wno-sign-conversion")
+        set_source_files_properties(${TF_PROTOBUFS} PROPERTIES COMPILE_FLAGS "-Wno-unused-variable -Wno-unused-parameter -Wno-conversion -Wno-sign-conversion  -Wno-error=deprecated-declarations")
     endif()
 
     add_library_ex(armnnTfParser SHARED ${armnn_tf_parser_sources})
@@ -173,28 +194,18 @@ if(BUILD_ARMNN_QUANTIZER AND ARMNNREF)
     target_include_directories(armnnQuantizer PRIVATE include/armnnDeserializer)
     target_include_directories(armnnQuantizer PRIVATE src/armnnUtils)
     target_include_directories(armnnQuantizer PRIVATE src/armnn)
+    target_include_directories(armnnQuantizer PRIVATE third-party)
 
     include_directories(SYSTEM "${FLATBUFFERS_INCLUDE_PATH}")
     set_target_properties(armnnQuantizer PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
-    target_link_libraries(armnnQuantizer
-            armnn
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_THREAD_LIBRARY} )
+    target_link_libraries(armnnQuantizer armnn)
 
     add_executable_ex(ArmnnQuantizer
         src/armnnQuantizer/ArmNNQuantizerMain.cpp)
 
     target_include_directories(ArmnnQuantizer PRIVATE include/armnnDeserializer)
     target_include_directories(ArmnnQuantizer PRIVATE src/armnn)
-
-    target_link_libraries(ArmnnQuantizer
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_THREAD_LIBRARY} )
 
     target_link_libraries(ArmnnQuantizer
             armnnQuantizer
@@ -244,6 +255,12 @@ list(APPEND armnn_sources
     include/armnn/Version.hpp
     include/armnn/profiling/IProfilingGuidGenerator.hpp
     include/armnn/profiling/ISendTimelinePacket.hpp
+    include/armnn/utility/Assert.hpp
+    include/armnn/utility/IgnoreUnused.hpp
+    include/armnn/utility/NumericCast.hpp
+    include/armnn/utility/PolymorphicDowncast.hpp
+    include/armnn/utility/StringUtils.hpp
+    include/armnn/utility/TransformIterator.hpp
     src/armnn/layers/LayerCloneBase.hpp
     src/armnn/layers/LayerWithParameters.hpp
     src/armnn/layers/ActivationLayer.hpp
@@ -264,8 +281,12 @@ list(APPEND armnn_sources
     src/armnn/layers/ConstantLayer.cpp
     src/armnn/layers/Convolution2dLayer.hpp
     src/armnn/layers/Convolution2dLayer.cpp
+    src/armnn/layers/ConvertBf16ToFp32Layer.cpp
+    src/armnn/layers/ConvertBf16ToFp32Layer.hpp
     src/armnn/layers/ConvertFp16ToFp32Layer.hpp
     src/armnn/layers/ConvertFp16ToFp32Layer.cpp
+    src/armnn/layers/ConvertFp32ToBf16Layer.hpp
+    src/armnn/layers/ConvertFp32ToBf16Layer.cpp
     src/armnn/layers/ConvertFp32ToFp16Layer.hpp
     src/armnn/layers/ConvertFp32ToFp16Layer.cpp
     src/armnn/layers/DebugLayer.hpp
@@ -284,6 +305,8 @@ list(APPEND armnn_sources
     src/armnn/layers/ElementwiseUnaryLayer.cpp
     src/armnn/layers/FakeQuantizationLayer.hpp
     src/armnn/layers/FakeQuantizationLayer.cpp
+    src/armnn/layers/FillLayer.hpp
+    src/armnn/layers/FillLayer.cpp
     src/armnn/layers/FloorLayer.hpp
     src/armnn/layers/FloorLayer.cpp
     src/armnn/layers/FullyConnectedLayer.hpp
@@ -296,10 +319,14 @@ list(APPEND armnn_sources
     src/armnn/layers/InstanceNormalizationLayer.cpp
     src/armnn/layers/L2NormalizationLayer.hpp
     src/armnn/layers/L2NormalizationLayer.cpp
+    src/armnn/layers/LogicalBinaryLayer.hpp
+    src/armnn/layers/LogicalBinaryLayer.cpp
     src/armnn/layers/LogSoftmaxLayer.hpp
     src/armnn/layers/LogSoftmaxLayer.cpp
     src/armnn/layers/LstmLayer.cpp
     src/armnn/layers/LstmLayer.hpp
+    src/armnn/layers/MapLayer.cpp
+    src/armnn/layers/MapLayer.hpp
     src/armnn/layers/MaximumLayer.cpp
     src/armnn/layers/MaximumLayer.hpp
     src/armnn/layers/MeanLayer.hpp
@@ -326,6 +353,8 @@ list(APPEND armnn_sources
     src/armnn/layers/Pooling2dLayer.cpp
     src/armnn/layers/QuantizeLayer.cpp
     src/armnn/layers/QuantizeLayer.hpp
+    src/armnn/layers/QLstmLayer.hpp
+    src/armnn/layers/QLstmLayer.cpp
     src/armnn/layers/QuantizedLstmLayer.hpp
     src/armnn/layers/QuantizedLstmLayer.cpp
     src/armnn/layers/DivisionLayer.cpp
@@ -334,6 +363,8 @@ list(APPEND armnn_sources
     src/armnn/layers/PreCompiledLayer.cpp
     src/armnn/layers/PreluLayer.hpp
     src/armnn/layers/PreluLayer.cpp
+    src/armnn/layers/RankLayer.hpp
+    src/armnn/layers/RankLayer.cpp
     src/armnn/layers/ReshapeLayer.hpp
     src/armnn/layers/ReshapeLayer.cpp
     src/armnn/layers/ResizeLayer.hpp
@@ -360,6 +391,10 @@ list(APPEND armnn_sources
     src/armnn/layers/SwitchLayer.hpp
     src/armnn/layers/TransposeConvolution2dLayer.cpp
     src/armnn/layers/TransposeConvolution2dLayer.hpp
+    src/armnn/layers/TransposeLayer.hpp
+    src/armnn/layers/TransposeLayer.cpp
+    src/armnn/layers/UnmapLayer.cpp
+    src/armnn/layers/UnmapLayer.hpp
     src/armnn/BackendRegistry.cpp
     src/armnn/BackendSettings.hpp
     src/armnn/BackendHelper.cpp
@@ -431,39 +466,38 @@ list(APPEND armnn_sources
     src/armnn/Utils.cpp
     src/armnn/WallClockTimer.cpp
     src/armnn/WallClockTimer.hpp
+    src/armnn/optimizations/AddBroadcastReshapeLayer.hpp
     src/armnn/optimizations/AddDebug.hpp
     src/armnn/optimizations/All.hpp
     src/armnn/optimizations/ConvertConstants.hpp
+    src/armnn/optimizations/ConvertFp32NetworkToBf16.hpp
     src/armnn/optimizations/ConvertFp32NetworkToFp16.hpp
     src/armnn/optimizations/FoldPadIntoConvolution2d.hpp
     src/armnn/optimizations/MovePermuteUp.hpp
+    src/armnn/optimizations/MoveTransposeUp.hpp
     src/armnn/optimizations/Optimization.hpp
     src/armnn/optimizations/OptimizeConsecutiveReshapes.hpp
     src/armnn/optimizations/OptimizeInverseConversions.hpp
     src/armnn/optimizations/OptimizeInversePermutes.hpp
     src/armnn/optimizations/PermuteAndBatchToSpaceAsDepthToSpace.hpp
-    src/armnn/optimizations/PermuteAndBatchToSpaceAsDepthToSpace.cpp
     src/armnn/optimizations/PermuteAsReshape.hpp
     src/armnn/optimizations/SquashEqualSiblings.hpp
+    src/profiling/ActivateTimelineReportingCommandHandler.cpp
+    src/profiling/ActivateTimelineReportingCommandHandler.hpp
     src/profiling/BufferManager.cpp
     src/profiling/BufferManager.hpp
     src/profiling/CommandHandler.cpp
     src/profiling/CommandHandler.hpp
-    src/profiling/CommandHandlerFunctor.cpp
-    src/profiling/CommandHandlerFunctor.hpp
-    src/profiling/CommandHandlerKey.cpp
-    src/profiling/CommandHandlerKey.hpp
-    src/profiling/CommandHandlerRegistry.cpp
-    src/profiling/CommandHandlerRegistry.hpp
     src/profiling/ConnectionAcknowledgedCommandHandler.cpp
     src/profiling/ConnectionAcknowledgedCommandHandler.hpp
     src/profiling/CounterDirectory.cpp
     src/profiling/CounterDirectory.hpp
     src/profiling/CounterIdMap.cpp
     src/profiling/CounterIdMap.hpp
+    src/profiling/DeactivateTimelineReportingCommandHandler.cpp
+    src/profiling/DeactivateTimelineReportingCommandHandler.hpp
     src/profiling/DirectoryCaptureCommandHandler.cpp
     src/profiling/DirectoryCaptureCommandHandler.hpp
-    src/profiling/EncodeVersion.hpp
     src/profiling/FileOnlyProfilingConnection.cpp
     src/profiling/FileOnlyProfilingConnection.hpp
     src/profiling/Holder.cpp
@@ -473,6 +507,8 @@ list(APPEND armnn_sources
     src/profiling/ICounterDirectory.hpp
     src/profiling/ICounterRegistry.hpp
     src/profiling/ICounterValues.hpp
+    src/profiling/INotifyBackends.hpp
+    src/profiling/IReportStructure.hpp
     src/profiling/ISendCounterPacket.hpp
     src/profiling/ISendThread.hpp
     src/profiling/IPacketBuffer.hpp
@@ -481,11 +517,9 @@ list(APPEND armnn_sources
     src/profiling/IProfilingConnectionFactory.hpp
     src/profiling/LabelsAndEventClasses.cpp
     src/profiling/LabelsAndEventClasses.hpp
-    src/profiling/Packet.hpp
+    src/profiling/NullProfilingConnection.hpp
     src/profiling/PacketBuffer.cpp
     src/profiling/PacketBuffer.hpp
-    src/profiling/PacketVersionResolver.cpp
-    src/profiling/PacketVersionResolver.hpp
     src/profiling/PeriodicCounterCapture.hpp
     src/profiling/PeriodicCounterCapture.cpp
     src/profiling/PeriodicCounterSelectionCommandHandler.cpp
@@ -521,7 +555,15 @@ list(APPEND armnn_sources
     src/profiling/TimelineUtilityMethods.hpp
     src/profiling/backends/BackendProfiling.cpp
     src/profiling/backends/BackendProfiling.hpp
+    third-party/cxxopts/cxxopts.hpp
+    third-party/ghc/filesystem.hpp
     third-party/half/half.hpp
+    third-party/mapbox/optional.hpp
+    third-party/mapbox/recursive_wrapper.hpp
+    third-party/mapbox/variant.hpp
+    third-party/mapbox/variant_cast.hpp
+    third-party/mapbox/variant_io.hpp
+    third-party/mapbox/variant_visitor.hpp
     )
 
 # Files used for Streamline-based profiling backend
@@ -543,21 +585,33 @@ add_library_ex(armnn SHARED ${armnn_sources})
 
 target_compile_definitions(armnn PRIVATE "ARMNN_COMPILING_DLL")
 
-target_include_directories(armnn PRIVATE src/armnn)
-target_include_directories(armnn PRIVATE src/armnnUtils)
-target_include_directories(armnn PRIVATE src/backends)
-target_include_directories(armnn PRIVATE src/profiling)
+target_include_directories(armnn
+    PUBLIC
+        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE
+        src/armnn
+        src/armnnUtils
+        src/backends
+        src/profiling
+        profiling/common/include
+)
 
 target_link_libraries(armnn armnnUtils)
+# only link pipeCommon if it has been built
+if(BUILD_TIMELINE_DECODER)
+    target_link_libraries(armnn pipeCommon)
+endif()
 
 target_link_libraries(armnn ${CMAKE_DL_LIBS})
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL Windows) 
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL Windows)
     target_link_libraries(armnn Ws2_32.lib)
 endif()
 
-install(TARGETS armnn
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# Link fmt third-party library
+add_subdirectory(third-party/fmt)
+target_link_libraries(armnn fmt)
+
 if(BUILD_CAFFE_PARSER)
     install(TARGETS armnnCaffeParser
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -576,9 +630,6 @@ endif()
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-target_link_libraries(armnn ${Boost_THREAD_LIBRARY}
-                            ${Boost_SYSTEM_LIBRARY} ${Boost_FILESYSTEM_LIBRARY})
-
 if(ARMCOMPUTENEON OR ARMCOMPUTECL)
     target_link_libraries(armnn ${ARMCOMPUTE_LIBRARIES})
 endif()
@@ -595,7 +646,6 @@ if(BUILD_UNIT_TESTS)
         src/armnn/test/ConstTensorLayerVisitor.hpp
         src/armnn/test/ConstTensorLayerVisitor.cpp
         src/armnn/test/CreateWorkload.hpp
-        src/armnn/test/CsvReaderTest.cpp
         src/armnn/test/EndToEndTest.cpp
         src/armnn/test/ExecutionFrameTest.cpp
         src/armnn/test/FloatingPointConverterTest.cpp
@@ -610,20 +660,28 @@ if(BUILD_UNIT_TESTS)
         src/armnn/test/NetworkTests.cpp
         src/armnn/test/ObservableTest.cpp
         src/armnn/test/OptimizerTests.cpp
+        src/armnn/test/optimizations/AddBroadcastReshapeLayerTests.cpp
+        src/armnn/test/optimizations/ConvertConstantsBFloatTests.cpp
         src/armnn/test/optimizations/ConvertConstantsFloatToHalfTests.cpp
         src/armnn/test/optimizations/ConvertConstantsHalfToFloatTests.cpp
+        src/armnn/test/optimizations/Fp32NetworkToBf16ConverterTests.cpp
         src/armnn/test/optimizations/Fp32NetworkToFp16ConverterTests.cpp
+        src/armnn/test/optimizations/FuseActivationTests.cpp
+        src/armnn/test/optimizations/FuseBatchNormTests.cpp
         src/armnn/test/optimizations/InsertDebugLayerTests.cpp
         src/armnn/test/optimizations/MovePermuteUpTests.cpp
+        src/armnn/test/optimizations/MoveTransposeUpTests.cpp
         src/armnn/test/optimizations/OptimizeConsecutiveReshapesTests.cpp
         src/armnn/test/optimizations/OptimizeInverseConversionsTests.cpp
         src/armnn/test/optimizations/OptimizeInversePermutesTests.cpp
         src/armnn/test/optimizations/PermuteAndBatchToSpaceAsDepthToSpaceTests.cpp
         src/armnn/test/optimizations/PermuteAsReshapeTests.cpp
         src/armnn/test/optimizations/SquashEqualSiblingsTests.cpp
+        src/armnn/test/optimizations/TransposeAsReshapeTests.cpp
         src/armnn/test/OptionalTest.cpp
         src/armnn/test/ProfilerTests.cpp
         src/armnn/test/ProfilingEventTest.cpp
+        src/armnn/test/ShapeInferenceTests.cpp
         src/armnn/test/SubgraphViewTests.cpp
         src/armnn/test/TensorHandleStrategyTest.cpp
         src/armnn/test/TensorHelpers.hpp
@@ -638,15 +696,20 @@ if(BUILD_UNIT_TESTS)
         src/armnn/test/TestNameAndDescriptorLayerVisitor.cpp
         src/armnn/test/TestUtils.cpp
         src/armnn/test/TestUtils.hpp
+        src/armnn/test/UtilityTests.cpp
         src/armnn/test/UnitTests.cpp
         src/armnn/test/UnitTests.hpp
         src/armnn/test/UtilsTests.cpp
-        src/armnnUtils/test/QuantizeHelperTest.cpp
-        src/armnnUtils/test/PrototxtConversionsTest.cpp
+        src/armnnUtils/test/FloatingPointComparisonTest.cpp
         src/armnnUtils/test/ParserHelperTest.cpp
+        src/armnnUtils/test/PrototxtConversionsTest.cpp
+        src/armnnUtils/test/QuantizeHelperTest.cpp
         src/armnnUtils/test/TensorUtilsTest.cpp
+        src/armnnUtils/test/TransformIteratorTest.cpp
         src/profiling/test/BufferTests.cpp
         src/profiling/test/FileOnlyProfilingDecoratorTests.cpp
+        src/profiling/test/PrintPacketHeaderHandler.cpp
+        src/profiling/test/PrintPacketHeaderHandler.hpp
         src/profiling/test/ProfilingConnectionDumpToFileDecoratorTests.cpp
         src/profiling/test/ProfilingGuidTest.cpp
         src/profiling/test/ProfilingMocks.hpp
@@ -654,8 +717,14 @@ if(BUILD_UNIT_TESTS)
         src/profiling/test/ProfilingTests.hpp
         src/profiling/test/ProfilingTestUtils.cpp
         src/profiling/test/ProfilingTestUtils.hpp
+        src/profiling/test/RequestCountersPacketHandler.cpp
+        src/profiling/test/RequestCountersPacketHandler.hpp
         src/profiling/test/SendCounterPacketTests.cpp
         src/profiling/test/SendCounterPacketTests.hpp
+        src/profiling/test/TestTimelinePacketHandler.cpp
+        src/profiling/test/TestTimelinePacketHandler.hpp
+        src/profiling/test/TimelineModel.cpp
+        src/profiling/test/TimelineModel.hpp
         src/profiling/test/SendTimelinePacketTests.cpp
         src/profiling/test/TimelinePacketTests.cpp
         src/profiling/test/TimelineUtilityMethodsTests.cpp
@@ -713,6 +782,7 @@ if(BUILD_UNIT_TESTS)
             src/armnnTfParser/test/Stack.cpp
             src/armnnTfParser/test/Sub.cpp
             src/armnnTfParser/test/StridedSlice.cpp
+            src/armnnTfParser/test/Transpose.cpp
             )
 
     endif()
@@ -729,13 +799,18 @@ if(BUILD_UNIT_TESTS)
              src/armnnTfLiteParser/test/DepthwiseConvolution2D.cpp
              src/armnnTfLiteParser/test/Dequantize.cpp
              src/armnnTfLiteParser/test/DetectionPostProcess.cpp
+             src/armnnTfLiteParser/test/Div.cpp
+             src/armnnTfLiteParser/test/Exp.cpp
              src/armnnTfLiteParser/test/FullyConnected.cpp
              src/armnnTfLiteParser/test/L2Normalization.cpp
+             src/armnnTfLiteParser/test/LeakyRelu.cpp
+             src/armnnTfLiteParser/test/LoadScopeDynamicTensor.cpp
              src/armnnTfLiteParser/test/Maximum.cpp
              src/armnnTfLiteParser/test/MaxPool2D.cpp
              src/armnnTfLiteParser/test/Mean.cpp
              src/armnnTfLiteParser/test/Minimum.cpp
              src/armnnTfLiteParser/test/Multiplication.cpp
+             src/armnnTfLiteParser/test/Neg.cpp
              src/armnnTfLiteParser/test/Pack.cpp
              src/armnnTfLiteParser/test/Pad.cpp
              src/armnnTfLiteParser/test/Reshape.cpp
@@ -745,6 +820,7 @@ if(BUILD_UNIT_TESTS)
              src/armnnTfLiteParser/test/SpaceToBatchND.cpp
              src/armnnTfLiteParser/test/Slice.cpp
              src/armnnTfLiteParser/test/Split.cpp
+             src/armnnTfLiteParser/test/SplitV.cpp
              src/armnnTfLiteParser/test/Squeeze.cpp
              src/armnnTfLiteParser/test/StridedSlice.cpp
              src/armnnTfLiteParser/test/Sub.cpp
@@ -759,6 +835,7 @@ if(BUILD_UNIT_TESTS)
              src/armnnTfLiteParser/test/GetTensorIds.cpp
              src/armnnTfLiteParser/test/GetSubgraphInputsOutputs.cpp
              src/armnnTfLiteParser/test/GetInputsOutputs.cpp
+             src/armnnTfLiteParser/test/TfLiteParser.cpp
              )
 
         # Generate SchemaText.cpp file which contains the TfLite schema text as a
@@ -790,19 +867,21 @@ if(BUILD_UNIT_TESTS)
 
     if(BUILD_ONNX_PARSER AND ARMNNREF)
         list(APPEND unittest_sources
-            src/armnnOnnxParser/test/Constructor.cpp
-            src/armnnOnnxParser/test/CreateNetwork.cpp
-            src/armnnOnnxParser/test/ProtoxtFixture.cpp
-            src/armnnOnnxParser/test/Const.cpp
-            src/armnnOnnxParser/test/Pooling.cpp
-            src/armnnOnnxParser/test/Reshape.cpp
-            src/armnnOnnxParser/test/Relu.cpp
-            src/armnnOnnxParser/test/Conv2D.cpp
             src/armnnOnnxParser/test/Addition.cpp
+            src/armnnOnnxParser/test/BatchNorm.cpp
+            src/armnnOnnxParser/test/Clip.cpp
+            src/armnnOnnxParser/test/Const.cpp
+            src/armnnOnnxParser/test/Constructor.cpp
+            src/armnnOnnxParser/test/Conv2D.cpp
+            src/armnnOnnxParser/test/CreateNetwork.cpp
+            src/armnnOnnxParser/test/DepthConv.cpp
+            src/armnnOnnxParser/test/Flatten.cpp
             src/armnnOnnxParser/test/FullyConnected.cpp
             src/armnnOnnxParser/test/GetInputsOutputs.cpp
-            src/armnnOnnxParser/test/BatchNorm.cpp
-            src/armnnOnnxParser/test/DepthConv.cpp
+            src/armnnOnnxParser/test/Pooling.cpp
+            src/armnnOnnxParser/test/ProtoxtFixture.cpp
+            src/armnnOnnxParser/test/Relu.cpp
+            src/armnnOnnxParser/test/Reshape.cpp
             )
     endif()
 
@@ -827,6 +906,7 @@ if(BUILD_UNIT_TESTS)
             src/armnnDeserializer/test/DeserializeConvolution2d.cpp
             src/armnnDeserializer/test/DeserializeDepthToSpace.cpp
             src/armnnDeserializer/test/DeserializeDivision.cpp
+            src/armnnDeserializer/test/DeserializeFill.cpp
             src/armnnDeserializer/test/DeserializeFloor.cpp
             src/armnnDeserializer/test/DeserializeFullyConnected.cpp
             src/armnnDeserializer/test/DeserializeGather.cpp
@@ -839,6 +919,7 @@ if(BUILD_UNIT_TESTS)
             src/armnnDeserializer/test/DeserializePad.cpp
             src/armnnDeserializer/test/DeserializePermute.cpp
             src/armnnDeserializer/test/DeserializePooling2d.cpp
+            src/armnnDeserializer/test/DeserializeRank.cpp
             src/armnnDeserializer/test/DeserializeReshape.cpp
             src/armnnDeserializer/test/DeserializeResizeBilinear.cpp
             src/armnnDeserializer/test/DeserializeRsqrt.cpp
@@ -855,8 +936,20 @@ if(BUILD_UNIT_TESTS)
     if(BUILD_GATORD_MOCK)
         list(APPEND unittest_sources
             tests/profiling/gatordmock/tests/GatordMockTests.cpp
-            tests/profiling/timelineDecoder/tests/TimelineTests.cpp
             )
+    endif()
+
+    if(BUILD_TIMELINE_DECODER)
+        list(APPEND unittest_sources
+             src/timelineDecoder/tests/JSONTimelineDecoderTests.cpp
+             profiling/server/src/timelineDecoder/tests/TimelineTests.cpp
+             )
+    endif()
+
+    if(BUILD_BASE_PIPE_SERVER)
+        list(APPEND unittest_sources
+                profiling/server/src/basePipeServer/tests/BasePipeServerTests.cpp
+                )
     endif()
 
     foreach(lib ${armnnUnitTestLibraries})
@@ -880,7 +973,7 @@ if(BUILD_UNIT_TESTS)
     endif()
 
     target_link_libraries(UnitTests ${CMAKE_THREAD_LIBS_INIT})
-    target_link_libraries(UnitTests ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY} ${Boost_SYSTEM_LIBRARY} ${Boost_FILESYSTEM_LIBRARY})
+    target_link_libraries(UnitTests ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
     target_link_libraries(UnitTests armnn)
     target_link_libraries(UnitTests armnnUtils)
@@ -891,6 +984,11 @@ if(BUILD_UNIT_TESTS)
 
     if(BUILD_GATORD_MOCK)
         target_link_libraries(UnitTests gatordMockService)
+    endif()
+
+    if(BUILD_TIMELINE_DECODER)
+        target_link_libraries(UnitTests timelineDecoder)
+        target_link_libraries(UnitTests timelineDecoderJson)
     endif()
 
     if(BUILD_TF_LITE_PARSER)
@@ -917,6 +1015,10 @@ if(BUILD_UNIT_TESTS)
 
     if(BUILD_ONNX_PARSER)
         target_link_libraries(UnitTests armnnOnnxParser)
+    endif()
+
+    if(BUILD_BASE_PIPE_SERVER)
+        target_link_libraries(UnitTests armnnBasePipeServer)
     endif()
 
     addDllCopyCommands(UnitTests)
@@ -950,11 +1052,25 @@ if (BUILD_ARMNN_SERIALIZER AND (BUILD_TF_PARSER OR BUILD_TF_LITE_PARSER OR BUILD
 
     target_link_libraries(ArmnnConverter armnn)
     target_link_libraries(ArmnnConverter ${CMAKE_THREAD_LIBS_INIT})
-    target_link_libraries(ArmnnConverter
-        ${Boost_SYSTEM_LIBRARY}
-        ${Boost_FILESYSTEM_LIBRARY}
-        ${Boost_PROGRAM_OPTIONS_LIBRARY})
     addDllCopyCommands(ArmnnConverter)
+endif()
+
+if(BUILD_BASE_PIPE_SERVER)
+    add_subdirectory(profiling/server/src/basePipeServer)
+endif()
+
+if(BUILD_TIMELINE_DECODER)
+    add_subdirectory(profiling/server/src/timelineDecoder)
+    add_subdirectory(profiling/common/src)
+    add_subdirectory(src/timelineDecoder)
+endif()
+
+if(BUILD_GATORD_MOCK AND NOT BUILD_BASE_PIPE_SERVER)
+    message(ERROR, "In order to build GatordMock you must set BUILD_BASE_PIPE_SERVER = YES")
+endif()
+
+if(BUILD_GATORD_MOCK AND NOT BUILD_TIMELINE_DECODER)
+    message(ERROR, "In order to build GatordMock you must set BUILD_TIMELINE_DECODER = YES")
 endif()
 
 if(BUILD_GATORD_MOCK)
@@ -972,34 +1088,106 @@ if(BUILD_GATORD_MOCK)
         tests/profiling/gatordmock/PeriodicCounterSelectionResponseHandler.hpp
         tests/profiling/gatordmock/StreamMetadataCommandHandler.cpp
         tests/profiling/gatordmock/StreamMetadataCommandHandler.hpp
-        tests/profiling/timelineDecoder/ITimelineDecoder.h
-        tests/profiling/timelineDecoder/TimelineCaptureCommandHandler.cpp
-        tests/profiling/timelineDecoder/TimelineCaptureCommandHandler.hpp
-        tests/profiling/timelineDecoder/TimelineDecoder.cpp
-        tests/profiling/timelineDecoder/TimelineDirectoryCaptureCommandHandler.cpp
-        tests/profiling/timelineDecoder/TimelineDirectoryCaptureCommandHandler.hpp
-        tests/profiling/timelineDecoder/tests/TimelineTestFunctions.hpp
+        tests/profiling/gatordmock/StubCommandHandler.hpp
         )
 
-    include_directories(${Boost_INCLUDE_DIRS} src/profiling)
-    include_directories(${Boost_INCLUDE_DIRS} tests/profiling)
-    include_directories(${Boost_INCLUDE_DIRS} tests/profiling/gatordmock)
-    include_directories(${Boost_INCLUDE_DIRS} tests/profiling/timelineDecoder)
-
     add_library_ex(gatordMockService STATIC ${gatord_mock_sources})
-    target_include_directories(gatordMockService PRIVATE src/armnnUtils)
 
-    add_executable_ex(GatordMock tests/profiling/gatordmock/GatordMockMain.cpp)
-    target_include_directories(GatordMock PRIVATE src/armnnUtils)
+    target_include_directories(gatordMockService PRIVATE profiling/common/include
+                                                         profiling/server/src/basePipeServer
+                                                         src/armnnUtils
+                                                         src/profiling
+                                                         src/timelineDecoder)
 
-    target_link_libraries(GatordMock
-        armnn
-        gatordMockService
-        ${Boost_PROGRAM_OPTIONS_LIBRARY}
-        ${Boost_SYSTEM_LIBRARY})
-
-    if(Threads_FOUND AND (NOT ("${CMAKE_SYSTEM_NAME}" STREQUAL Android)))
-        target_link_libraries(GatordMock pthread)
+    if(BUILD_UNIT_TESTS)
+        target_include_directories(UnitTests PRIVATE tests/profiling/gatordmock)
+        target_include_directories(UnitTests PRIVATE src/backends/backendsCommon/test)
     endif()
 
+    add_executable_ex(GatordMock tests/profiling/gatordmock/GatordMockMain.cpp)
+
+    target_include_directories(GatordMock PRIVATE profiling/common/include
+                                                  profiling/server/src/basePipeServer
+                                                  src/armnnUtils
+                                                  src/profiling
+                                                  src/timelineDecoder)
+
+    target_link_libraries(GatordMock
+                          armnn
+                          armnnBasePipeServer
+                          timelineDecoder
+                          gatordMockService)
+
+    if(Threads_FOUND AND (NOT ("${CMAKE_SYSTEM_NAME}" STREQUAL Android)))
+        target_link_libraries(GatordMock ${CMAKE_THREAD_LIBS_INIT})
+    endif()
+
+endif()
+
+####################################################
+# export targets
+set(armnn_export_targets)
+list(APPEND armnn_export_targets
+    armnn
+    armnnUtils
+)
+
+install(
+    TARGETS ${armnn_export_targets}
+    EXPORT  armnn-targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+####################################################
+## Set export alias
+set_target_properties(armnn
+    PROPERTIES
+    EXPORT_NAME Armnn
+)
+
+## Export target scrips
+install(
+    EXPORT      armnn-targets
+    FILE        ArmnnTargets.cmake
+    NAMESPACE   Armnn::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+####################################################
+## Create ArmnnConfig.cmake
+include(CMakePackageConfigHelpers)
+set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR})
+
+message(STATUS "CMAKE_CURRENT_LIST_DIR ${CMAKE_CURRENT_LIST_DIR}" )
+message(STATUS "CMAKE_CURRENT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}" )
+configure_package_config_file(
+    ${CMAKE_CURRENT_LIST_DIR}/cmake/ArmnnConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ArmnnConfig.cmake
+    INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
+)
+
+####################################################
+## Install Armnn config file
+install(
+    FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/ArmnnConfig.cmake
+    DESTINATION ${INSTALL_CONFIGDIR}
+)
+
+####################################################
+## Export from build tree
+export(
+    EXPORT      armnn-targets
+    FILE        ${CMAKE_CURRENT_BINARY_DIR}/ArmnnTargets.cmake
+    NAMESPACE   Armnn::
+)
+
+add_library(Armnn::Armnn ALIAS armnn)
+add_library(Armnn::armnnUtils ALIAS armnnUtils)
+
+####################################################
+## Build Python bindings
+if (BUILD_PYTHON_WHL OR BUILD_PYTHON_SRC)
+    add_subdirectory(python/pyarmnn)
 endif()

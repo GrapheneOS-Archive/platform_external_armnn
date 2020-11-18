@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -30,8 +30,6 @@ struct LstmOptCifgParameters
     /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
     std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToInputWeights;
     /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellToInputWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
     std::unique_ptr<ScopedCpuTensorHandle> m_InputGateBias;
 };
 
@@ -45,6 +43,8 @@ struct LstmOptProjectionParameters
 
 struct LstmOptPeepholeParameters
 {
+    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
+    std::unique_ptr<ScopedCpuTensorHandle> m_CellToInputWeights;
     /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
     std::unique_ptr<ScopedCpuTensorHandle> m_CellToForgetWeights;
     /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
@@ -96,6 +96,7 @@ public:
 
     /// Check if the input tensor shape(s)
     /// will lead to a valid configuration of @ref LstmLayer.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     /// By default returns inputShapes if the number of inputs are equal to number of outputs,

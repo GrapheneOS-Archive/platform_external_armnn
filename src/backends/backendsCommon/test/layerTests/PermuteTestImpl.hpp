@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,20 +19,21 @@ template<typename T>
 LayerTestResult<T, 4> SimplePermuteTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         armnn::PermuteDescriptor descriptor,
         armnn::TensorInfo inputTensorInfo,
         armnn::TensorInfo outputTensorInfo,
         const std::vector<T>& inputData,
         const std::vector<T>& outputExpectedData)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     auto input = MakeTensor<T, 4>(inputTensorInfo, inputData);
 
     LayerTestResult<T, 4> ret(outputTensorInfo);
     ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo, outputExpectedData);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::PermuteQueueDescriptor data;
     data.m_Parameters = descriptor;
@@ -57,7 +58,8 @@ LayerTestResult<T, 4> SimplePermuteTestImpl(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> SimplePermuteTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -72,29 +74,33 @@ LayerTestResult<T, 4> SimplePermuteTest(
     outputTensorInfo = armnn::TensorInfo(4, outputShape, ArmnnType);
 
     // Set quantization parameters if the requested type is a quantized type.
+    float qScale = 0.5f;
+    int32_t qOffset = 5;
     if(armnn::IsQuantizedType<T>())
     {
-        inputTensorInfo.SetQuantizationScale(0.5f);
-        inputTensorInfo.SetQuantizationOffset(5);
-        outputTensorInfo.SetQuantizationScale(0.5f);
-        outputTensorInfo.SetQuantizationOffset(5);
+        inputTensorInfo.SetQuantizationScale(qScale);
+        inputTensorInfo.SetQuantizationOffset(qOffset);
+        outputTensorInfo.SetQuantizationScale(qScale);
+        outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = std::vector<T>(
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(
     {
         1, 2,
         3, 4,
         5, 6,
         7, 8
-    });
+    },
+    qScale, qOffset);
 
-    std::vector<T> outputExpected = std::vector<T>(
+    std::vector<T> outputExpected = armnnUtils::QuantizedVector<T>(
     {
         1, 5, 2, 6,
         3, 7, 4, 8
-    });
+    },
+    qScale, qOffset);
 
-    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager,
+    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager, tensorHandleFactory,
                                     descriptor, inputTensorInfo,
                                     outputTensorInfo, input, outputExpected);
 }
@@ -102,7 +108,8 @@ LayerTestResult<T, 4> SimplePermuteTest(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> PermuteValueSet1Test(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -117,30 +124,34 @@ LayerTestResult<T, 4> PermuteValueSet1Test(
     outputTensorInfo = armnn::TensorInfo(4, outputShape, ArmnnType);
 
     // Set quantization parameters if the requested type is a quantized type.
+    float qScale = 0.5f;
+    int32_t qOffset = 5;
     if(armnn::IsQuantizedType<T>())
     {
-        inputTensorInfo.SetQuantizationScale(0.5f);
-        inputTensorInfo.SetQuantizationOffset(5);
-        outputTensorInfo.SetQuantizationScale(0.5f);
-        outputTensorInfo.SetQuantizationOffset(5);
+        inputTensorInfo.SetQuantizationScale(qScale);
+        inputTensorInfo.SetQuantizationOffset(qOffset);
+        outputTensorInfo.SetQuantizationScale(qScale);
+        outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = std::vector<T>(
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(
     {
          1,  2,  3,
         11, 12, 13,
         21, 22, 23,
         31, 32, 33
-    });
+    },
+    qScale, qOffset);
 
-    std::vector<T> outputExpected = std::vector<T>(
+    std::vector<T> outputExpected = armnnUtils::QuantizedVector<T>(
     {
         1, 11, 21, 31,
         2, 12, 22, 32,
         3, 13, 23, 33
-    });
+    },
+    qScale, qOffset);
 
-    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager,
+    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager, tensorHandleFactory,
                                     descriptor, inputTensorInfo,
                                     outputTensorInfo, input, outputExpected);
 }
@@ -148,7 +159,8 @@ LayerTestResult<T, 4> PermuteValueSet1Test(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> PermuteValueSet2Test(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -163,30 +175,34 @@ LayerTestResult<T, 4> PermuteValueSet2Test(
     outputTensorInfo = armnn::TensorInfo(4, outputShape, ArmnnType);
 
     // Set quantization parameters if the requested type is a quantized type.
+    float qScale = 0.5f;
+    int32_t qOffset = 5;
     if(armnn::IsQuantizedType<T>())
     {
-        inputTensorInfo.SetQuantizationScale(0.5f);
-        inputTensorInfo.SetQuantizationOffset(5);
-        outputTensorInfo.SetQuantizationScale(0.5f);
-        outputTensorInfo.SetQuantizationOffset(5);
+        inputTensorInfo.SetQuantizationScale(qScale);
+        inputTensorInfo.SetQuantizationOffset(qOffset);
+        outputTensorInfo.SetQuantizationScale(qScale);
+        outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = std::vector<T>(
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(
     {
         1, 11, 21, 31,
         2, 12, 22, 32,
         3, 13, 23, 33
-    });
+    },
+    qScale, qOffset);
 
-    std::vector<T> outputExpected = std::vector<T>(
+    std::vector<T> outputExpected = armnnUtils::QuantizedVector<T>(
     {
          1,  2,  3,
         11, 12, 13,
         21, 22, 23,
         31, 32, 33,
-    });
+    },
+    qScale, qOffset);
 
-    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager,
+    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager, tensorHandleFactory,
                                     descriptor, inputTensorInfo,
                                     outputTensorInfo, input, outputExpected);
 }
@@ -194,7 +210,8 @@ LayerTestResult<T, 4> PermuteValueSet2Test(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> PermuteValueSet3Test(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -209,32 +226,36 @@ LayerTestResult<T, 4> PermuteValueSet3Test(
     outputTensorInfo = armnn::TensorInfo(4, outputShape, ArmnnType);
 
     // Set quantization parameters if the requested type is a quantized type.
+    float qScale = 0.5f;
+    int32_t qOffset = 5;
     if(armnn::IsQuantizedType<T>())
     {
-        inputTensorInfo.SetQuantizationScale(0.5f);
-        inputTensorInfo.SetQuantizationOffset(5);
-        outputTensorInfo.SetQuantizationScale(0.5f);
-        outputTensorInfo.SetQuantizationOffset(5);
+        inputTensorInfo.SetQuantizationScale(qScale);
+        inputTensorInfo.SetQuantizationOffset(qOffset);
+        outputTensorInfo.SetQuantizationScale(qScale);
+        outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = std::vector<T>(
-            {
-                 1,  2,  3,
-                11, 12, 13,
-                21, 22, 23,
-                31, 32, 33,
-                41, 42, 43,
-                51, 52, 53
-            });
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(
+    {
+         1,  2,  3,
+        11, 12, 13,
+        21, 22, 23,
+        31, 32, 33,
+        41, 42, 43,
+        51, 52, 53
+    },
+    qScale, qOffset);
 
-    std::vector<T> outputExpected = std::vector<T>(
-            {
-                1, 11, 21, 31, 41, 51,
-                2, 12, 22, 32, 42, 52,
-                3, 13, 23, 33, 43, 53
-            });
+    std::vector<T> outputExpected = armnnUtils::QuantizedVector<T>(
+    {
+        1, 11, 21, 31, 41, 51,
+        2, 12, 22, 32, 42, 52,
+        3, 13, 23, 33, 43, 53
+    },
+    qScale, qOffset);
 
-    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager,
+    return SimplePermuteTestImpl<T>(workloadFactory, memoryManager, tensorHandleFactory,
                                     descriptor, inputTensorInfo,
                                     outputTensorInfo, input, outputExpected);
 }

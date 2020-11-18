@@ -32,6 +32,7 @@ BACKEND_SOURCES := \
         workloads/DetectionPostProcess.cpp \
         workloads/Dequantize.cpp \
         workloads/ElementwiseFunction.cpp \
+        workloads/Fill.cpp \
         workloads/FullyConnected.cpp \
         workloads/Gather.cpp \
         workloads/InstanceNorm.cpp \
@@ -49,7 +50,9 @@ BACKEND_SOURCES := \
         workloads/RefComparisonWorkload.cpp \
         workloads/RefConcatWorkload.cpp \
         workloads/RefConstantWorkload.cpp \
+        workloads/RefConvertBf16ToFp32Workload.cpp \
         workloads/RefConvertFp16ToFp32Workload.cpp \
+        workloads/RefConvertFp32ToBf16Workload.cpp \
         workloads/RefConvertFp32ToFp16Workload.cpp \
         workloads/RefConvolution2dWorkload.cpp \
         workloads/RefDebugWorkload.cpp \
@@ -60,11 +63,14 @@ BACKEND_SOURCES := \
         workloads/RefElementwiseWorkload.cpp \
         workloads/RefElementwiseUnaryWorkload.cpp \
         workloads/RefFakeQuantizationFloat32Workload.cpp \
+        workloads/RefFillWorkload.cpp \
         workloads/RefFloorWorkload.cpp \
         workloads/RefFullyConnectedWorkload.cpp \
         workloads/RefGatherWorkload.cpp \
         workloads/RefInstanceNormalizationWorkload.cpp \
         workloads/RefL2NormalizationWorkload.cpp \
+        workloads/RefLogicalBinaryWorkload.cpp \
+        workloads/RefLogicalUnaryWorkload.cpp \
         workloads/RefLogSoftmaxWorkload.cpp \
         workloads/RefLstmWorkload.cpp \
         workloads/RefMeanWorkload.cpp \
@@ -73,6 +79,7 @@ BACKEND_SOURCES := \
         workloads/RefPermuteWorkload.cpp \
         workloads/RefPooling2dWorkload.cpp \
         workloads/RefPreluWorkload.cpp \
+        workloads/RefQLstmWorkload.cpp \
         workloads/RefQuantizeWorkload.cpp \
         workloads/RefReshapeWorkload.cpp \
         workloads/RefResizeBilinearWorkload.cpp \
@@ -85,6 +92,7 @@ BACKEND_SOURCES := \
         workloads/RefStridedSliceWorkload.cpp \
         workloads/RefSplitterWorkload.cpp \
         workloads/RefTransposeConvolution2dWorkload.cpp \
+        workloads/RefTransposeWorkload.cpp \
         workloads/Resize.cpp \
         workloads/Slice.cpp \
         workloads/SpaceToBatchNd.cpp \
@@ -115,6 +123,7 @@ ifeq ($(ARMNN_REF_ENABLED),1)
 # Include the source files for the CL backend tests
 
 BACKEND_TEST_SOURCES := \
+        test/ArgMinMaxTests.cpp \
         test/RefCreateWorkloadTests.cpp \
         test/RefDetectionPostProcessTests.cpp \
         test/RefEndToEndTests.cpp \
@@ -123,7 +132,8 @@ BACKEND_TEST_SOURCES := \
         test/RefLayerTests.cpp \
         test/RefMemoryManagerTests.cpp \
         test/RefOptimizedNetworkTests.cpp \
-        test/RefRuntimeTests.cpp
+        test/RefRuntimeTests.cpp \
+        test/RefTensorHandleTests.cpp
 else
 
 # ARMNN_REF_ENABLED == 0

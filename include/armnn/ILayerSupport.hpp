@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -75,6 +75,14 @@ public:
     virtual bool IsConstantSupported(const TensorInfo& output,
                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
+    virtual bool IsConvertBf16ToFp32Supported(const TensorInfo& input,
+                                              const TensorInfo& output,
+                                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsConvertFp32ToBf16Supported(const TensorInfo& input,
+                                              const TensorInfo& output,
+                                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
     virtual bool IsConvertFp16ToFp32Supported(const TensorInfo& input,
                                               const TensorInfo& output,
                                               Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
@@ -149,6 +157,11 @@ public:
                                              const FakeQuantizationDescriptor& descriptor,
                                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
+    virtual bool IsFillSupported(const TensorInfo& input,
+                                 const TensorInfo& output,
+                                 const FillDescriptor& descriptor,
+                                 Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
     virtual bool IsFloorSupported(const TensorInfo& input,
                                   const TensorInfo& output,
                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
@@ -160,9 +173,16 @@ public:
                                            const FullyConnectedDescriptor& descriptor,
                                            Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
+    ARMNN_DEPRECATED_MSG("Use IsGatherSupported with descriptor instead")
     virtual bool IsGatherSupported(const TensorInfo& input0,
                                    const TensorInfo& input1,
                                    const TensorInfo& output,
+                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsGatherSupported(const TensorInfo& input0,
+                                   const TensorInfo& input1,
+                                   const TensorInfo& output,
+                                   const GatherDescriptor& descriptor,
                                    Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
     ARMNN_DEPRECATED_MSG("Use IsComparisonSupported instead")
@@ -184,6 +204,17 @@ public:
                                             const TensorInfo& output,
                                             const L2NormalizationDescriptor& descriptor,
                                             Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsLogicalBinarySupported(const TensorInfo& input0,
+                                          const TensorInfo& input1,
+                                          const TensorInfo& output,
+                                          const LogicalBinaryDescriptor& descriptor,
+                                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsLogicalUnarySupported(const TensorInfo& input,
+                                         const TensorInfo& output,
+                                         const ElementwiseUnaryDescriptor& descriptor,
+                                         Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
     virtual bool IsLogSoftmaxSupported(const TensorInfo& input,
                                        const TensorInfo& output,
@@ -276,6 +307,16 @@ public:
                                      const TensorInfo& output,
                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
+    virtual bool IsQLstmSupported(const TensorInfo& input,
+                                  const TensorInfo& previousOutputIn,
+                                  const TensorInfo& previousCellStateIn,
+                                  const TensorInfo& outputStateOut,
+                                  const TensorInfo& cellStateOut,
+                                  const TensorInfo& output,
+                                  const QLstmDescriptor& descriptor,
+                                  const LstmInputParamsInfo& paramsInfo,
+                                  Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
     virtual bool IsQuantizedLstmSupported(const TensorInfo& input,
                                           const TensorInfo& previousCellStateIn,
                                           const TensorInfo& previousOutputIn,
@@ -283,6 +324,10 @@ public:
                                           const TensorInfo& output,
                                           const QuantizedLstmInputParamsInfo& paramsInfo,
                                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsRankSupported(const TensorInfo& input,
+                                 const TensorInfo& output,
+                                 Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
     virtual bool IsReshapeSupported(const TensorInfo& input,
                                     const TensorInfo& output,
@@ -368,6 +413,11 @@ public:
         const TensorInfo& weights,
         const Optional<TensorInfo>& biases,
         Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
+
+    virtual bool IsTransposeSupported(const TensorInfo& input,
+                                      const TensorInfo& output,
+                                      const TransposeDescriptor& descriptor,
+                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const = 0;
 
 }; // class ILayerSupport
 

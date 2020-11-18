@@ -11,11 +11,9 @@ namespace armnn
 namespace profiling
 {
 
-void RegisterBackendCounters::RegisterCategory(const std::string& categoryName,
-                                               const Optional<uint16_t>& deviceUid,
-                                               const Optional<uint16_t>& counterSetUid)
+void RegisterBackendCounters::RegisterCategory(const std::string& categoryName)
 {
-     m_CounterDirectory.RegisterCategory(categoryName, deviceUid, counterSetUid);
+     m_CounterDirectory.RegisterCategory(categoryName);
 }
 
 uint16_t RegisterBackendCounters::RegisterDevice(const std::string& deviceName,
@@ -61,7 +59,7 @@ uint16_t RegisterBackendCounters::RegisterCounter(const uint16_t uid,
                                                                    counterSetUid);
     m_CurrentMaxGlobalCounterID = counterPtr->m_MaxCounterUid;
     // register mappings
-    IRegisterCounterMapping& counterIdMap = ProfilingService::Instance().GetCounterMappingRegistry();
+    IRegisterCounterMapping& counterIdMap = m_ProfilingService.GetCounterMappingRegistry();
     uint16_t globalCounterId = counterPtr->m_Uid;
     if (globalCounterId == counterPtr->m_MaxCounterUid)
     {

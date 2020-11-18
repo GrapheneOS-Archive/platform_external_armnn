@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "StackLayer.hpp"
@@ -22,6 +22,8 @@ StackLayer::StackLayer(const StackDescriptor& param, const char* name)
 std::unique_ptr<IWorkload> StackLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     StackQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateStack(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -32,13 +34,13 @@ StackLayer* StackLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> StackLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    boost::ignore_unused(inputShapes);
+    IgnoreUnused(inputShapes);
 
     const TensorShape& inputShape = m_Param.m_InputShape;
     const unsigned int inputNumDimensions = inputShape.GetNumDimensions();
     const unsigned int axis = m_Param.m_Axis;
 
-    BOOST_ASSERT(axis <= inputNumDimensions);
+    ARMNN_ASSERT(axis <= inputNumDimensions);
 
     std::vector<unsigned int> dimensionSizes(inputNumDimensions + 1, 0);
     for (unsigned int i = 0; i < axis; ++i)
@@ -68,6 +70,10 @@ void StackLayer::ValidateTensorShapesFromInputs()
 
     VerifyLayerConnections(m_Param.m_NumInputs, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     // Constructs and validates input shapes
     std::vector<TensorShape> inputShapes;
     for (unsigned int i = 0; i < GetNumInputSlots(); ++i)
@@ -84,12 +90,9 @@ void StackLayer::ValidateTensorShapesFromInputs()
 
     auto inferredShapes = InferOutputShapes(inputShapes);
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "StackLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "StackLayer");
 }
 
 void StackLayer::Accept(ILayerVisitor& visitor) const

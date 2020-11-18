@@ -9,10 +9,7 @@
 #include <armnn/TypesUtils.hpp>
 
 #include <armnnUtils/Permute.hpp>
-
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <iostream>
 #include <fcntl.h>
@@ -22,7 +19,7 @@ template <typename TDataType>
 unsigned int ImagePreprocessor<TDataType>::GetLabelAndResizedImageAsFloat(unsigned int testCaseId,
                                                                           std::vector<float> & result)
 {
-    testCaseId = testCaseId % boost::numeric_cast<unsigned int>(m_ImageSet.size());
+    testCaseId = testCaseId % armnn::numeric_cast<unsigned int>(m_ImageSet.size());
     const ImageSet& imageSet = m_ImageSet[testCaseId];
     const std::string fullPath = m_BinaryDirectory + imageSet.first;
 
@@ -39,7 +36,7 @@ unsigned int ImagePreprocessor<TDataType>::GetLabelAndResizedImageAsFloat(unsign
     // duplicate data across the batch
     for (unsigned int i = 1; i < m_BatchSize; i++)
     {
-        result.insert(result.end(), result.begin(), result.begin() + boost::numeric_cast<int>(GetNumImageElements()));
+        result.insert(result.end(), result.begin(), result.begin() + armnn::numeric_cast<int>(GetNumImageElements()));
     }
 
     if (m_DataFormat == DataFormat::NCHW)

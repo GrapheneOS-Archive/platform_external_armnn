@@ -5,6 +5,8 @@
 
 #include "GraphUtils.hpp"
 
+#include <armnn/utility/PolymorphicDowncast.hpp>
+
 bool GraphHasNamedLayer(const armnn::Graph& graph, const std::string& name)
 {
     for (auto&& layer : graph)
@@ -52,7 +54,7 @@ bool IsConnected(armnn::Layer* srcLayer, armnn::Layer* destLayer,
     const unsigned int numConnections = outputSlot.GetNumConnections();
     for (unsigned int c = 0; c < numConnections; ++c)
     {
-        auto inputSlot = boost::polymorphic_downcast<const armnn::InputSlot*>(outputSlot.GetConnection(c));
+        auto inputSlot = armnn::PolymorphicDowncast<const armnn::InputSlot*>(outputSlot.GetConnection(c));
         if (inputSlot->GetOwningLayer().GetNameStr() == destLayer->GetNameStr() &&
             inputSlot->GetSlotIndex() == destSlot)
         {
@@ -60,4 +62,17 @@ bool IsConnected(armnn::Layer* srcLayer, armnn::Layer* destLayer,
         }
     }
     return false;
+}
+
+/// Checks that first comes before second in the order.
+bool CheckOrder(const armnn::Graph& graph, const armnn::Layer* first, const armnn::Layer* second)
+{
+    graph.Print();
+
+    const auto& order = graph.TopologicalSort();
+
+    auto firstPos = std::find(order.begin(), order.end(), first);
+    auto secondPos = std::find(firstPos, order.end(), second);
+
+    return (secondPos != order.end());
 }

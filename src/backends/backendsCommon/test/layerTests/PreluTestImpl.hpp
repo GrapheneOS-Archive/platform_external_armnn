@@ -15,6 +15,7 @@
 #include <backendsCommon/WorkloadFactory.hpp>
 
 #include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadFactoryHelper.hpp>
 #include <backendsCommon/test/WorkloadTestUtils.hpp>
 
 #include <test/TensorHelpers.hpp>
@@ -22,9 +23,10 @@
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> PreluTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     armnn::TensorInfo inputTensorInfo ({ 1, 2, 2, 3 }, ArmnnType);
     armnn::TensorInfo alphaTensorInfo ({ 1, 1, 1, 3 }, ArmnnType);
@@ -76,9 +78,9 @@ LayerTestResult<T, 4> PreluTest(
                                                         outputTensorInfo.GetQuantizationScale(),
                                                         outputTensorInfo.GetQuantizationOffset()));
 
-    std::unique_ptr <armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr <armnn::ITensorHandle> alphaHandle  = workloadFactory.CreateTensorHandle(alphaTensorInfo);
-    std::unique_ptr <armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr <armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr <armnn::ITensorHandle> alphaHandle  = tensorHandleFactory.CreateTensorHandle(alphaTensorInfo);
+    std::unique_ptr <armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::PreluQueueDescriptor descriptor;
     armnn::WorkloadInfo info;

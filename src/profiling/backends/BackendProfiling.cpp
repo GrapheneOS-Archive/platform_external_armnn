@@ -15,7 +15,8 @@ namespace profiling
 std::unique_ptr<IRegisterBackendCounters>
     BackendProfiling::GetCounterRegistrationInterface(uint16_t currentMaxGlobalCounterID)
 {
-    return std::make_unique<RegisterBackendCounters>(RegisterBackendCounters(currentMaxGlobalCounterID, m_BackendId));
+    return std::make_unique<RegisterBackendCounters>(
+        RegisterBackendCounters(currentMaxGlobalCounterID, m_BackendId, m_ProfilingService));
 }
 
 std::unique_ptr<ISendTimelinePacket> BackendProfiling::GetSendTimelinePacket()
@@ -31,7 +32,7 @@ IProfilingGuidGenerator& BackendProfiling::GetProfilingGuidGenerator()
 
 void BackendProfiling::ReportCounters(const std::vector<Timestamp>& timestamps)
 {
-    for (const auto timestampInfo : timestamps)
+    for (const auto& timestampInfo : timestamps)
     {
         std::vector<CounterValue> backendCounterValues = timestampInfo.counterValues;
         for_each(backendCounterValues.begin(), backendCounterValues.end(), [&](CounterValue& backendCounterValue)
@@ -73,7 +74,7 @@ std::vector<CounterStatus> BackendProfiling::GetActiveCounters()
     for (auto globalCounterId : globalCounterIds) {
         // Get pair of local counterId and backendId using globalCounterId
         const std::pair<uint16_t, armnn::BackendId>& backendCounterIdPair =
-                ProfilingService::Instance().GetCounterMappings().GetBackendId(globalCounterId);
+                m_ProfilingService.GetCounterMappings().GetBackendId(globalCounterId);
         if (backendCounterIdPair.second == m_BackendId)
         {
             activeCounterIds.emplace_back(backendCounterIdPair.first,

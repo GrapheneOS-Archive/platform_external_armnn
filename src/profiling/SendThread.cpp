@@ -1,19 +1,16 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "SendThread.hpp"
-#include "EncodeVersion.hpp"
 #include "ProfilingUtils.hpp"
 
 #include <armnn/Exceptions.hpp>
 #include <armnn/Conversion.hpp>
-#include <Processes.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
-#include <boost/format.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/core/ignore_unused.hpp>
+#include <Processes.hpp>
 
 #include <cstring>
 
@@ -23,10 +20,10 @@ namespace armnn
 namespace profiling
 {
 
-using boost::numeric_cast;
-
 SendThread::SendThread(armnn::profiling::ProfilingStateMachine& profilingStateMachine,
-    armnn::profiling::IBufferManager& buffer, armnn::profiling::ISendCounterPacket& sendCounterPacket, int timeout)
+                       armnn::profiling::IBufferManager& buffer,
+                       armnn::profiling::ISendCounterPacket& sendCounterPacket,
+                       int timeout)
     : m_StateMachine(profilingStateMachine)
     , m_BufferManager(buffer)
     , m_SendCounterPacket(sendCounterPacket)
@@ -235,7 +232,7 @@ void SendThread::FlushBuffer(IProfilingConnection& profilingConnection, bool not
         if (profilingConnection.IsOpen())
         {
             // Write a packet to the profiling connection. Silently ignore any write error and continue
-            profilingConnection.WritePacket(readBuffer, boost::numeric_cast<uint32_t>(readBufferSize));
+            profilingConnection.WritePacket(readBuffer, armnn::numeric_cast<uint32_t>(readBufferSize));
 
             // Set the flag that indicates whether at least a packet has been sent
             packetsSent = true;

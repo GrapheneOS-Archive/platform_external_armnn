@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -29,15 +29,23 @@ struct QueueDescriptor
 {
     std::vector<ITensorHandle*> m_Inputs;
     std::vector<ITensorHandle*> m_Outputs;
+    void* m_AdditionalInfoObject;
 
     void ValidateInputsOutputs(const std::string& descName,
                                unsigned int numExpectedIn,
                                unsigned int numExpectedOut) const;
 
+    template<typename T>
+    const T* GetAdditionalInformation() const
+    {
+        return static_cast<T*>(m_AdditionalInfoObject);
+    }
 
 protected:
     ~QueueDescriptor() = default;
-    QueueDescriptor() = default;
+    QueueDescriptor()
+        : m_AdditionalInfoObject(nullptr)
+    {}
     QueueDescriptor(QueueDescriptor const&) = default;
     QueueDescriptor& operator=(QueueDescriptor const&) = default;
 };
@@ -53,6 +61,16 @@ protected:
     QueueDescriptorWithParameters() = default;
     QueueDescriptorWithParameters(QueueDescriptorWithParameters const&) = default;
     QueueDescriptorWithParameters& operator=(QueueDescriptorWithParameters const&) = default;
+};
+
+struct MapQueueDescriptor : QueueDescriptor
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct UnmapQueueDescriptor : QueueDescriptor
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
 struct MemCopyQueueDescriptor : QueueDescriptor
@@ -133,6 +151,12 @@ struct ActivationQueueDescriptor : QueueDescriptorWithParameters<ActivationDescr
 };
 
 struct ArgMinMaxQueueDescriptor : QueueDescriptorWithParameters<ArgMinMaxDescriptor>
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+// Fill layer workload data.
+struct FillQueueDescriptor : QueueDescriptorWithParameters<FillDescriptor>
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
@@ -259,7 +283,7 @@ struct QuantizeQueueDescriptor : QueueDescriptor
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
-// Equal layer workload data
+// Deprecated use ComparisonQueueDescriptor instead
 struct EqualQueueDescriptor : QueueDescriptor
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
@@ -281,6 +305,11 @@ struct BatchNormalizationQueueDescriptor : QueueDescriptorWithParameters<BatchNo
     const ConstCpuTensorHandle* m_Beta;
     const ConstCpuTensorHandle* m_Gamma;
 
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct RankQueueDescriptor : QueueDescriptor
+{
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
@@ -407,6 +436,16 @@ struct LstmQueueDescriptor : QueueDescriptorWithParameters<LstmDescriptor>
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
+struct ConvertBf16ToFp32QueueDescriptor : QueueDescriptor
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct ConvertFp32ToBf16QueueDescriptor : QueueDescriptor
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
 struct ConvertFp16ToFp32QueueDescriptor : QueueDescriptor
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
@@ -433,6 +472,7 @@ struct MinimumQueueDescriptor : QueueDescriptor
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
+// Deprecated use ComparisonQueueDescriptor instead
 struct GreaterQueueDescriptor : QueueDescriptor
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
@@ -454,7 +494,7 @@ struct RsqrtQueueDescriptor : QueueDescriptor
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
 
-struct GatherQueueDescriptor : QueueDescriptor
+struct GatherQueueDescriptor : QueueDescriptorWithParameters<GatherDescriptor>
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
@@ -500,6 +540,63 @@ struct TransposeConvolution2dQueueDescriptor : QueueDescriptorWithParameters<Tra
 
     const ConstCpuTensorHandle* m_Weight;
     const ConstCpuTensorHandle* m_Bias;
+
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct TransposeQueueDescriptor : QueueDescriptorWithParameters<TransposeDescriptor>
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct QLstmQueueDescriptor : QueueDescriptorWithParameters<QLstmDescriptor>
+{
+    QLstmQueueDescriptor()
+            : m_InputToInputWeights(nullptr)
+            , m_InputToForgetWeights(nullptr)
+            , m_InputToCellWeights(nullptr)
+            , m_InputToOutputWeights(nullptr)
+            , m_RecurrentToInputWeights(nullptr)
+            , m_RecurrentToForgetWeights(nullptr)
+            , m_RecurrentToCellWeights(nullptr)
+            , m_RecurrentToOutputWeights(nullptr)
+            , m_CellToInputWeights(nullptr)
+            , m_CellToForgetWeights(nullptr)
+            , m_CellToOutputWeights(nullptr)
+            , m_InputGateBias(nullptr)
+            , m_ForgetGateBias(nullptr)
+            , m_CellBias(nullptr)
+            , m_OutputGateBias(nullptr)
+            , m_ProjectionWeights(nullptr)
+            , m_ProjectionBias(nullptr)
+            , m_InputLayerNormWeights(nullptr)
+            , m_ForgetLayerNormWeights(nullptr)
+            , m_CellLayerNormWeights(nullptr)
+            , m_OutputLayerNormWeights(nullptr)
+    {
+    }
+
+    const ConstCpuTensorHandle* m_InputToInputWeights;
+    const ConstCpuTensorHandle* m_InputToForgetWeights;
+    const ConstCpuTensorHandle* m_InputToCellWeights;
+    const ConstCpuTensorHandle* m_InputToOutputWeights;
+    const ConstCpuTensorHandle* m_RecurrentToInputWeights;
+    const ConstCpuTensorHandle* m_RecurrentToForgetWeights;
+    const ConstCpuTensorHandle* m_RecurrentToCellWeights;
+    const ConstCpuTensorHandle* m_RecurrentToOutputWeights;
+    const ConstCpuTensorHandle* m_CellToInputWeights;
+    const ConstCpuTensorHandle* m_CellToForgetWeights;
+    const ConstCpuTensorHandle* m_CellToOutputWeights;
+    const ConstCpuTensorHandle* m_InputGateBias;
+    const ConstCpuTensorHandle* m_ForgetGateBias;
+    const ConstCpuTensorHandle* m_CellBias;
+    const ConstCpuTensorHandle* m_OutputGateBias;
+    const ConstCpuTensorHandle* m_ProjectionWeights;
+    const ConstCpuTensorHandle* m_ProjectionBias;
+    const ConstCpuTensorHandle* m_InputLayerNormWeights;
+    const ConstCpuTensorHandle* m_ForgetLayerNormWeights;
+    const ConstCpuTensorHandle* m_CellLayerNormWeights;
+    const ConstCpuTensorHandle* m_OutputLayerNormWeights;
 
     void Validate(const WorkloadInfo& workloadInfo) const;
 };
@@ -562,6 +659,11 @@ struct ComparisonQueueDescriptor : QueueDescriptorWithParameters<ComparisonDescr
 };
 
 struct ElementwiseUnaryQueueDescriptor : QueueDescriptorWithParameters<ElementwiseUnaryDescriptor>
+{
+    void Validate(const WorkloadInfo& workloadInfo) const;
+};
+
+struct LogicalBinaryQueueDescriptor : QueueDescriptorWithParameters<LogicalBinaryDescriptor>
 {
     void Validate(const WorkloadInfo& workloadInfo) const;
 };

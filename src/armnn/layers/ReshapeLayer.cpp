@@ -1,11 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ReshapeLayer.hpp"
 
 #include "LayerCloneBase.hpp"
 
+#include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/TypesUtils.hpp>
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
@@ -21,6 +22,8 @@ ReshapeLayer::ReshapeLayer(const ReshapeDescriptor& param, const char* name)
 std::unique_ptr<IWorkload> ReshapeLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     ReshapeQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateReshape(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -31,7 +34,7 @@ ReshapeLayer* ReshapeLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> ReshapeLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    boost::ignore_unused(inputShapes);
+    IgnoreUnused(inputShapes);
     return std::vector<TensorShape>({ m_Param.m_TargetShape });
 }
 
@@ -39,14 +42,15 @@ void ReshapeLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
-    auto inferredShapes = InferOutputShapes({  });
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "ReshapeLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
+
+    ARMNN_ASSERT(inferredShapes.size() == 1);
+
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ReshapeLayer");
 }
 
 void ReshapeLayer::Accept(ILayerVisitor& visitor) const

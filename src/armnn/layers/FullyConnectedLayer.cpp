@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "FullyConnectedLayer.hpp"
@@ -22,16 +22,19 @@ FullyConnectedLayer::FullyConnectedLayer(const FullyConnectedDescriptor& param, 
 std::unique_ptr<IWorkload> FullyConnectedLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     // on this level constant data should not be released..
-    BOOST_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
+    ARMNN_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
 
     FullyConnectedQueueDescriptor descriptor;
 
     descriptor.m_Weight = m_Weight.get();
     if (m_Param.m_BiasEnabled)
     {
-        BOOST_ASSERT_MSG(m_Bias != nullptr, "FullyConnectedLayer: Bias data should not be null.");
+        ARMNN_ASSERT_MSG(m_Bias != nullptr, "FullyConnectedLayer: Bias data should not be null.");
         descriptor.m_Bias = m_Bias.get();
     }
+
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateFullyConnected(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -50,7 +53,7 @@ FullyConnectedLayer* FullyConnectedLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> FullyConnectedLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 2);
+    ARMNN_ASSERT(inputShapes.size() == 2);
     const TensorShape& inputShape = inputShapes[0];
     const TensorShape weightShape = inputShapes[1];
 
@@ -63,21 +66,20 @@ std::vector<TensorShape> FullyConnectedLayer::InferOutputShapes(const std::vecto
 
 void FullyConnectedLayer::ValidateTensorShapesFromInputs()
 {
-    VerifyLayerConnections(1, CHECK_LOCATION());
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
     // check if we m_Weight data is not nullptr
-    BOOST_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
+    ARMNN_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
 
-    auto inferredShapes = InferOutputShapes({
-        GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-        m_Weight->GetTensorInfo().GetShape() });
+    auto inferredShapes = InferOutputShapes({GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
+                                             m_Weight->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "FullyConnectedLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "FullyConnectedLayer");
 }
 
 Layer::ConstantTensors FullyConnectedLayer::GetConstantTensorsByRef()

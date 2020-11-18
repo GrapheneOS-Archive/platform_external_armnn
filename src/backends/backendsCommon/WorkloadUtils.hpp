@@ -8,15 +8,13 @@
 #include "CpuTensorHandle.hpp"
 
 #include <armnn/backends/ITensorHandle.hpp>
-
 #include <armnn/Tensor.hpp>
-
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <armnnUtils/Permute.hpp>
 
 #include <Half.hpp>
 #include <Profiling.hpp>
 
-#include <boost/cast.hpp>
 
 namespace armnn
 {
@@ -55,11 +53,11 @@ void CopyTensorContentsGeneric(const ITensorHandle* srcTensor, ITensorHandle* ds
     TensorShape srcStrides      = srcTensor->GetStrides();
     const TensorShape& srcShape = srcTensor->GetShape();
     const auto srcSize          = srcTensor->GetStrides()[0] * srcShape[0];
-    boost::ignore_unused(srcSize);  // Only used for asserts
+    IgnoreUnused(srcSize);  // Only used for asserts
     TensorShape dstStrides      = dstTensor->GetStrides();
     const TensorShape& dstShape = dstTensor->GetShape();
     const auto dstSize          = dstTensor->GetStrides()[0] * dstShape[0];
-    boost::ignore_unused(dstSize);  // Only used for asserts
+    IgnoreUnused(dstSize);  // Only used for asserts
 
     size_t srcDepth    = 1;
     size_t srcBatches  = 1;
@@ -168,8 +166,8 @@ void CopyTensorContentsGeneric(const ITensorHandle* srcTensor, ITensorHandle* ds
                 auto dstPtrChannel = dstData;
                 for (unsigned int w = 0; w < copyWidth; ++w)
                 {
-                    BOOST_ASSERT(srcData >= srcDataStart && srcData + copyLength <= srcDataStart + srcSize);
-                    BOOST_ASSERT(dstData >= dstDataStart && dstData + copyLength <= dstDataStart + dstSize);
+                    ARMNN_ASSERT(srcData >= srcDataStart && srcData + copyLength <= srcDataStart + srcSize);
+                    ARMNN_ASSERT(dstData >= dstDataStart && dstData + copyLength <= dstDataStart + dstSize);
                     copy(dstData, srcData, copyLength);
                     dstData += dstWidthStride;
                     srcData += srcWidthStride;
@@ -198,9 +196,9 @@ void GatherTensorHandlePairs(const DescriptorType& descriptor,
     for (unsigned int i = 0; i < numInputs; ++i)
     {
         SrcTensorHandleType* const srcTensorHandle =
-            boost::polymorphic_downcast<SrcTensorHandleType*>(descriptor.m_Inputs[i]);
+            PolymorphicDowncast<SrcTensorHandleType*>(descriptor.m_Inputs[i]);
         DstTensorHandleType* const dstTensorHandle =
-            boost::polymorphic_downcast<DstTensorHandleType*>(descriptor.m_Outputs[i]);
+            PolymorphicDowncast<DstTensorHandleType*>(descriptor.m_Outputs[i]);
 
         tensorHandlePairs.emplace_back(srcTensorHandle, dstTensorHandle);
     }

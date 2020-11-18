@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -13,10 +13,9 @@
 #include <armnn/Exceptions.hpp>
 #include <armnn/Optional.hpp>
 #include <armnn/Conversion.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <atomic>
 #include <condition_variable>

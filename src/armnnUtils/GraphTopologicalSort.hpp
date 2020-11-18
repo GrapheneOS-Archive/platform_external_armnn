@@ -1,11 +1,10 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <armnn/Optional.hpp>
-#include <boost/assert.hpp>
 
 #include <functional>
 #include <map>

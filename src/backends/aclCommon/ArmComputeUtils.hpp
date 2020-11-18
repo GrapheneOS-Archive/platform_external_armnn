@@ -6,10 +6,10 @@
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/Tensor.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 #include <arm_compute/core/Types.h>
-
-#include <boost/assert.hpp>
 
 namespace armnn
 {
@@ -65,6 +65,8 @@ ConvertActivationFunctionToAclActivationFunction(ActivationFunction armnnFunctio
         case ActivationFunction::Sqrt:          return AclActivationFunction::SQRT;
         case ActivationFunction::Square:        return AclActivationFunction::SQUARE;
         case ActivationFunction::TanH:          return AclActivationFunction::TANH;
+        case ActivationFunction::Elu:           return AclActivationFunction::ELU;
+        case ActivationFunction::HardSwish:     return AclActivationFunction::HARD_SWISH;
         default:                                throw InvalidArgumentException("Unsupported activation function");
     }
 }
@@ -74,6 +76,44 @@ ConvertActivationDescriptorToAclActivationLayerInfo(const ActivationDescriptor& 
 {
     return arm_compute::ActivationLayerInfo(ConvertActivationFunctionToAclActivationFunction(actDesc.m_Function),
         actDesc.m_A, actDesc.m_B);
+}
+
+inline arm_compute::ActivationLayerInfo
+ConvertActivationDescriptorToAclActivationLayerInfo(const ActivationDescriptor* activationDescPtr)
+{
+    if (activationDescPtr != nullptr)
+    {
+        return ConvertActivationDescriptorToAclActivationLayerInfo(static_cast<ActivationDescriptor>(
+                                                                           *activationDescPtr));
+    }
+    return arm_compute::ActivationLayerInfo();
+}
+
+inline arm_compute::ActivationLayerInfo
+ConvertAdditionalInfoToAclActivationLayerInfo(const QueueDescriptor& queueDescriptor)
+{
+    const ActivationDescriptor* activationDescPtr = queueDescriptor.GetAdditionalInformation<ActivationDescriptor>();
+
+    if (activationDescPtr != nullptr)
+    {
+        return ConvertActivationDescriptorToAclActivationLayerInfo(static_cast<ActivationDescriptor>(
+                *activationDescPtr));
+    }
+    return arm_compute::ActivationLayerInfo();
+}
+
+inline arm_compute::ComparisonOperation ConvertComparisonOperationToAcl(const ComparisonDescriptor& descriptor)
+{
+    switch (descriptor.m_Operation)
+    {
+        case ComparisonOperation::Greater:         return arm_compute::ComparisonOperation::Greater;
+        case ComparisonOperation::GreaterOrEqual:  return arm_compute::ComparisonOperation::GreaterEqual;
+        case ComparisonOperation::Less:            return arm_compute::ComparisonOperation::Less;
+        case ComparisonOperation::LessOrEqual:     return arm_compute::ComparisonOperation::LessEqual;
+        case ComparisonOperation::Equal:           return arm_compute::ComparisonOperation::Equal;
+        case ComparisonOperation::NotEqual:        return arm_compute::ComparisonOperation::NotEqual;
+        default:                                   throw InvalidArgumentException("Unsupported comparison function");
+    }
 }
 
 inline arm_compute::PoolingType ConvertPoolingAlgorithmToAclPoolingType(PoolingAlgorithm poolingAlgorithm)
@@ -115,10 +155,22 @@ ConvertNormalizationAlgorithmChannelToAclNormType(NormalizationAlgorithmChannel 
 }
 
 inline arm_compute::FullyConnectedLayerInfo
-ConvertFullyConnectedDescriptorToAclFullyConnectedLayerInfo(const FullyConnectedDescriptor& fullyConnectedDesc)
+ConvertFullyConnectedDescriptorToAclFullyConnectedLayerInfo(const FullyConnectedDescriptor& fullyConnectedDesc,
+                                                            const ActivationDescriptor* activationDesc)
 {
     arm_compute::FullyConnectedLayerInfo fc_info;
     fc_info.transpose_weights = fullyConnectedDesc.m_TransposeWeightMatrix;
+    fc_info.activation_info = ConvertActivationDescriptorToAclActivationLayerInfo(activationDesc);
+    return fc_info;
+}
+
+inline arm_compute::FullyConnectedLayerInfo
+ConvertFullyConnectedDescriptorToAclFullyConnectedLayerInfo(const FullyConnectedDescriptor& fullyConnectedDesc,
+        arm_compute::ActivationLayerInfo activationLayerInfo)
+{
+    arm_compute::FullyConnectedLayerInfo fc_info;
+    fc_info.transpose_weights = fullyConnectedDesc.m_TransposeWeightMatrix;
+    fc_info.activation_info = activationLayerInfo;
     return fc_info;
 }
 
@@ -135,20 +187,24 @@ inline arm_compute::InterpolationPolicy ConvertResizeMethodToAclInterpolationPol
     }
 }
 
-inline unsigned int ComputeSoftmaxAclAxis(const SoftmaxDescriptor& softmaxDesc, const armnn::TensorInfo& tensor)
+template<typename T>
+inline T ComputeSoftmaxAclAxis(const SoftmaxDescriptor& softmaxDesc, const armnn::TensorInfo& tensor)
 {
-    // Detect the Android default value of -1 and return the ACL default value of 1.
+    // Detect the Android default value of -1 and return the ACL default value of 0.
     if (softmaxDesc.m_Axis == -1)
     {
-        return 1;
+        return 0;
     }
 
-   unsigned int dim = tensor.GetNumDimensions();
+    unsigned int dim = tensor.GetNumDimensions();
 
-    BOOST_ASSERT(dim != 0);
+    ARMNN_ASSERT(dim != 0);
 
     // Currently ArmNN support axis 1.
-    return dim - 1;
+    auto aclAxis = (static_cast<T>(dim) - 1);
+    aclAxis = aclAxis > 0 ? aclAxis -1 : aclAxis;
+
+    return aclAxis;
 }
 
 inline std::set<unsigned int> ComputeSplitAxis(const armnn::SplitterDescriptor& desc, const TensorShape& input)
@@ -168,6 +224,35 @@ inline std::set<unsigned int> ComputeSplitAxis(const armnn::SplitterDescriptor& 
         }
     }
     return splitAxis;
+}
+
+/// Function to convert ArmNN axis (left to right) to ACL axis (right to left) ranging from [-rank, rank)
+inline int ComputeAclAxis(const int& armnnAxis, const armnn::TensorInfo& tensor)
+{
+    int rank = static_cast<int>(tensor.GetNumDimensions());
+
+    ARMNN_ASSERT(rank != 0);
+    ARMNN_ASSERT((-1 * rank) <= armnnAxis);
+    ARMNN_ASSERT(armnnAxis < rank);
+
+    int sign = (armnnAxis < 0) ? -1 : 1;
+    int aclAxis = sign * rank - 1  - armnnAxis;
+
+    return aclAxis;
+}
+
+/// Function to convert axis to its positive equivalent value.
+/// [-rank, rank) --> [0, rank)
+inline unsigned int ComputePositiveAxis(const int& axis, const armnn::TensorInfo& tensor)
+{
+    int rank = static_cast<int>(tensor.GetNumDimensions());
+
+    ARMNN_ASSERT(rank != 0);
+    ARMNN_ASSERT((-1 * rank) <= axis);
+    ARMNN_ASSERT(axis < rank);
+
+    int positiveAxis = (axis < 0) ? rank + axis : axis;
+    return static_cast<unsigned int>(positiveAxis);
 }
 
 } // namespace armnn

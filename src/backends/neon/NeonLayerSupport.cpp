@@ -1,20 +1,22 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "NeonLayerSupport.hpp"
 #include "NeonBackendId.hpp"
+#include "NeonBackendModelContext.hpp"
 
 #include <armnn/Descriptors.hpp>
+#include <armnn/Exceptions.hpp>
 #include <armnn/Tensor.hpp>
 #include <armnn/Types.hpp>
 #include <armnn/BackendRegistry.hpp>
 
 #include <InternalTypes.hpp>
 #include <LayerSupportCommon.hpp>
-
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #if defined(ARMCOMPUTENEON_ENABLED)
 #include <aclCommon/ArmComputeUtils.hpp>
@@ -25,13 +27,16 @@
 #include "workloads/NeonArgMinMaxWorkload.hpp"
 #include "workloads/NeonBatchNormalizationWorkload.hpp"
 #include "workloads/NeonBatchToSpaceNdWorkload.hpp"
+#include "workloads/NeonExpWorkload.hpp"
+#include "workloads/NeonComparisonWorkload.hpp"
+#include "workloads/NeonConstantWorkload.hpp"
 #include "workloads/NeonConvolution2dWorkload.hpp"
 #include "workloads/NeonDepthToSpaceWorkload.hpp"
 #include "workloads/NeonDepthwiseConvolutionWorkload.hpp"
 #include "workloads/NeonDequantizeWorkload.hpp"
-#include "workloads/NeonGreaterWorkload.hpp"
 #include "workloads/NeonInstanceNormalizationWorkload.hpp"
 #include "workloads/NeonL2NormalizationFloatWorkload.hpp"
+#include "workloads/NeonLogSoftmaxWorkload.hpp"
 #include "workloads/NeonLstmFloatWorkload.hpp"
 #include "workloads/NeonMaximumWorkload.hpp"
 #include "workloads/NeonMeanWorkload.hpp"
@@ -39,19 +44,22 @@
 #include "workloads/NeonMinimumWorkload.hpp"
 #include "workloads/NeonMultiplicationWorkload.hpp"
 #include "workloads/NeonDivisionWorkload.hpp"
+#include "workloads/NeonNegWorkload.hpp"
 #include "workloads/NeonNormalizationFloatWorkload.hpp"
 #include "workloads/NeonFullyConnectedWorkload.hpp"
+#include "workloads/NeonGatherWorkload.hpp"
 #include "workloads/NeonPadWorkload.hpp"
 #include "workloads/NeonPermuteWorkload.hpp"
 #include "workloads/NeonPooling2dWorkload.hpp"
 #include "workloads/NeonPreluWorkload.hpp"
+#include "workloads/NeonQLstmWorkload.hpp"
 #include "workloads/NeonQuantizeWorkload.hpp"
 #include "workloads/NeonQuantizedLstmWorkload.hpp"
 #include "workloads/NeonReshapeWorkload.hpp"
 #include "workloads/NeonResizeWorkload.hpp"
 #include "workloads/NeonRsqrtWorkload.hpp"
 #include "workloads/NeonSliceWorkload.hpp"
-#include "workloads/NeonSoftmaxBaseWorkload.hpp"
+#include "workloads/NeonSoftmaxWorkload.hpp"
 #include "workloads/NeonSpaceToBatchNdWorkload.hpp"
 #include "workloads/NeonSpaceToDepthWorkload.hpp"
 #include "workloads/NeonSplitterWorkload.hpp"
@@ -59,9 +67,8 @@
 #include "workloads/NeonStridedSliceWorkload.hpp"
 #include "workloads/NeonSubtractionWorkload.hpp"
 #include "workloads/NeonTransposeConvolution2dWorkload.hpp"
+#include "workloads/NeonTransposeWorkload.hpp"
 #endif
-
-using namespace boost;
 
 namespace armnn
 {
@@ -72,7 +79,7 @@ namespace
 template< typename ... Args>
 bool IsNeonBackendSupported(Optional<std::string&> reasonIfUnsupported, Args... args)
 {
-    boost::ignore_unused(reasonIfUnsupported, (args)...);
+    IgnoreUnused(reasonIfUnsupported, (args)...);
 #if defined(ARMCOMPUTENEON_ENABLED)
     return true;
 #else
@@ -120,6 +127,16 @@ inline bool IsWorkloadSupported(FuncType& func, Optional<std::string&> reasonIfU
 #endif
 } // anonymous namespace
 
+NeonLayerSupport::NeonLayerSupport(const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr)
+    : m_ModelContextPtr(modelContextPtr)
+{
+}
+
+NeonLayerSupport::NeonLayerSupport()
+    : m_ModelContextPtr(nullptr)
+{
+}
+
 bool NeonLayerSupport::IsAbsSupported(const TensorInfo& input,
                                       const TensorInfo& output,
                                       Optional<std::string&> reasonIfUnsupported) const
@@ -133,7 +150,7 @@ bool NeonLayerSupport::IsActivationSupported(const TensorInfo& input,
                                              const ActivationDescriptor& descriptor,
                                              Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     FORWARD_WORKLOAD_VALIDATE_FUNC(NeonActivationWorkloadValidate,
                                    reasonIfUnsupported,
                                    input,
@@ -150,7 +167,8 @@ bool NeonLayerSupport::IsAdditionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsArgMinMaxSupported(const TensorInfo& input,
@@ -182,7 +200,8 @@ bool NeonLayerSupport::IsBatchNormalizationSupported(const TensorInfo& input,
                                    var,
                                    beta,
                                    gamma,
-                                   descriptor);
+                                   descriptor,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsBatchToSpaceNdSupported(const TensorInfo& input,
@@ -203,16 +222,13 @@ bool NeonLayerSupport::IsComparisonSupported(const TensorInfo& input0,
                                              const ComparisonDescriptor& descriptor,
                                              Optional<std::string&> reasonIfUnsupported) const
 {
-    if (descriptor.m_Operation == ComparisonOperation::Greater)
-    {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(NeonGreaterWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input0,
-                                       input1,
-                                       output);
-    }
 
-    return false;
+    FORWARD_WORKLOAD_VALIDATE_FUNC(NeonComparisonWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input0,
+                                   input1,
+                                   output,
+                                   descriptor);
 }
 
 bool NeonLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> inputs,
@@ -257,19 +273,38 @@ bool NeonLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> in
 bool NeonLayerSupport::IsConstantSupported(const TensorInfo& output,
                                            Optional<std::string&> reasonIfUnsupported) const
 {
-    return IsSupportedForDataTypeNeon(reasonIfUnsupported,
-                                      output.GetDataType(),
-                                      &TrueFunc<>,
-                                      &TrueFunc<>);
+    FORWARD_WORKLOAD_VALIDATE_FUNC(NeonConstantWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   output);
+}
+
+bool NeonLayerSupport::IsConvertBf16ToFp32Supported(const TensorInfo& input,
+                                                    const TensorInfo& output,
+                                                    Optional<std::string&> reasonIfUnsupported) const
+{
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(reasonIfUnsupported);
+    return true;
 }
 
 bool NeonLayerSupport::IsConvertFp16ToFp32Supported(const TensorInfo& input,
                                                     const TensorInfo& output,
                                                     Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(input);
-    ignore_unused(output);
-    ignore_unused(reasonIfUnsupported);
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(reasonIfUnsupported);
+    return true;
+}
+
+bool NeonLayerSupport::IsConvertFp32ToBf16Supported(const TensorInfo& input,
+                                                    const TensorInfo& output,
+                                                    Optional<std::string&> reasonIfUnsupported) const
+{
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(reasonIfUnsupported);
     return true;
 }
 
@@ -277,9 +312,9 @@ bool NeonLayerSupport::IsConvertFp32ToFp16Supported(const TensorInfo& input,
                                                     const TensorInfo& output,
                                                     Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(input);
-    ignore_unused(output);
-    ignore_unused(reasonIfUnsupported);
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(reasonIfUnsupported);
     return true;
 }
 
@@ -290,13 +325,30 @@ bool NeonLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
                                                 const Optional<TensorInfo>& biases,
                                                 Optional<std::string&> reasonIfUnsupported) const
 {
+    bool isFastMathEnabled = false;
+#if defined(ARMCOMPUTENEON_ENABLED)
+    if (m_ModelContextPtr)
+    {
+        if (m_ModelContextPtr.get() != nullptr)
+        {
+            auto modelOptions = dynamic_cast<NeonBackendModelContext*>(m_ModelContextPtr.get());
+            if (modelOptions)
+            {
+                isFastMathEnabled = modelOptions->IsFastMathEnabled();
+            }
+        }
+    }
+#endif
+
     FORWARD_WORKLOAD_VALIDATE_FUNC(NeonConvolution2dWorkloadValidate,
                                    reasonIfUnsupported,
                                    input,
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   isFastMathEnabled,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsDepthToSpaceSupported(const TensorInfo& input,
@@ -324,7 +376,8 @@ bool NeonLayerSupport::IsDepthwiseConvolutionSupported(const TensorInfo& input,
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsDequantizeSupported(const TensorInfo& input,
@@ -350,7 +403,8 @@ bool NeonLayerSupport::IsDilatedDepthwiseConvolutionSupported(const TensorInfo& 
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
@@ -358,29 +412,50 @@ bool NeonLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
                                                    const ElementwiseUnaryDescriptor& descriptor,
                                                    Optional<std::string&> reasonIfUnsupported) const
 {
-    if (descriptor.m_Operation == UnaryOperation::Abs)
+    switch(descriptor.m_Operation)
     {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(NeonAbsWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input,
-                                       output);
+        case UnaryOperation::Abs:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(NeonAbsWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Exp:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(NeonExpWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Neg:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(NeonNegWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Rsqrt:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(NeonRsqrtWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        default:
+            return false;
     }
-    else if (descriptor.m_Operation == UnaryOperation::Rsqrt)
-    {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(NeonRsqrtWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input,
-                                       output);
-    }
+}
 
-    return false;
+bool NeonLayerSupport::IsFillSupported(const TensorInfo& input,
+                                       const TensorInfo& output,
+                                       const FillDescriptor& descriptor,
+                                       Optional<std::string&> reasonIfUnsupported) const
+{
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(descriptor);
+
+    return IsNeonBackendSupported(reasonIfUnsupported);
 }
 
 bool NeonLayerSupport::IsFloorSupported(const TensorInfo& input,
                                         const TensorInfo& output,
                                         Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(output);
+    armnn::IgnoreUnused(output);
     return IsNeonBackendSupported(reasonIfUnsupported) &&
            IsSupportedForDataTypeGeneric(reasonIfUnsupported,
                                          input.GetDataType(),
@@ -404,6 +479,21 @@ bool NeonLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
                                    output,
                                    weights,
                                    biases,
+                                   descriptor,
+                                   nullptr);
+}
+
+bool NeonLayerSupport::IsGatherSupported(const TensorInfo& input0,
+                                         const TensorInfo& input1,
+                                         const TensorInfo& output,
+                                         const GatherDescriptor& descriptor,
+                                         Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(NeonGatherWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input0,
+                                   input1,
+                                   output,
                                    descriptor);
 }
 
@@ -440,6 +530,14 @@ bool NeonLayerSupport::IsL2NormalizationSupported(const TensorInfo& input,
                                                   Optional<std::string&> reasonIfUnsupported) const
 {
     FORWARD_WORKLOAD_VALIDATE_FUNC(NeonL2NormalizationWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
+}
+
+bool NeonLayerSupport::IsLogSoftmaxSupported(const TensorInfo& input,
+                                             const TensorInfo& output,
+                                             const LogSoftmaxDescriptor& descriptor,
+                                             Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(NeonLogSoftmaxWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
 }
 
 bool NeonLayerSupport::IsLstmSupported(const TensorInfo& input,
@@ -519,7 +617,8 @@ bool NeonLayerSupport::IsMultiplicationSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsDivisionSupported(const TensorInfo& input0,
@@ -531,7 +630,8 @@ bool NeonLayerSupport::IsDivisionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsNormalizationSupported(const TensorInfo& input,
@@ -588,6 +688,41 @@ bool NeonLayerSupport::IsPreluSupported(const armnn::TensorInfo &input,
     FORWARD_WORKLOAD_VALIDATE_FUNC(NeonPreluWorkloadValidate, reasonIfUnsupported, input, alpha, output);
 }
 
+bool NeonLayerSupport::IsQLstmSupported(const TensorInfo& input,
+                                        const TensorInfo& previousOutputIn,
+                                        const TensorInfo& previousCellStateIn,
+                                        const TensorInfo& outputStateOut,
+                                        const TensorInfo& cellStateOut,
+                                        const TensorInfo& output,
+                                        const QLstmDescriptor& descriptor,
+                                        const LstmInputParamsInfo& paramsInfo,
+                                        Optional<std::string&> reasonIfUnsupported) const
+{
+    // Check required here in order to pass IsLayerSupported for datatypes tests
+    if (input.GetDataType()               == armnn::DataType::QAsymmS8 &&
+        previousOutputIn.GetDataType()    == armnn::DataType::QAsymmS8 &&
+        previousCellStateIn.GetDataType() == armnn::DataType::QSymmS16 &&
+        outputStateOut.GetDataType()      == armnn::DataType::QAsymmS8 &&
+        cellStateOut.GetDataType()        == armnn::DataType::QSymmS16 &&
+        output.GetDataType()              == armnn::DataType::QAsymmS8)
+    {
+        FORWARD_WORKLOAD_VALIDATE_FUNC(NeonQLstmWorkloadValidate,
+                                       reasonIfUnsupported,
+                                       input,
+                                       previousCellStateIn,
+                                       previousOutputIn,
+                                       cellStateOut,
+                                       outputStateOut,
+                                       output,
+                                       descriptor,
+                                       paramsInfo);
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool NeonLayerSupport::IsQuantizeSupported(const TensorInfo& input,
                                            const TensorInfo& output,
                                            Optional<std::string&> reasonIfUnsupported) const
@@ -621,7 +756,7 @@ bool NeonLayerSupport::IsReshapeSupported(const TensorInfo& input,
                                           const ReshapeDescriptor& descriptor,
                                           Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(descriptor);
+    armnn::IgnoreUnused(descriptor);
     FORWARD_WORKLOAD_VALIDATE_FUNC(NeonReshapeWorkloadValidate,
                                    reasonIfUnsupported,
                                    input,
@@ -711,7 +846,7 @@ bool NeonLayerSupport::IsSplitterSupported(const TensorInfo& input,
                                            const ViewsDescriptor& descriptor,
                                            Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(descriptor);
+    armnn::IgnoreUnused(descriptor);
     return IsSupportedForDataTypeNeon(reasonIfUnsupported,
                                       input.GetDataType(),
                                       &TrueFunc<>,
@@ -739,7 +874,7 @@ bool NeonLayerSupport::IsSplitterSupported(const TensorInfo& input,
                                        *splitAxis.begin());
     }
 #endif
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     for (auto output : outputs)
     {
         if (!input.IsTypeSpaceMatch(output)) // Cannot use sub-tensors if the types are not same space
@@ -784,7 +919,8 @@ bool NeonLayerSupport::IsSubtractionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool NeonLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
@@ -801,6 +937,14 @@ bool NeonLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input
                                    descriptor,
                                    weights,
                                    biases);
+}
+
+bool NeonLayerSupport::IsTransposeSupported(const TensorInfo& input,
+                                            const TensorInfo& output,
+                                            const TransposeDescriptor& descriptor,
+                                            Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(NeonTransposeWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
 }
 
 } // namespace armnn

@@ -1,19 +1,18 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <armnn/Tensor.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnnUtils/FloatingPointComparison.hpp>
 
 #include <QuantizeHelper.hpp>
 
-#include <boost/assert.hpp>
 #include <boost/multi_array.hpp>
-#include <boost/numeric/conversion/cast.hpp>
 #include <boost/random/uniform_real_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
-#include <boost/test/tools/floating_point_comparison.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <array>
@@ -54,8 +53,7 @@ struct SelectiveComparer<T, false>
         }
 
         // For unquantized floats we use a tolerance of 1%.
-        boost::math::fpc::close_at_tolerance<float> comparer(boost::math::fpc::percent_tolerance(1.0f));
-        return comparer(a, b);
+        return armnnUtils::within_percentage_tolerance(a, b);
     }
 };
 
@@ -74,20 +72,26 @@ bool SelectiveCompareBoolean(T a, T b)
 template <typename T, std::size_t n>
 boost::test_tools::predicate_result CompareTensors(const boost::multi_array<T, n>& a,
                                                    const boost::multi_array<T, n>& b,
-                                                   bool compareBoolean = false)
+                                                   bool compareBoolean = false,
+                                                   bool isDynamic = false)
 {
-    // Checks they are same shape.
-    for (unsigned int i=0; i<n; i++)
+    if (!isDynamic)
     {
-        if (a.shape()[i] != b.shape()[i])
+        // Checks they are same shape.
+        for (unsigned int i = 0;
+             i < n;
+             i++)
         {
-            boost::test_tools::predicate_result res(false);
-            res.message() << "Different shapes ["
-                        << a.shape()[i]
-                        << "!="
-                        << b.shape()[i]
-                        << "]";
-            return res;
+            if (a.shape()[i] != b.shape()[i])
+            {
+                boost::test_tools::predicate_result res(false);
+                res.message() << "Different shapes ["
+                              << a.shape()[i]
+                              << "!="
+                              << b.shape()[i]
+                              << "]";
+                return res;
+            }
         }
     }
 
@@ -190,9 +194,13 @@ boost::multi_array<T, n> MakeTensor(const armnn::TensorInfo& tensorInfo)
 
 // Creates a boost::multi_array with the shape defined by the given TensorInfo and contents defined by the given vector.
 template <typename T, std::size_t n>
-boost::multi_array<T, n> MakeTensor(const armnn::TensorInfo& tensorInfo, const std::vector<T>& flat)
+boost::multi_array<T, n> MakeTensor(
+    const armnn::TensorInfo& tensorInfo, const std::vector<T>& flat, bool isDynamic = false)
 {
-    BOOST_ASSERT_MSG(flat.size() == tensorInfo.GetNumElements(), "Wrong number of components supplied to tensor");
+    if (!isDynamic)
+    {
+        ARMNN_ASSERT_MSG(flat.size() == tensorInfo.GetNumElements(), "Wrong number of components supplied to tensor");
+    }
 
     std::array<unsigned int, n> shape;
 

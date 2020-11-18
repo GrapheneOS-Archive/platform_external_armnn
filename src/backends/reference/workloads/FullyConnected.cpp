@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -7,8 +7,6 @@
 
 #include "RefWorkloadUtils.hpp"
 
-#include <boost/assert.hpp>
-
 namespace armnn
 {
 
@@ -16,6 +14,7 @@ void FullyConnected(const TensorShape& rInputShape,
                     Decoder<float>& rInputDecoder,
                     const TensorShape& rOutputShape,
                     Encoder<float>& rOutputEncoder,
+                    const TensorShape& rWeightsShape,
                     Decoder<float>& rWeightDecoder,
                     Decoder<float>& rBiasDecoder,
                     const bool biasEnabled,
@@ -24,6 +23,13 @@ void FullyConnected(const TensorShape& rInputShape,
 {
     // Perform FullyConnected implementation
     unsigned int outputSize = rOutputShape[1];
+
+    const std::vector<float> decodedInputs = rInputDecoder.DecodeTensor(rInputShape);
+    const std::vector<float> decodedWeights = rWeightDecoder.DecodeTensor(rWeightsShape);
+
+    const TensorShape biasShape{outputSize};
+    const std::vector<float> decodedBiases = biasEnabled ? rBiasDecoder.DecodeTensor(biasShape) : std::vector<float>();
+
 
     for (unsigned int n = 0; n < rInputShape[0]; n++)
     {
@@ -36,23 +42,19 @@ void FullyConnected(const TensorShape& rInputShape,
                 float weight;
                 if (transposeWeights)
                 {
-                    rWeightDecoder[channelOutput * K + channelInput];
-                    weight = rWeightDecoder.Get();
+                    weight = decodedWeights[channelOutput * K + channelInput];
                 }
                 else
                 {
-                    rWeightDecoder[channelInput * outputSize + channelOutput];
-                    weight = rWeightDecoder.Get();
+                    weight = decodedWeights[channelInput * outputSize + channelOutput];
                 }
 
-                rInputDecoder[n * K + channelInput];
-                outval += weight * rInputDecoder.Get();
+                outval += weight * decodedInputs[n * K + channelInput];
             }
 
             if (biasEnabled)
             {
-                rBiasDecoder[channelOutput];
-                outval += rBiasDecoder.Get();
+                outval += decodedBiases[channelOutput];
             }
 
             rOutputEncoder[n * outputSize + channelOutput];

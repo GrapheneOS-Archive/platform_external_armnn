@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -21,6 +21,8 @@ LogSoftmaxLayer::LogSoftmaxLayer(const LogSoftmaxDescriptor &param, const char* 
 std::unique_ptr<IWorkload> LogSoftmaxLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     LogSoftmaxQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateLogSoftmax(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -33,13 +35,14 @@ void LogSoftmaxLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
-    auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "LogSoftmaxLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
+    auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
+    ARMNN_ASSERT(inferredShapes.size() == 1);
+
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LogSoftmaxLayer");
 }
 
 void LogSoftmaxLayer::Accept(ILayerVisitor& visitor) const

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -17,18 +17,18 @@
 #include <armnn/Types.hpp>
 #include <armnn/Tensor.hpp>
 #include <armnn/INetwork.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <algorithm>
+#include <functional>
+#include <iostream>
+#include <list>
 #include <memory>
 #include <string>
 #include <vector>
-#include <iostream>
-#include <functional>
-#include <list>
-
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/cast.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 namespace armnn
 {
@@ -135,7 +135,7 @@ public:
 
     // IOutputSlot
 
-    unsigned int GetNumConnections() const override { return boost::numeric_cast<unsigned int>(m_Connections.size()); }
+    unsigned int GetNumConnections() const override { return armnn::numeric_cast<unsigned int>(m_Connections.size()); }
     const InputSlot* GetConnection(unsigned int index) const override;
     InputSlot* GetConnection(unsigned int index) override;
 
@@ -145,12 +145,12 @@ public:
 
     int Connect(IInputSlot& destination) override
     {
-        return Connect(*boost::polymorphic_downcast<InputSlot*>(&destination));
+        return Connect(*PolymorphicDowncast<InputSlot*>(&destination));
     }
 
     void Disconnect(IInputSlot& slot) override
     {
-        return Disconnect(*boost::polymorphic_downcast<InputSlot*>(&slot));
+        return Disconnect(*PolymorphicDowncast<InputSlot*>(&slot));
     }
 
     unsigned int CalculateIndexOnOwner() const override;
@@ -205,6 +205,7 @@ class ScopedCpuTensorHandle;
 // Base layer class
 
 using LayerPriority = unsigned int;
+using AdditionalInfoObjectPtr = std::shared_ptr<void>;
 
 class Layer : public IConnectableLayer
 {
@@ -227,6 +228,8 @@ public:
     {
         return const_cast<OutputHandler&>(const_cast<const Layer*>(this)->GetOutputHandler(i));
     }
+
+    ShapeInferenceMethod GetShapeInferenceMethod() const { return m_ShapeInferenceMethod; };
 
     const std::vector<InputSlot>& GetInputSlots() const { return m_InputSlots; }
     const std::vector<OutputSlot>& GetOutputSlots() const { return m_OutputSlots; }
@@ -320,6 +323,29 @@ public:
     const std::list<std::string>& GetRelatedLayerNames() { return m_RelatedLayerNames; }
 
     virtual void Reparent(Graph& dest, std::list<Layer*>::const_iterator iterator) = 0;
+
+    void BackendSelectionHint(Optional<BackendId> backend) final
+    {
+        m_BackendHint = backend;
+    }
+    Optional<BackendId> GetBackendHint() const { return m_BackendHint; }
+
+    void SetShapeInferenceMethod(ShapeInferenceMethod shapeInferenceMethod)
+    {
+        m_ShapeInferenceMethod = shapeInferenceMethod;
+    }
+
+    template<typename T>
+    std::shared_ptr<T> GetAdditionalInformation() const
+    {
+        return std::static_pointer_cast<T>(m_AdditionalInfoObject);
+    }
+
+    void SetAdditionalInfoForObject(const AdditionalInfoObjectPtr& additionalInfo)
+    {
+        m_AdditionalInfoObject = additionalInfo;
+    }
+
 protected:
     // Graph needs access to the virtual destructor.
     friend class Graph;
@@ -339,6 +365,14 @@ protected:
         CollectWorkloadOutputs(dataCollector);
     }
 
+    void ValidateAndCopyShape(const TensorShape& outputShape,
+                              const TensorShape& inferredShape,
+                              const ShapeInferenceMethod shapeInferenceMethod,
+                              const std::string& layerName,
+                              const unsigned int outputSlotIndex = 0);
+
+    void VerifyShapeInferenceType(const TensorShape& outputShape, ShapeInferenceMethod shapeInferenceMethod);
+
     /// Helper function to reduce duplication in *Layer::CreateWorkload.
     template <typename QueueDescriptor>
     WorkloadInfo PrepInfoAndDesc(QueueDescriptor& descriptor) const
@@ -356,12 +390,19 @@ protected:
     using ConstantTensors = std::vector<std::reference_wrapper<std::unique_ptr<ScopedCpuTensorHandle>>>;
     virtual ConstantTensors GetConstantTensorsByRef() {return ConstantTensors(); };
 
+    // "Blob"
+    AdditionalInfoObjectPtr m_AdditionalInfoObject;
+
+    // Utility method to set a pointer in the queueDescriptor to the "blob" location in the layer
+    void SetAdditionalInfo(QueueDescriptor& descriptor) const;
+
 private:
     void CollectWorkloadInputs(WorkloadDataCollector& dataCollector) const;
     void CollectWorkloadOutputs(WorkloadDataCollector& dataCollector) const;
 
 protected:
     std::vector<OutputHandler> m_OutputHandlers;
+    ShapeInferenceMethod m_ShapeInferenceMethod;
 
 private:
     const std::string m_LayerName;
@@ -371,6 +412,7 @@ private:
 
     const LayerType m_Type;
     BackendId m_BackendId;
+    Optional<BackendId> m_BackendHint;
 
     /// Used for sorting.
     mutable LayerPriority m_Priority = 0;
@@ -379,6 +421,7 @@ private:
     LayerGuid m_Guid;
 
     std::list<std::string> m_RelatedLayerNames;
+
 };
 
 // A layer user-provided data can be bound to (e.g. inputs, outputs).

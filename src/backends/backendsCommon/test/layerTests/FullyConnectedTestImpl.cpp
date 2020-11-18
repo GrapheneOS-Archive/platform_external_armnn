@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,6 +24,7 @@ template<typename T, typename B>
 LayerTestResult<T, 2> SimpleFullyConnectedTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         armnn::TensorInfo inputTensorInfo,
         armnn::TensorInfo outputTensorInfo,
         armnn::TensorInfo weightsDesc,
@@ -34,9 +35,8 @@ LayerTestResult<T, 2> SimpleFullyConnectedTestImpl(
         bool biasEnabled,
         bool transposeWeights)
 {
-    boost::ignore_unused(memoryManager);
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::FullyConnectedQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -71,6 +71,7 @@ template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 2> FullyConnectedTest(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         bool biasEnabled)
 {
     constexpr static unsigned int inputWidth = 3u;
@@ -118,6 +119,7 @@ LayerTestResult<T, 2> FullyConnectedTest(
     result = SimpleFullyConnectedTestImpl<T>(
             workloadFactory,
             memoryManager,
+            tensorHandleFactory,
             inputTensorInfo, outputTensorInfo,
             weightsDesc, biasesDesc,
             weights, bias, input,
@@ -148,6 +150,7 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 2> FullyConnectedLargeTestCommon(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool transposeWeights,
     float qScale = 0.0f,
     int32_t qOffset = 0)
@@ -212,6 +215,7 @@ LayerTestResult<T, 2> FullyConnectedLargeTestCommon(
     result = SimpleFullyConnectedTestImpl<T>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputTensorInfo, outputTensorInfo,
         weightsDesc, biasesDesc,
         weights, bias, input,
@@ -232,12 +236,14 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 2>
 FullyConnectedTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 2>
 FullyConnectedTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled);
 
 //
@@ -247,6 +253,7 @@ FullyConnectedTest<armnn::DataType::QSymmS16>(
 LayerTestResult<float, 2> FullyConnectedFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     bool transposeWeights)
 {
@@ -320,6 +327,7 @@ LayerTestResult<float, 2> FullyConnectedFloat32Test(
     result = SimpleFullyConnectedTestImpl<float>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputTensorInfo, outputTensorInfo,
         weightsDesc, biasesDesc,
         weights, bias, input,
@@ -344,7 +352,11 @@ LayerTestResult<float, 2> FullyConnectedFloat32Test(
 LayerTestResult<float, 2> FullyConnectedLargeTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool transposeWeights)
 {
-    return FullyConnectedLargeTestCommon<armnn::DataType::Float32>(workloadFactory, memoryManager, transposeWeights);
+    return FullyConnectedLargeTestCommon<armnn::DataType::Float32>(workloadFactory,
+                                                                   memoryManager,
+                                                                   tensorHandleFactory,
+                                                                   transposeWeights);
 }

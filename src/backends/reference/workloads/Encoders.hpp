@@ -9,7 +9,7 @@
 
 #include <armnnUtils/TensorUtils.hpp>
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 namespace armnn
 {
@@ -75,6 +75,10 @@ inline std::unique_ptr<Encoder<float>> MakeEncoder(const TensorInfo& info, void*
         {
             return std::make_unique<Int32Encoder>(static_cast<int32_t*>(data));
         }
+        case armnn::DataType::BFloat16:
+        {
+            return std::make_unique<BFloat16Encoder>(static_cast<armnn::BFloat16*>(data));
+        }
         case armnn::DataType::Float16:
         {
             return std::make_unique<Float16Encoder>(static_cast<Half*>(data));
@@ -85,7 +89,7 @@ inline std::unique_ptr<Encoder<float>> MakeEncoder(const TensorInfo& info, void*
         }
         default:
         {
-            BOOST_ASSERT_MSG(false, "Unsupported target Data Type!");
+            ARMNN_ASSERT_MSG(false, "Unsupported target Data Type!");
             break;
         }
     }
@@ -103,7 +107,25 @@ inline std::unique_ptr<Encoder<bool>> MakeEncoder(const TensorInfo& info, void* 
         }
         default:
         {
-            BOOST_ASSERT_MSG(false, "Cannot encode from boolean. Not supported target Data Type!");
+            ARMNN_ASSERT_MSG(false, "Cannot encode from boolean. Not supported target Data Type!");
+            break;
+        }
+    }
+    return nullptr;
+}
+
+template<>
+inline std::unique_ptr<Encoder<int32_t>> MakeEncoder(const TensorInfo& info, void* data)
+{
+    switch(info.GetDataType())
+    {
+        case DataType::Signed32:
+        {
+            return std::make_unique<Int32ToInt32tEncoder>(static_cast<int32_t*>(data));
+        }
+        default:
+        {
+            ARMNN_ASSERT_MSG(false, "Unsupported Data Type!");
             break;
         }
     }

@@ -5,7 +5,8 @@
 
 #include "Dequantize.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+
 namespace armnn
 {
 
@@ -14,8 +15,8 @@ void Dequantize(Decoder<float>& inputDecoder,
                 const TensorInfo& inputInfo,
                 const TensorInfo& outputInfo)
 {
-    boost::ignore_unused(outputInfo);
-    BOOST_ASSERT(inputInfo.GetNumElements() == outputInfo.GetNumElements());
+    IgnoreUnused(outputInfo);
+    ARMNN_ASSERT(inputInfo.GetNumElements() == outputInfo.GetNumElements());
     for (unsigned int i = 0; i < inputInfo.GetNumElements(); i++)
     {
         // inputDecoder.Get() dequantizes the data element from whatever

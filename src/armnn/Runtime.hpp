@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -14,13 +14,21 @@
 
 #include <armnn/backends/DynamicBackend.hpp>
 
+#include <ProfilingService.hpp>
+
+#include <IProfilingService.hpp>
+#include <IReportStructure.hpp>
+
 #include <mutex>
 #include <unordered_map>
 
 namespace armnn
 {
+using LoadedNetworks = std::unordered_map<NetworkId, std::unique_ptr<LoadedNetwork>>;
+using IReportStructure = profiling::IReportStructure;
 
-class Runtime final : public IRuntime
+class Runtime final :  public IRuntime,
+                       public IReportStructure
 {
 public:
     /// Loads a complete network into the Runtime.
@@ -77,8 +85,14 @@ public:
 
     ~Runtime();
 
+    //NOTE: we won't need the profiling service reference but it is good to pass the service
+    // in this way to facilitate other implementations down the road
+    virtual void ReportStructure() override;
+
 private:
     friend void RuntimeLoadedNetworksReserve(armnn::Runtime* runtime); // See RuntimeTests.cpp
+
+    friend profiling::ProfilingService& GetProfilingService(armnn::Runtime* runtime); // See RuntimeTests.cpp
 
     int GenerateNetworkId();
 
@@ -100,7 +114,9 @@ private:
 
     mutable std::mutex m_Mutex;
 
-    std::unordered_map<NetworkId, std::unique_ptr<LoadedNetwork>> m_LoadedNetworks;
+    /// Map of Loaded Networks with associated GUID as key
+    LoadedNetworks m_LoadedNetworks;
+
     std::unordered_map<BackendId, IBackendInternal::IBackendContextPtr> m_BackendContexts;
 
     int m_NetworkIdCounter;
@@ -109,6 +125,9 @@ private:
 
     /// List of dynamic backends loaded in the runtime
     std::vector<DynamicBackendPtr> m_DynamicBackends;
+
+    /// Profiling Service Instance
+    profiling::ProfilingService m_ProfilingService;
 };
 
 } // namespace armnn

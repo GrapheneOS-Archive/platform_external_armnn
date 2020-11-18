@@ -7,9 +7,10 @@
 #include "InferenceTest.hpp"
 #include "MobileNetSsdDatabase.hpp"
 
-#include <boost/assert.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/test/tools/floating_point_comparison.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnnUtils/FloatingPointComparison.hpp>
 
 #include <vector>
 
@@ -27,27 +28,30 @@ public:
                                         testCaseId,
                                         { std::move(testCaseData.m_InputData) },
                                         { k_OutputSize1, k_OutputSize2, k_OutputSize3, k_OutputSize4 })
-        , m_FloatComparer(boost::math::fpc::percent_tolerance(1.0f))
         , m_DetectedObjects(testCaseData.m_ExpectedDetectedObject)
     {}
 
     TestCaseResult ProcessResult(const InferenceTestOptions& options) override
     {
-        boost::ignore_unused(options);
+        armnn::IgnoreUnused(options);
 
-        const std::vector<float>& output1 = boost::get<std::vector<float>>(this->GetOutputs()[0]); // bounding boxes
-        BOOST_ASSERT(output1.size() == k_OutputSize1);
+        // bounding boxes
+        const std::vector<float>& output1 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[0]);
+        ARMNN_ASSERT(output1.size() == k_OutputSize1);
 
-        const std::vector<float>& output2 = boost::get<std::vector<float>>(this->GetOutputs()[1]); // classes
-        BOOST_ASSERT(output2.size() == k_OutputSize2);
+        // classes
+        const std::vector<float>& output2 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[1]);
+        ARMNN_ASSERT(output2.size() == k_OutputSize2);
 
-        const std::vector<float>& output3 = boost::get<std::vector<float>>(this->GetOutputs()[2]); // scores
-        BOOST_ASSERT(output3.size() == k_OutputSize3);
+        // scores
+        const std::vector<float>& output3 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[2]);
+        ARMNN_ASSERT(output3.size() == k_OutputSize3);
 
-        const std::vector<float>& output4 = boost::get<std::vector<float>>(this->GetOutputs()[3]); // valid detections
-        BOOST_ASSERT(output4.size() == k_OutputSize4);
+        // valid detections
+        const std::vector<float>& output4 = mapbox::util::get<std::vector<float>>(this->GetOutputs()[3]);
+        ARMNN_ASSERT(output4.size() == k_OutputSize4);
 
-        const size_t numDetections = boost::numeric_cast<size_t>(output4[0]);
+        const size_t numDetections = armnn::numeric_cast<size_t>(output4[0]);
 
         // Check if number of valid detections matches expectations
         const size_t expectedNumDetections = m_DetectedObjects.size();
@@ -101,7 +105,7 @@ public:
                 return TestCaseResult::Failed;
             }
 
-            if(!m_FloatComparer(detectedObject.m_Confidence, expectedObject.m_Confidence))
+            if(!armnnUtils::within_percentage_tolerance(detectedObject.m_Confidence, expectedObject.m_Confidence))
             {
                 ARMNN_LOG(error) << "Confidence of prediction for test case " << this->GetTestCaseId() <<
                     " is incorrect: Expected (" << expectedObject.m_Confidence << ")  +- 1.0 pc" <<
@@ -109,10 +113,14 @@ public:
                 return TestCaseResult::Failed;
             }
 
-            if (!m_FloatComparer(detectedObject.m_BoundingBox.m_XMin, expectedObject.m_BoundingBox.m_XMin) ||
-                !m_FloatComparer(detectedObject.m_BoundingBox.m_YMin, expectedObject.m_BoundingBox.m_YMin) ||
-                !m_FloatComparer(detectedObject.m_BoundingBox.m_XMax, expectedObject.m_BoundingBox.m_XMax) ||
-                !m_FloatComparer(detectedObject.m_BoundingBox.m_YMax, expectedObject.m_BoundingBox.m_YMax))
+            if (!armnnUtils::within_percentage_tolerance(detectedObject.m_BoundingBox.m_XMin,
+                                                         expectedObject.m_BoundingBox.m_XMin) ||
+                !armnnUtils::within_percentage_tolerance(detectedObject.m_BoundingBox.m_YMin,
+                                                         expectedObject.m_BoundingBox.m_YMin) ||
+                !armnnUtils::within_percentage_tolerance(detectedObject.m_BoundingBox.m_XMax,
+                                                         expectedObject.m_BoundingBox.m_XMax) ||
+                !armnnUtils::within_percentage_tolerance(detectedObject.m_BoundingBox.m_YMax,
+                                                         expectedObject.m_BoundingBox.m_YMax))
             {
                 ARMNN_LOG(error) << "Detected bounding box for test case " << this->GetTestCaseId() <<
                     " is incorrect";
@@ -133,7 +141,6 @@ private:
     static constexpr unsigned int k_OutputSize3 = k_Shape;
     static constexpr unsigned int k_OutputSize4 = 1u;
 
-    boost::math::fpc::close_at_tolerance<float> m_FloatComparer;
     std::vector<DetectedObject>                 m_DetectedObjects;
 };
 
@@ -146,18 +153,19 @@ public:
         : m_ConstructModel(constructModel)
     {}
 
-    virtual void AddCommandLineOptions(boost::program_options::options_description& options) override
+    virtual void AddCommandLineOptions(cxxopts::Options& options, std::vector<std::string>& required) override
     {
-        namespace po = boost::program_options;
+        options
+            .allow_unrecognised_options()
+            .add_options()
+                ("d,data-dir", "Path to directory containing test data", cxxopts::value<std::string>(m_DataDir));
 
-        options.add_options()
-            ("data-dir,d", po::value<std::string>(&m_DataDir)->required(),
-             "Path to directory containing test data");
+        required.emplace_back("data-dir");
 
-        Model::AddCommandLineOptions(options, m_ModelCommandLineOptions);
+        Model::AddCommandLineOptions(options, m_ModelCommandLineOptions, required);
     }
 
-    virtual bool ProcessCommandLineOptions(const InferenceTestOptions &commonOptions) override
+    virtual bool ProcessCommandLineOptions(const InferenceTestOptions& commonOptions) override
     {
         if (!ValidateDirectory(m_DataDir))
         {

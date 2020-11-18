@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -7,8 +7,6 @@
 
 #include <backendsCommon/MemImportWorkload.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
-
-#include <boost/cast.hpp>
 
 #include <cstring>
 

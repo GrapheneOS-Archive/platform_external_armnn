@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,8 +7,9 @@
 #include "ProfilingUtils.hpp"
 
 #include <armnn/Types.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/format.hpp>
+#include <armnn/utility/NumericCast.hpp>
+
+#include <fmt/format.h>
 
 #include <vector>
 
@@ -18,11 +19,11 @@ namespace armnn
 namespace profiling
 {
 
-void PeriodicCounterSelectionCommandHandler::ParseData(const Packet& packet, CaptureData& captureData)
+void PeriodicCounterSelectionCommandHandler::ParseData(const arm::pipe::Packet& packet, CaptureData& captureData)
 {
     std::vector<uint16_t> counterIds;
-    uint32_t sizeOfUint32 = boost::numeric_cast<uint32_t>(sizeof(uint32_t));
-    uint32_t sizeOfUint16 = boost::numeric_cast<uint32_t>(sizeof(uint16_t));
+    uint32_t sizeOfUint32 = armnn::numeric_cast<uint32_t>(sizeof(uint32_t));
+    uint32_t sizeOfUint16 = armnn::numeric_cast<uint32_t>(sizeof(uint16_t));
     uint32_t offset = 0;
 
     if (packet.GetLength() < 4)
@@ -56,7 +57,7 @@ void PeriodicCounterSelectionCommandHandler::ParseData(const Packet& packet, Cap
     captureData.SetCounterIds(counterIds);
 }
 
-void PeriodicCounterSelectionCommandHandler::operator()(const Packet& packet)
+void PeriodicCounterSelectionCommandHandler::operator()(const arm::pipe::Packet& packet)
 {
     ProfilingState currentState = m_StateMachine.GetCurrentState();
     switch (currentState)
@@ -64,18 +65,18 @@ void PeriodicCounterSelectionCommandHandler::operator()(const Packet& packet)
     case ProfilingState::Uninitialised:
     case ProfilingState::NotConnected:
     case ProfilingState::WaitingForAck:
-        throw RuntimeException(boost::str(boost::format("Periodic Counter Selection Command Handler invoked while in "
-                                                        "an wrong state: %1%")
-                                          % GetProfilingStateName(currentState)));
+        throw RuntimeException(fmt::format("Periodic Counter Selection Command Handler invoked while in "
+                                           "an wrong state: {}",
+                                           GetProfilingStateName(currentState)));
     case ProfilingState::Active:
     {
         // Process the packet
         if (!(packet.GetPacketFamily() == 0u && packet.GetPacketId() == 4u))
         {
-            throw armnn::InvalidArgumentException(boost::str(boost::format("Expected Packet family = 0, id = 4 but "
-                                                                           "received family = %1%, id = %2%")
-                                                  % packet.GetPacketFamily()
-                                                  % packet.GetPacketId()));
+            throw armnn::InvalidArgumentException(fmt::format("Expected Packet family = 0, id = 4 but "
+                                                              "received family = {}, id = {}",
+                                                              packet.GetPacketFamily(),
+                                                              packet.GetPacketId()));
         }
 
         // Parse the packet to get the capture period and counter UIDs
@@ -140,7 +141,6 @@ void PeriodicCounterSelectionCommandHandler::operator()(const Packet& packet)
         // save the new backend counter ids for next time
         m_PrevBackendCounterIds = backendCounterIds;
 
-
         // Set the capture data with only the valid armnn counter UIDs
         m_CaptureDataHolder.SetCaptureData(capturePeriod, {validCounterIds.begin(), backendIdStart}, activeBackends);
 
@@ -161,15 +161,15 @@ void PeriodicCounterSelectionCommandHandler::operator()(const Packet& packet)
         break;
     }
     default:
-        throw RuntimeException(boost::str(boost::format("Unknown profiling service state: %1%")
-                                          % static_cast<int>(currentState)));
+        throw RuntimeException(fmt::format("Unknown profiling service state: {}",
+                                           static_cast<int>(currentState)));
     }
 }
 
 std::set<armnn::BackendId> PeriodicCounterSelectionCommandHandler::ProcessBackendCounterIds(
-                                                                      const u_int32_t capturePeriod,
-                                                                      std::set<uint16_t> newCounterIds,
-                                                                      std::set<uint16_t> unusedCounterIds)
+                                                                      const uint32_t capturePeriod,
+                                                                      const std::set<uint16_t> newCounterIds,
+                                                                      const std::set<uint16_t> unusedCounterIds)
 {
     std::set<armnn::BackendId> changedBackends;
     std::set<armnn::BackendId> activeBackends = m_CaptureDataHolder.GetCaptureData().GetActiveBackends();

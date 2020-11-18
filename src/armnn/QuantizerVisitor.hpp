@@ -89,6 +89,10 @@ public:
                                     const ElementwiseUnaryDescriptor& elementwiseUnaryDescriptor,
                                     const char* name = nullptr) override;
 
+    void VisitFillLayer(const IConnectableLayer* layer,
+                        const FillDescriptor& desc,
+                        const char* name) override;
+
     void VisitFullyConnectedLayer(const IConnectableLayer *layer,
                                   const FullyConnectedDescriptor& desc,
                                   const ConstTensor& weights,
@@ -186,6 +190,10 @@ public:
                                           const ConstTensor& weights,
                                           const Optional<ConstTensor>& biases,
                                           const char* name = nullptr) override;
+
+    void VisitTransposeLayer(const IConnectableLayer* layer,
+                             const TransposeDescriptor& descriptor,
+                             const char* name = nullptr) override;
 
     /// Extract the quantized network
     INetworkPtr RetrieveFinalNetwork() { return std::move(m_QuantizedNetwork); }

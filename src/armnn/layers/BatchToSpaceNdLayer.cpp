@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -31,6 +31,7 @@ BatchToSpaceNdLayer::BatchToSpaceNdLayer(const armnn::BatchToSpaceNdDescriptor& 
 std::unique_ptr<IWorkload> BatchToSpaceNdLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     BatchToSpaceNdQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
 
     return factory.CreateBatchToSpaceNd(descriptor, PrepInfoAndDesc(descriptor));
 }
@@ -45,18 +46,20 @@ void BatchToSpaceNdLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape &outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape()});
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "BatchToSpaceLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "BatchToSpaceNdLayer");
 }
 
 std::vector<TensorShape> BatchToSpaceNdLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 1);
+    ARMNN_ASSERT(inputShapes.size() == 1);
 
     const TensorShape& inputShape = inputShapes[0];
     TensorShape outputShape(inputShape);
@@ -66,7 +69,7 @@ std::vector<TensorShape> BatchToSpaceNdLayer::InferOutputShapes(const std::vecto
                                                          1U,
                                                          std::multiplies<>());
 
-    BOOST_ASSERT(inputShape[0] % accumulatedBlockShape == 0);
+    ARMNN_ASSERT(inputShape[0] % accumulatedBlockShape == 0);
 
     outputShape[0] = inputShape[0] / accumulatedBlockShape;
 
@@ -80,10 +83,10 @@ std::vector<TensorShape> BatchToSpaceNdLayer::InferOutputShapes(const std::vecto
     unsigned int outputHeight = inputShape[heightIndex] * m_Param.m_BlockShape[0];
     unsigned int outputWidth = inputShape[widthIndex] * m_Param.m_BlockShape[1];
 
-    BOOST_ASSERT_MSG(heightCrop <= outputHeight,
+    ARMNN_ASSERT_MSG(heightCrop <= outputHeight,
         "BatchToSpaceLayer: Overall height crop should be less than or equal to the uncropped output height.");
 
-    BOOST_ASSERT_MSG(widthCrop <= outputWidth,
+    ARMNN_ASSERT_MSG(widthCrop <= outputWidth,
         "BatchToSpaceLayer: Overall width crop should be less than or equal to the uncropped output width.");
 
     outputShape[heightIndex] = outputHeight - heightCrop;

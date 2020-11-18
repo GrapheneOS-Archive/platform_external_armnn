@@ -21,8 +21,9 @@
 #include <armnn/Types.hpp>
 
 #include <armnnUtils/TensorUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <boost/variant.hpp>
+#include <mapbox/variant.hpp>
 
 #include <vector>
 #include <cmath>
@@ -30,7 +31,7 @@
 namespace armnn
 {
 
-using TContainer = boost::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
+using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
 INetworkQuantizer* INetworkQuantizer::CreateRaw(INetwork* inputNetwork, const QuantizerOptions& options)
 {
@@ -44,12 +45,12 @@ INetworkQuantizerPtr INetworkQuantizer::Create(INetwork* inputNetwork, const Qua
 
 void INetworkQuantizer::Destroy(INetworkQuantizer *quantizer)
 {
-    delete boost::polymorphic_downcast<NetworkQuantizer*>(quantizer);
+    delete PolymorphicDowncast<NetworkQuantizer*>(quantizer);
 }
 
 void NetworkQuantizer::OverrideInputRange(LayerBindingId layerId, float min, float max)
 {
-    const Graph& graph = boost::polymorphic_downcast<const Network*>(m_InputNetwork)->GetGraph();
+    const Graph& graph = PolymorphicDowncast<const Network*>(m_InputNetwork)->GetGraph();
     auto inputLayers = graph.GetInputLayers();
 
     // Walk the input layers of the graph and override the quantization parameters of the one with the given id
@@ -68,7 +69,7 @@ void NetworkQuantizer::Refine(const InputTensors& inputTensors)
     {
         m_RefineCount = 0;
         m_Ranges.SetDynamicMode(true);
-        const Graph& cGraph = boost::polymorphic_downcast<const Network*>(m_InputNetwork)->GetGraph().TopologicalSort();
+        const Graph& cGraph = PolymorphicDowncast<const Network*>(m_InputNetwork)->GetGraph().TopologicalSort();
 
         // need to insert Debug layers in the DynamicQuantizationVisitor
         Graph& graph = const_cast<Graph&>(cGraph);
@@ -135,7 +136,7 @@ void NetworkQuantizer::Refine(const InputTensors& inputTensors)
 
 INetworkPtr NetworkQuantizer::ExportNetwork()
 {
-    const Graph& graph = boost::polymorphic_downcast<const Network*>(m_InputNetwork)->GetGraph().TopologicalSort();
+    const Graph& graph = PolymorphicDowncast<const Network*>(m_InputNetwork)->GetGraph().TopologicalSort();
 
     // Step 1) Walk the graph and populate default min/max values for
     // intermediate tensors, only if Runtime does not exist (created

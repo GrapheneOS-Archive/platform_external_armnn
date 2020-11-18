@@ -1,21 +1,21 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "Runtime.hpp"
 
 #include <armnn/Version.hpp>
 #include <armnn/BackendRegistry.hpp>
+#include <LabelsAndEventClasses.hpp>
 #include <armnn/Logging.hpp>
+#include <armnn/utility/Timer.hpp>
 
 #include <armnn/backends/IBackendContext.hpp>
 #include <backendsCommon/DynamicBackendUtils.hpp>
-
-#include <ProfilingService.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <iostream>
 
-#include <boost/polymorphic_cast.hpp>
 #include <backends/BackendProfiling.hpp>
 
 using namespace armnn;
@@ -36,7 +36,7 @@ IRuntimePtr IRuntime::Create(const CreationOptions& options)
 
 void IRuntime::Destroy(IRuntime* runtime)
 {
-    delete boost::polymorphic_downcast<Runtime*>(runtime);
+    delete PolymorphicDowncast<Runtime*>(runtime);
 }
 
 int Runtime::GenerateNetworkId()
@@ -73,9 +73,10 @@ Status Runtime::LoadNetwork(NetworkId& networkIdOut,
     }
 
     unique_ptr<LoadedNetwork> loadedNetwork = LoadedNetwork::MakeLoadedNetwork(
-        std::unique_ptr<OptimizedNetwork>(boost::polymorphic_downcast<OptimizedNetwork*>(rawNetwork)),
+        std::unique_ptr<OptimizedNetwork>(PolymorphicDowncast<OptimizedNetwork*>(rawNetwork)),
         errorMessage,
-        networkProperties);
+        networkProperties,
+        m_ProfilingService);
 
     if (!loadedNetwork)
     {
@@ -94,9 +95,9 @@ Status Runtime::LoadNetwork(NetworkId& networkIdOut,
         context.second->AfterLoadNetwork(networkIdOut);
     }
 
-    if (profiling::ProfilingService::Instance().IsProfilingEnabled())
+    if (m_ProfilingService.IsProfilingEnabled())
     {
-        profiling::ProfilingService::Instance().IncrementCounterValue(armnn::profiling::NETWORK_LOADS);
+        m_ProfilingService.IncrementCounterValue(armnn::profiling::NETWORK_LOADS);
     }
 
     return Status::Success;
@@ -117,17 +118,31 @@ Status Runtime::UnloadNetwork(NetworkId networkId)
         return Status::Failure;
     }
 
+    std::unique_ptr<profiling::TimelineUtilityMethods> timelineUtils =
+            profiling::TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
     {
         std::lock_guard<std::mutex> lockGuard(m_Mutex);
 
+        // If timeline recording is on mark the Network end of life
+        if (timelineUtils)
+        {
+            auto search = m_LoadedNetworks.find(networkId);
+            if (search != m_LoadedNetworks.end())
+            {
+                profiling::ProfilingGuid networkGuid = search->second->GetNetworkGuid();
+                timelineUtils->RecordEvent(networkGuid,
+                                           profiling::LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS);
+            }
+        }
         if (m_LoadedNetworks.erase(networkId) == 0)
         {
             ARMNN_LOG(warning) << "WARNING: Runtime::UnloadNetwork(): " << networkId << " not found!";
             return Status::Failure;
         }
-        if (profiling::ProfilingService::Instance().IsProfilingEnabled())
+
+        if (m_ProfilingService.IsProfilingEnabled())
         {
-            profiling::ProfilingService::Instance().IncrementCounterValue(armnn::profiling::NETWORK_UNLOADS);
+            m_ProfilingService.IncrementCounterValue(armnn::profiling::NETWORK_UNLOADS);
         }
     }
 
@@ -152,13 +167,32 @@ const std::shared_ptr<IProfiler> Runtime::GetProfiler(NetworkId networkId) const
     return nullptr;
 }
 
-Runtime::Runtime(const CreationOptions& options)
-    : m_NetworkIdCounter(0)
+void Runtime::ReportStructure() // armnn::profiling::IProfilingService& profilingService as param
 {
+    // No-op for the time being, but this may be useful in future to have the profilingService available
+    // if (profilingService.IsProfilingEnabled()){}
+
+    LoadedNetworks::iterator it = m_LoadedNetworks.begin();
+    while (it != m_LoadedNetworks.end())
+    {
+        auto& loadedNetwork = it->second;
+        loadedNetwork->SendNetworkStructure();
+        // Increment the Iterator to point to next entry
+        it++;
+    }
+}
+
+Runtime::Runtime(const CreationOptions& options)
+    : m_NetworkIdCounter(0),
+      m_ProfilingService(*this)
+{
+    const auto start_time = armnn::GetTimeNow();
     ARMNN_LOG(info) << "ArmNN v" << ARMNN_VERSION << "\n";
 
-    // pass configuration info to the profiling service
-    armnn::profiling::ProfilingService::Instance().ConfigureProfilingService(options.m_ProfilingOptions);
+    if ( options.m_ProfilingOptions.m_TimelineEnabled && !options.m_ProfilingOptions.m_EnableProfiling )
+    {
+        throw RuntimeException("It is not possible to enable timeline reporting without profiling being enabled");
+    }
 
     // Load any available/compatible dynamic backend before the runtime
     // goes through the backend registry
@@ -171,7 +205,7 @@ Runtime::Runtime(const CreationOptions& options)
         try {
             auto factoryFun = BackendRegistryInstance().GetFactory(id);
             auto backend = factoryFun();
-            BOOST_ASSERT(backend.get() != nullptr);
+            ARMNN_ASSERT(backend.get() != nullptr);
 
             auto context = backend->CreateBackendContext(options);
 
@@ -185,7 +219,7 @@ Runtime::Runtime(const CreationOptions& options)
 
             unique_ptr<armnn::profiling::IBackendProfiling> profilingIface =
                 std::make_unique<armnn::profiling::BackendProfiling>(armnn::profiling::BackendProfiling(
-                    options, armnn::profiling::ProfilingService::Instance(), id));
+                    options, m_ProfilingService, id));
 
             // Backends may also provide a profiling context. Ask for it now.
             auto profilingContext = backend->CreateBackendProfilingContext(options, profilingIface);
@@ -193,20 +227,33 @@ Runtime::Runtime(const CreationOptions& options)
             if (profilingContext)
             {
                 // Pass the context onto the profiling service.
-                armnn::profiling::ProfilingService::Instance().AddBackendProfilingContext(id, profilingContext);
+                m_ProfilingService.AddBackendProfilingContext(id, profilingContext);
             }
         }
         catch (const BackendUnavailableException&)
         {
             // Ignore backends which are unavailable
         }
-
     }
+
+    BackendRegistryInstance().SetProfilingService(m_ProfilingService);
+    // pass configuration info to the profiling service
+    m_ProfilingService.ConfigureProfilingService(options.m_ProfilingOptions);
+    if (options.m_ProfilingOptions.m_EnableProfiling)
+    {
+        // try to wait for the profiling service to initialise
+        m_ProfilingService.WaitForProfilingServiceActivation(3000);
+    }
+
     m_DeviceSpec.AddSupportedBackends(supportedBackends);
+
+    ARMNN_LOG(info) << "Initialization time: " << std::setprecision(2)
+                    << std::fixed << armnn::GetTimeDuration(start_time).count() << " ms\n";
 }
 
 Runtime::~Runtime()
 {
+    const auto start_time = armnn::GetTimeNow();
     std::vector<int> networkIDs;
     try
     {
@@ -244,11 +291,14 @@ Runtime::~Runtime()
         }
     }
 
-
     // Clear all dynamic backends.
     DynamicBackendUtils::DeregisterDynamicBackends(m_DeviceSpec.GetDynamicBackends());
     m_DeviceSpec.ClearDynamicBackends();
     m_BackendContexts.clear();
+
+    BackendRegistryInstance().SetProfilingService(armnn::EmptyOptional());
+    ARMNN_LOG(info) << "Shutdown time: " << std::setprecision(2)
+                    << std::fixed << armnn::GetTimeDuration(start_time).count() << " ms\n";
 }
 
 LoadedNetwork* Runtime::GetLoadedNetworkPtr(NetworkId networkId) const
@@ -273,6 +323,9 @@ Status Runtime::EnqueueWorkload(NetworkId networkId,
                                 const OutputTensors& outputTensors)
 {
     LoadedNetwork* loadedNetwork = GetLoadedNetworkPtr(networkId);
+    ProfilerManager::GetInstance().RegisterProfiler(loadedNetwork->GetProfiler().get());
+
+    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "EnqueueWorkload");
 
     static thread_local NetworkId lastId = networkId;
     if (lastId != networkId)

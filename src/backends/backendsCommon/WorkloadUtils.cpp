@@ -6,6 +6,7 @@
 #include <backendsCommon/WorkloadUtils.hpp>
 
 #include <armnn/Utils.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 namespace armnn
 {
@@ -13,8 +14,8 @@ namespace armnn
 armnn::ConstTensor PermuteTensor(const ConstCpuTensorHandle* tensor,
                                  const PermutationVector& permutationVector, void* permuteBuffer)
 {
-    BOOST_ASSERT_MSG(tensor, "Invalid input tensor");
-    BOOST_ASSERT_MSG(permuteBuffer, "Invalid permute buffer");
+    ARMNN_ASSERT_MSG(tensor, "Invalid input tensor");
+    ARMNN_ASSERT_MSG(permuteBuffer, "Invalid permute buffer");
 
     TensorInfo tensorInfo = tensor->GetTensorInfo();
 
@@ -133,8 +134,8 @@ armnn::ConstTensor ConvertWeightTensorFromArmnnToAcl(const ConstCpuTensorHandle*
                                                      DataLayout dataLayout,
                                                      void* permuteBuffer)
 {
-    BOOST_ASSERT_MSG(weightTensor, "Invalid input tensor");
-    BOOST_ASSERT_MSG(permuteBuffer, "Invalid permute buffer");
+    ARMNN_ASSERT_MSG(weightTensor, "Invalid input tensor");
+    ARMNN_ASSERT_MSG(permuteBuffer, "Invalid permute buffer");
 
     auto multiplier    = weightTensor->GetTensorInfo().GetShape()[0];
     auto inputChannels = weightTensor->GetTensorInfo().GetShape()[1];
@@ -192,12 +193,12 @@ armnn::ConstTensor ConvertWeightTensorFromArmnnToAcl(const ConstCpuTensorHandle*
 int32_t ConvertMaskToACLFormat(int32_t mask, int32_t numDim)
 {
     int32_t reversedMask = 0;
-    for (unsigned int i = 0; i < boost::numeric_cast<unsigned int>(numDim); ++i)
+    for (unsigned int i = 0; i < armnn::numeric_cast<unsigned int>(numDim); ++i)
     {
         // Check if bit set in mask for each dimension
         int32_t bit = (mask & 1 << i) != 0;
         // Increment the new mask with the bits reversed
-        reversedMask += (bit << std::max(numDim-(boost::numeric_cast<int>(i)+1), 0));
+        reversedMask += (bit << std::max(numDim-(armnn::numeric_cast<int>(i)+1), 0));
     }
 
     return reversedMask;

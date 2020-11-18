@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #define BOOST_TEST_MODULE UnitTests
@@ -7,8 +7,7 @@
 
 #include "UnitTests.hpp"
 #include <armnn/Logging.hpp>
-
-#include <boost/algorithm/string.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 struct ConfigureLoggingFixture
 {
@@ -26,7 +25,7 @@ BOOST_GLOBAL_FIXTURE(ConfigureLoggingFixture);
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/tee.hpp>
 #include <iostream>
-#include <Windows.h>
+#include <common/include/WindowsWrapper.hpp>
 
 using namespace boost::iostreams;
 using namespace std;
@@ -36,7 +35,7 @@ struct DebugOutputSink : boost::iostreams::sink
     std::streamsize write(const char* s, std::streamsize n)
     {
         // The given string is not null-terminated, so we need to copy it.
-        std::string s2(s, boost::numeric_cast<size_t>(n));
+        std::string s2(s, armnn::numeric_cast<size_t>(n));
         OutputDebugString(s2.c_str());
         return n;
     }
@@ -103,12 +102,12 @@ BOOST_AUTO_TEST_CASE(LoggerTest)
 
     }
 
-    BOOST_CHECK(boost::contains(ss.str(), "Trace: My trace message; -2"));
-    BOOST_CHECK(boost::contains(ss.str(), "Debug: My debug message; -1"));
-    BOOST_CHECK(boost::contains(ss.str(), "Info: My info message; 0"));
-    BOOST_CHECK(boost::contains(ss.str(), "Warning: My warning message; 1"));
-    BOOST_CHECK(boost::contains(ss.str(), "Error: My error message; 2"));
-    BOOST_CHECK(boost::contains(ss.str(), "Fatal: My fatal message; 3"));
+    BOOST_CHECK(ss.str().find("Trace: My trace message; -2") != std::string::npos);
+    BOOST_CHECK(ss.str().find("Debug: My debug message; -1") != std::string::npos);
+    BOOST_CHECK(ss.str().find("Info: My info message; 0") != std::string::npos);
+    BOOST_CHECK(ss.str().find("Warning: My warning message; 1") != std::string::npos);
+    BOOST_CHECK(ss.str().find("Error: My error message; 2") != std::string::npos);
+    BOOST_CHECK(ss.str().find("Fatal: My fatal message; 3") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

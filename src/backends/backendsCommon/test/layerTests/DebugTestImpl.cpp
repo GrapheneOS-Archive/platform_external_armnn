@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -30,7 +30,7 @@ LayerTestResult<T, Dim> DebugTestImpl(
     const float qScale = 1.0f,
     const int32_t qOffset = 0)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     if(armnn::IsQuantizedType<T>())
     {
         inputTensorInfo.SetQuantizationScale(qScale);
@@ -47,11 +47,10 @@ LayerTestResult<T, Dim> DebugTestImpl(
     ret.outputExpected =
         MakeTensor<T, Dim>(outputTensorInfo, armnnUtils::QuantizedVector<T>(outputExpectedData, qScale, qOffset));
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle =
-        workloadFactory.CreateTensorHandle(inputTensorInfo);
-
-    std::unique_ptr<armnn::ITensorHandle> outputHandle =
-        workloadFactory.CreateTensorHandle(outputTensorInfo);
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    ARMNN_NO_DEPRECATE_WARN_END
 
     armnn::WorkloadInfo info;
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
@@ -307,6 +306,34 @@ LayerTestResult<float, 1> Debug1dFloat32Test(
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
     return Debug1dTest<armnn::DataType::Float32>(workloadFactory, memoryManager);
+}
+
+LayerTestResult<armnn::BFloat16, 4> Debug4dBFloat16Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+{
+    return Debug4dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
+}
+
+LayerTestResult<armnn::BFloat16, 3> Debug3dBFloat16Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+{
+    return Debug3dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
+}
+
+LayerTestResult<armnn::BFloat16, 2> Debug2dBFloat16Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+{
+    return Debug2dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
+}
+
+LayerTestResult<armnn::BFloat16, 1> Debug1dBFloat16Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+{
+    return Debug1dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<uint8_t, 4> Debug4dUint8Test(

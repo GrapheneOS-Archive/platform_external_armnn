@@ -1,13 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include <armnn/Logging.hpp>
 #include <backendsCommon/DynamicBackendUtils.hpp>
-
-#include <boost/filesystem.hpp>
-#include <boost/algorithm/string.hpp>
+#include "armnn/utility/StringUtils.hpp"
+#include <Filesystem.hpp>
 
 #include <regex>
 
@@ -16,7 +15,7 @@ namespace armnn
 
 void* DynamicBackendUtils::OpenHandle(const std::string& sharedObjectPath)
 {
-#if defined(__unix__)
+#if defined(__unix__) || defined(__APPLE__)
     if (sharedObjectPath.empty())
     {
         throw RuntimeException("OpenHandle error: shared object path must not be empty");
@@ -25,7 +24,7 @@ void* DynamicBackendUtils::OpenHandle(const std::string& sharedObjectPath)
     void* sharedObjectHandle = dlopen(sharedObjectPath.c_str(), RTLD_LAZY);
     if (!sharedObjectHandle)
     {
-        throw RuntimeException(boost::str(boost::format("OpenHandle error: %1%") % GetDlError()));
+        throw RuntimeException(fmt::format("OpenHandle error: {}", GetDlError()));
     }
 
     return sharedObjectHandle;
@@ -36,7 +35,7 @@ void* DynamicBackendUtils::OpenHandle(const std::string& sharedObjectPath)
 
 void DynamicBackendUtils::CloseHandle(const void* sharedObjectHandle)
 {
-#if defined(__unix__)
+#if defined(__unix__) || defined(__APPLE__)
     if (!sharedObjectHandle)
     {
         return;
@@ -64,7 +63,7 @@ bool DynamicBackendUtils::IsBackendCompatibleImpl(const BackendVersion &backendA
 
 std::string DynamicBackendUtils::GetDlError()
 {
-#if defined(__unix__)
+#if defined(__unix__) || defined(__APPLE__)
     const char* errorMessage = dlerror();
     if (!errorMessage)
     {
@@ -110,11 +109,10 @@ std::vector<std::string> DynamicBackendUtils::GetBackendPathsImpl(const std::str
     }
 
     std::unordered_set<std::string> uniqueBackendPaths;
-    std::vector<std::string> tempBackendPaths;
     std::vector<std::string> validBackendPaths;
 
     // Split the given list of paths
-    boost::split(tempBackendPaths, backendPaths, boost::is_any_of(":"));
+    std::vector<std::string> tempBackendPaths = armnn::stringUtils::StringTokenizer(backendPaths, ":");
 
     for (const std::string& path : tempBackendPaths)
     {
@@ -150,21 +148,21 @@ bool DynamicBackendUtils::IsPathValid(const std::string& path)
         return false;
     }
 
-    boost::filesystem::path boostPath(path);
+    fs::path fsPath(path);
 
-    if (!boost::filesystem::exists(boostPath))
+    if (!fs::exists(fsPath))
     {
         ARMNN_LOG(warning) << "WARNING: The given backend path \"" << path << "\" does not exist";
         return false;
     }
 
-    if (!boost::filesystem::is_directory(boostPath))
+    if (!fs::is_directory(fsPath))
     {
         ARMNN_LOG(warning) << "WARNING: The given backend path \"" << path << "\" is not a directory";
         return false;
     }
 
-    if (!boostPath.is_absolute())
+    if (!fsPath.is_absolute())
     {
         ARMNN_LOG(warning) << "WARNING: The given backend path \"" << path << "\" is not absolute";
         return false;
@@ -180,7 +178,7 @@ std::vector<std::string> DynamicBackendUtils::GetSharedObjects(const std::vector
 
     for (const std::string& backendPath : backendPaths)
     {
-        using namespace boost::filesystem;
+        using namespace fs;
 
         // Check if the path is valid. In case of error, IsValidPath will log an error message
         if (!IsPathValid(backendPath))

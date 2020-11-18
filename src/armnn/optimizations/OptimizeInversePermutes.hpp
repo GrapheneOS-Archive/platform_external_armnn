@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -6,13 +6,15 @@
 
 #include "Optimization.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
 namespace optimizations
 {
 
+template <typename PermuteType>
 class OptimizeInversePermutesImpl
 {
 public:
@@ -20,11 +22,11 @@ public:
     /// Bypasses both layers for that connection if one is the inverse of the other.
     void Run(Graph& graph, InputSlot& connection) const
     {
-        boost::ignore_unused(graph);
+        IgnoreUnused(graph);
         Layer& base = connection.GetConnectedOutputSlot()->GetOwningLayer();
-        auto child = boost::polymorphic_downcast<PermuteLayer*>(&connection.GetOwningLayer());
+        auto child = PolymorphicDowncast<PermuteType*>(&connection.GetOwningLayer());
 
-        if (child->IsInverse(*boost::polymorphic_downcast<PermuteLayer*>(&base)))
+        if (child->IsInverse(*PolymorphicDowncast<PermuteType*>(&base)))
         {
             // Bypass both layers. Child will be removed as it's left unconnected.
             // Base layer will be removed if left unconnected.
@@ -37,7 +39,10 @@ protected:
     ~OptimizeInversePermutesImpl() = default;
 };
 
-using OptimizeInversePermutes = OptimizeForConnection<PermuteLayer, PermuteLayer, OptimizeInversePermutesImpl>;
+using OptimizeInversePermutes = OptimizeForConnection<PermuteLayer, PermuteLayer,
+    OptimizeInversePermutesImpl<PermuteLayer>>;
+using OptimizeInverseTransposes = OptimizeForConnection<TransposeLayer, TransposeLayer,
+    OptimizeInversePermutesImpl<TransposeLayer>>;
 
 } // namespace optimizations
 } // namespace armnn

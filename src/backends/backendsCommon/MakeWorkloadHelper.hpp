@@ -31,9 +31,9 @@ struct MakeWorkloadForType<NullWorkload>
                                               const WorkloadInfo& info,
                                               Args&&... args)
     {
-        boost::ignore_unused(descriptor);
-        boost::ignore_unused(info);
-        boost::ignore_unused(args...);
+        IgnoreUnused(descriptor);
+        IgnoreUnused(info);
+        IgnoreUnused(args...);
         return nullptr;
     }
 };
@@ -52,6 +52,7 @@ std::unique_ptr<IWorkload> MakeWorkloadHelper(const QueueDescriptorType& descrip
 
     switch (dataType)
     {
+
         case DataType::Float16:
             return MakeWorkloadForType<Float16Workload>::Func(descriptor, info, std::forward<Args>(args)...);
         case DataType::Float32:
@@ -65,10 +66,11 @@ std::unique_ptr<IWorkload> MakeWorkloadHelper(const QueueDescriptorType& descrip
             return MakeWorkloadForType<Int32Workload>::Func(descriptor, info, std::forward<Args>(args)...);
         case DataType::Boolean:
             return MakeWorkloadForType<BooleanWorkload>::Func(descriptor, info, std::forward<Args>(args)...);
+        case DataType::BFloat16:
         case DataType::QSymmS16:
             return nullptr;
         default:
-            BOOST_ASSERT_MSG(false, "Unknown DataType.");
+            ARMNN_ASSERT_MSG(false, "Unknown DataType.");
             return nullptr;
     }
 }

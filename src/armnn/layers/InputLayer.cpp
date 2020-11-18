@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "InputLayer.hpp"
@@ -19,7 +19,7 @@ InputLayer::InputLayer(LayerBindingId id, const char* name)
 
 std::unique_ptr<IWorkload> InputLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    boost::ignore_unused(factory);
+    IgnoreUnused(factory);
     return nullptr;
 }
 
@@ -31,7 +31,7 @@ InputLayer* InputLayer::Clone(Graph& graph) const
 void InputLayer::ValidateTensorShapesFromInputs()
 {
     //The input layer should already have it's inputs set during graph building phase in the driver/parser.
-    ConditionalThrow<LayerValidationException>(GetOutputSlot(0).IsTensorInfoSet(),
+    ConditionalThrow<LayerValidationException>(GetOutputHandler(0).IsTensorInfoSet(),
                                                "InputLayer should already have the TensorInfo set.");
 }
 

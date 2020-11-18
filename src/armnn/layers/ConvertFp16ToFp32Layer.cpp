@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,6 +22,8 @@ ConvertFp16ToFp32Layer::ConvertFp16ToFp32Layer(const char* name)
 std::unique_ptr<IWorkload> ConvertFp16ToFp32Layer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     ConvertFp16ToFp32QueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateConvertFp16ToFp32(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -34,21 +36,22 @@ void ConvertFp16ToFp32Layer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "ConvertFp16ToFp32Layer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ConvertFp16ToFp32Layer");
 }
 
 void ConvertFp16ToFp32Layer::Accept(ILayerVisitor& visitor) const
 {
     // these conversion layers are only inserted by the
     // optimizer and so will never be in an input graph.
-    boost::ignore_unused(visitor);
+    IgnoreUnused(visitor);
     throw armnn::Exception("ConvertFp16ToFp32Layer should never appear in an input graph");
 }
 

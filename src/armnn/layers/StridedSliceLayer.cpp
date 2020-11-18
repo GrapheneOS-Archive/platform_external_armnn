@@ -1,15 +1,15 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "StridedSliceLayer.hpp"
 
 #include "LayerCloneBase.hpp"
 
+#include <armnn/utility/NumericCast.hpp>
+
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
-
-#include <boost/numeric/conversion/cast.hpp>
 
 namespace armnn
 {
@@ -34,6 +34,8 @@ std::unique_ptr<IWorkload> StridedSliceLayer::CreateWorkload(const IWorkloadFact
     descriptor.m_Parameters.m_NewAxisMask    = m_Param.m_NewAxisMask;
     descriptor.m_Parameters.m_ShrinkAxisMask = m_Param.m_ShrinkAxisMask;
 
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateStridedSlice(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -45,46 +47,68 @@ StridedSliceLayer* StridedSliceLayer::Clone(Graph& graph) const
 std::vector<TensorShape> StridedSliceLayer::InferOutputShapes(
     const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 1);
+    ARMNN_ASSERT(inputShapes.size() == 1);
 
     TensorShape inputShape = inputShapes[0];
     std::vector<unsigned int> outputShape;
+    unsigned int amountDimShrunk{0};
 
     for (unsigned int i = 0; i < inputShape.GetNumDimensions(); i++)
     {
-        if (m_Param.m_ShrinkAxisMask & (1 << i))
-        {
-            continue;
-        }
-
         int stride = m_Param.m_Stride[i];
         int start = m_Param.GetStartForAxis(inputShape, i);
         int stop = m_Param.GetStopForAxis(inputShape, i, start);
+
+        if (m_Param.m_ShrinkAxisMask & (1 << i))
+        {
+            amountDimShrunk+=1;
+
+            // If the difference between the start point and the end point of the slice on an axis being shrunk
+            // is greater than 1 then throw an error as the output will not be large enough to hold the slice
+            if (((m_Param.m_Begin[i] - m_Param.m_End[i]) > 1) || ((m_Param.m_Begin[i] - m_Param.m_End[i]) < -1))
+            {
+                throw LayerValidationException(
+                    "StridedSlice: Attempting to take a larger slice than can fit in inferred output");
+            }
+
+            if (stride < 0)
+            {
+                throw LayerValidationException(
+                    "StridedSlice: Stride can not be negative with Shrink Axis Mask set.");
+            }
+            continue;
+        }
 
         int newSize = stride > 0 ? ((stop - start) + stride - 1) / stride :
                                    ((start - stop) - stride - 1) / -stride;
 
         newSize = std::max(0, newSize);
 
-        outputShape.push_back(boost::numeric_cast<unsigned int>(newSize));
+        outputShape.push_back(armnn::numeric_cast<unsigned int>(newSize));
+    }
+
+    if (outputShape.size() == 0 && (inputShape.GetNumDimensions() - amountDimShrunk) == 0)
+    {
+        outputShape.push_back(1);
     }
 
     return std::vector<TensorShape>({
-        TensorShape(boost::numeric_cast<unsigned int>(outputShape.size()), &outputShape[0]) });
+        TensorShape(armnn::numeric_cast<unsigned int>(outputShape.size()), &outputShape[0]) });
 }
 
 void StridedSliceLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape()});
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-                    "StridedSlice: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-                    GetOutputSlot(0).GetTensorInfo().GetShape(),
-                    inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "StridedSliceLayer");
 }
 
 void StridedSliceLayer::Accept(ILayerVisitor& visitor) const

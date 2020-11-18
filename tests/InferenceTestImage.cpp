@@ -4,10 +4,11 @@
 //
 #include "InferenceTestImage.hpp"
 
-#include <boost/core/ignore_unused.hpp>
-#include <boost/format.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+
+#include <fmt/format.h>
 
 #include <array>
 
@@ -32,8 +33,7 @@ unsigned int GetImageChannelIndex(ImageChannelLayout channelLayout, ImageChannel
     case ImageChannelLayout::Bgr:
         return 2u - static_cast<unsigned int>(channel);
     default:
-        throw UnknownImageChannelLayout(boost::str(boost::format("Unknown layout %1%")
-            % static_cast<int>(channelLayout)));
+        throw UnknownImageChannelLayout(fmt::format("Unknown layout {}", static_cast<int>(channelLayout)));
     }
 }
 
@@ -71,8 +71,8 @@ std::vector<float> ResizeBilinearAndNormalize(const InferenceTestImage & image,
 
     // How much to scale pixel coordinates in the output image to get the corresponding pixel coordinates
     // in the input image.
-    const float scaleY = boost::numeric_cast<float>(inputHeight) / boost::numeric_cast<float>(outputHeight);
-    const float scaleX = boost::numeric_cast<float>(inputWidth) / boost::numeric_cast<float>(outputWidth);
+    const float scaleY = armnn::numeric_cast<float>(inputHeight) / armnn::numeric_cast<float>(outputHeight);
+    const float scaleX = armnn::numeric_cast<float>(inputWidth) / armnn::numeric_cast<float>(outputWidth);
 
     uint8_t rgb_x0y0[3];
     uint8_t rgb_x1y0[3];
@@ -82,11 +82,11 @@ std::vector<float> ResizeBilinearAndNormalize(const InferenceTestImage & image,
     for (unsigned int y = 0; y < outputHeight; ++y)
     {
         // Corresponding real-valued height coordinate in input image.
-        const float iy = boost::numeric_cast<float>(y) * scaleY;
+        const float iy = armnn::numeric_cast<float>(y) * scaleY;
 
         // Discrete height coordinate of top-left texel (in the 2x2 texel area used for interpolation).
         const float fiy = floorf(iy);
-        const unsigned int y0 = boost::numeric_cast<unsigned int>(fiy);
+        const unsigned int y0 = armnn::numeric_cast<unsigned int>(fiy);
 
         // Interpolation weight (range [0,1])
         const float yw = iy - fiy;
@@ -94,9 +94,9 @@ std::vector<float> ResizeBilinearAndNormalize(const InferenceTestImage & image,
         for (unsigned int x = 0; x < outputWidth; ++x)
         {
             // Real-valued and discrete width coordinates in input image.
-            const float ix = boost::numeric_cast<float>(x) * scaleX;
+            const float ix = armnn::numeric_cast<float>(x) * scaleX;
             const float fix = floorf(ix);
-            const unsigned int x0 = boost::numeric_cast<unsigned int>(fix);
+            const unsigned int x0 = armnn::numeric_cast<unsigned int>(fix);
 
             // Interpolation weight (range [0,1]).
             const float xw = ix - fix;
@@ -138,17 +138,17 @@ InferenceTestImage::InferenceTestImage(char const* filePath)
 
     if (stbData == nullptr)
     {
-        throw InferenceTestImageLoadFailed(boost::str(boost::format("Could not load the image at %1%") % filePath));
+        throw InferenceTestImageLoadFailed(fmt::format("Could not load the image at {}", filePath));
     }
 
     if (width == 0 || height == 0)
     {
-        throw InferenceTestImageLoadFailed(boost::str(boost::format("Could not load empty image at %1%") % filePath));
+        throw InferenceTestImageLoadFailed(fmt::format("Could not load empty image at {}", filePath));
     }
 
-    m_Width = boost::numeric_cast<unsigned int>(width);
-    m_Height = boost::numeric_cast<unsigned int>(height);
-    m_NumChannels = boost::numeric_cast<unsigned int>(channels);
+    m_Width = armnn::numeric_cast<unsigned int>(width);
+    m_Height = armnn::numeric_cast<unsigned int>(height);
+    m_NumChannels = armnn::numeric_cast<unsigned int>(channels);
 
     const unsigned int sizeInBytes = GetSizeInBytes();
     m_Data.resize(sizeInBytes);
@@ -159,13 +159,13 @@ std::tuple<uint8_t, uint8_t, uint8_t> InferenceTestImage::GetPixelAs3Channels(un
 {
     if (x >= m_Width || y >= m_Height)
     {
-        throw InferenceTestImageOutOfBoundsAccess(boost::str(boost::format("Attempted out of bounds image access. "
-            "Requested (%1%, %2%). Maximum valid coordinates (%3%, %4%).") % x % y % (m_Width - 1) % (m_Height - 1)));
+        throw InferenceTestImageOutOfBoundsAccess(fmt::format("Attempted out of bounds image access. "
+            "Requested ({0}, {1}). Maximum valid coordinates ({2}, {3}).", x, y, (m_Width - 1), (m_Height - 1)));
     }
 
     const unsigned int pixelOffset = x * GetNumChannels() + y * GetWidth() * GetNumChannels();
     const uint8_t* const pixelData = m_Data.data() + pixelOffset;
-    BOOST_ASSERT(pixelData <= (m_Data.data() + GetSizeInBytes()));
+    ARMNN_ASSERT(pixelData <= (m_Data.data() + GetSizeInBytes()));
 
     std::array<uint8_t, 3> outPixelData;
     outPixelData.fill(0);
@@ -185,11 +185,11 @@ void InferenceTestImage::StbResize(InferenceTestImage& im, const unsigned int ne
     std::vector<uint8_t> newData;
     newData.resize(newWidth * newHeight * im.GetNumChannels() * im.GetSingleElementSizeInBytes());
 
-    // boost::numeric_cast<>() is used for user-provided data (protecting about overflows).
+    // armnn::numeric_cast<>() is used for user-provided data (protecting about overflows).
     // static_cast<> is ok for internal data (assumes that, when internal data was originally provided by a user,
-    // a boost::numeric_cast<>() handled the conversion).
-    const int nW = boost::numeric_cast<int>(newWidth);
-    const int nH = boost::numeric_cast<int>(newHeight);
+    // a armnn::numeric_cast<>() handled the conversion).
+    const int nW = armnn::numeric_cast<int>(newWidth);
+    const int nH = armnn::numeric_cast<int>(newHeight);
 
     const int w = static_cast<int>(im.GetWidth());
     const int h = static_cast<int>(im.GetHeight());
@@ -217,8 +217,8 @@ std::vector<float> InferenceTestImage::Resize(unsigned int newWidth,
     std::vector<float> out;
     if (newWidth == 0 || newHeight == 0)
     {
-        throw InferenceTestImageResizeFailed(boost::str(boost::format("None of the dimensions passed to a resize "
-            "operation can be zero. Requested width: %1%. Requested height: %2%.") % newWidth % newHeight));
+        throw InferenceTestImageResizeFailed(fmt::format("None of the dimensions passed to a resize "
+            "operation can be zero. Requested width: {0}. Requested height: {1}.", newWidth, newHeight));
     }
 
     switch (meth) {
@@ -233,9 +233,9 @@ std::vector<float> InferenceTestImage::Resize(unsigned int newWidth,
             break;
         }
         default:
-            throw InferenceTestImageResizeFailed(boost::str(
-                boost::format("Unknown resizing method asked ArmNN only supports {STB, BilinearAndNormalized} %1%")
-                              % location.AsString()));
+            throw InferenceTestImageResizeFailed(fmt::format("Unknown resizing method asked ArmNN only"
+                                                             " supports {STB, BilinearAndNormalized} {}",
+                                                             location.AsString()));
     }
     return out;
 }
@@ -265,14 +265,13 @@ void InferenceTestImage::Write(WriteFormat format, const char* filePath) const
             break;
         }
     default:
-        throw InferenceTestImageWriteFailed(boost::str(boost::format("Unknown format %1%")
-            % static_cast<int>(format)));
+        throw InferenceTestImageWriteFailed(fmt::format("Unknown format {}", static_cast<int>(format)));
     }
 
     if (res == 0)
     {
-        throw InferenceTestImageWriteFailed(boost::str(boost::format("An error occurred when writing to file %1%")
-            % filePath));
+        throw InferenceTestImageWriteFailed(fmt::format("An error occurred when writing to file {}",
+                                                        filePath));
     }
 }
 
@@ -314,7 +313,7 @@ std::vector<float> GetImageDataInArmNnLayoutAsNormalizedFloats(ImageChannelLayou
     return GetImageDataInArmNnLayoutAsFloats(layout, image,
         [](ImageChannel channel, float value)
         {
-            boost::ignore_unused(channel);
+            armnn::IgnoreUnused(channel);
             return value / 255.f;
         });
 }

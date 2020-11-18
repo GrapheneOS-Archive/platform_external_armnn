@@ -1,17 +1,14 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "InferenceTest.hpp"
 
+#include <armnn/utility/Assert.hpp>
+#include <Filesystem.hpp>
+
 #include "../src/armnn/Profiling.hpp"
-#include <boost/algorithm/string.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-#include <boost/program_options.hpp>
-#include <boost/filesystem/operations.hpp>
+#include <cxxopts/cxxopts.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -31,53 +28,51 @@ namespace test
 bool ParseCommandLine(int argc, char** argv, IInferenceTestCaseProvider& testCaseProvider,
     InferenceTestOptions& outParams)
 {
-    namespace po = boost::program_options;
-
-    po::options_description desc("Options");
+    cxxopts::Options options("InferenceTest", "Inference iteration parameters");
 
     try
     {
         // Adds generic options needed for all inference tests.
-        desc.add_options()
-            ("help", "Display help messages")
-            ("iterations,i", po::value<unsigned int>(&outParams.m_IterationCount)->default_value(0),
-                "Sets the number number of inferences to perform. If unset, a default number will be ran.")
-            ("inference-times-file", po::value<std::string>(&outParams.m_InferenceTimesFile)->default_value(""),
-                "If non-empty, each individual inference time will be recorded and output to this file")
-            ("event-based-profiling,e", po::value<bool>(&outParams.m_EnableProfiling)->default_value(0),
-                "Enables built in profiler. If unset, defaults to off.");
+        options
+            .allow_unrecognised_options()
+            .add_options()
+                ("h,help", "Display help messages")
+                ("i,iterations", "Sets the number of inferences to perform. If unset, will only be run once.",
+                 cxxopts::value<unsigned int>(outParams.m_IterationCount)->default_value("0"))
+                ("inference-times-file",
+                 "If non-empty, each individual inference time will be recorded and output to this file",
+                 cxxopts::value<std::string>(outParams.m_InferenceTimesFile)->default_value(""))
+                ("e,event-based-profiling", "Enables built in profiler. If unset, defaults to off.",
+                 cxxopts::value<bool>(outParams.m_EnableProfiling)->default_value("0"));
+
+        std::vector<std::string> required; //to be passed as reference to derived inference tests
 
         // Adds options specific to the ITestCaseProvider.
-        testCaseProvider.AddCommandLineOptions(desc);
+        testCaseProvider.AddCommandLineOptions(options, required);
+
+        auto result = options.parse(argc, argv);
+
+        if (result.count("help"))
+        {
+            std::cout << options.help() << std::endl;
+            return false;
+        }
+
+        CheckRequiredOptions(result, required);
+
+    }
+    catch (const cxxopts::OptionException& e)
+    {
+        std::cerr << e.what() << std::endl << options.help() << std::endl;
+        return false;
     }
     catch (const std::exception& e)
     {
         // Coverity points out that default_value(...) can throw a bad_lexical_cast,
         // and that desc.add_options() can throw boost::io::too_few_args.
         // They really won't in any of these cases.
-        BOOST_ASSERT_MSG(false, "Caught unexpected exception");
+        ARMNN_ASSERT_MSG(false, "Caught unexpected exception");
         std::cerr << "Fatal internal error: " << e.what() << std::endl;
-        return false;
-    }
-
-    po::variables_map vm;
-
-    try
-    {
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-
-        if (vm.count("help"))
-        {
-            std::cout << desc << std::endl;
-            return false;
-        }
-
-        po::notify(vm);
-    }
-    catch (po::error& e)
-    {
-        std::cerr << e.what() << std::endl << std::endl;
-        std::cerr << desc << std::endl;
         return false;
     }
 
@@ -102,13 +97,13 @@ bool ValidateDirectory(std::string& dir)
         dir += "/";
     }
 
-    if (!boost::filesystem::exists(dir))
+    if (!fs::exists(dir))
     {
         std::cerr << "Given directory " << dir << " does not exist" << std::endl;
         return false;
     }
 
-    if (!boost::filesystem::is_directory(dir))
+    if (!fs::is_directory(dir))
     {
         std::cerr << "Given directory [" << dir << "] is not a directory" << std::endl;
         return false;
@@ -228,7 +223,7 @@ bool InferenceTest(const InferenceTestOptions& params,
             success = false;
             break;
         default:
-            BOOST_ASSERT_MSG(false, "Unexpected TestCaseResult");
+            ARMNN_ASSERT_MSG(false, "Unexpected TestCaseResult");
             return false;
         }
     }

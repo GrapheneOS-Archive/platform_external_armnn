@@ -4,9 +4,12 @@
 //
 
 #include "Network.hpp"
+#include "NetworkQuantizerUtils.hpp"
 #include "QuantizerVisitor.hpp"
 #include "StaticRangeVisitor.hpp"
-#include "NetworkQuantizerUtils.hpp"
+
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -24,15 +27,15 @@ QuantizerVisitor::QuantizerVisitor(const RangeTracker& rangeTracker,
 void QuantizerVisitor::SetQuantizedInputConnections(const IConnectableLayer* srcLayer,
                                                     IConnectableLayer* quantizedLayer)
 {
-    BOOST_ASSERT(srcLayer);
+    ARMNN_ASSERT(srcLayer);
     for (unsigned int i = 0; i < srcLayer->GetNumInputSlots(); i++)
     {
         const IInputSlot& srcInputSlot = srcLayer->GetInputSlot(i);
-        const InputSlot* inputSlot = boost::polymorphic_downcast<const InputSlot*>(&srcInputSlot);
-        BOOST_ASSERT(inputSlot);
+        const InputSlot* inputSlot = PolymorphicDowncast<const InputSlot*>(&srcInputSlot);
+        ARMNN_ASSERT(inputSlot);
         const OutputSlot* outputSlot = inputSlot->GetConnectedOutputSlot();
 
-        BOOST_ASSERT(outputSlot);
+        ARMNN_ASSERT(outputSlot);
         unsigned int slotIdx = outputSlot->CalculateIndexOnOwner();
         Layer& layerToFind = outputSlot->GetOwningLayer();
 
@@ -40,7 +43,7 @@ void QuantizerVisitor::SetQuantizedInputConnections(const IConnectableLayer* src
         if (found == m_OriginalToQuantizedGuidMap.end())
         {
             // Error in graph traversal order
-            BOOST_ASSERT_MSG(false, "Error in graph traversal");
+            ARMNN_ASSERT_MSG(false, "Error in graph traversal");
             return;
         }
 
@@ -68,13 +71,13 @@ ConstTensor QuantizerVisitor::CreateQuantizedBias(const IConnectableLayer* srcLa
                                                   const Optional<ConstTensor>& biases,
                                                   std::vector<int32_t>& backing)
 {
-    BOOST_ASSERT(srcLayer);
+    ARMNN_ASSERT(srcLayer);
     const IInputSlot& srcInputSlot = srcLayer->GetInputSlot(0);
-    auto inputSlot = boost::polymorphic_downcast<const InputSlot*>(&srcInputSlot);
-    BOOST_ASSERT(inputSlot);
+    auto inputSlot = PolymorphicDowncast<const InputSlot*>(&srcInputSlot);
+    ARMNN_ASSERT(inputSlot);
     const OutputSlot* outputSlot = inputSlot->GetConnectedOutputSlot();
 
-    BOOST_ASSERT(outputSlot);
+    ARMNN_ASSERT(outputSlot);
     unsigned int slotIdx = outputSlot->CalculateIndexOnOwner();
     Layer& layerToFind = outputSlot->GetOwningLayer();
 
@@ -82,7 +85,7 @@ ConstTensor QuantizerVisitor::CreateQuantizedBias(const IConnectableLayer* srcLa
     if (found == m_OriginalToQuantizedGuidMap.end())
     {
         // Error in graph traversal order
-        BOOST_ASSERT_MSG(false, "Error in graph traversal");
+        ARMNN_ASSERT_MSG(false, "Error in graph traversal");
         return biases.value();
     }
 
@@ -101,7 +104,7 @@ ConstTensor QuantizerVisitor::CreateQuantizedBias(const IConnectableLayer* srcLa
     for (size_t i = 0; i < backing.size(); ++i)
     {
         float fp32Value = static_cast<const float*>(biases.value().GetMemoryArea())[i];
-        backing[i] = boost::numeric_cast<int32_t>(fp32Value * ( 1 / scale ));
+        backing[i] = armnn::numeric_cast<int32_t>(fp32Value * ( 1 / scale ));
     }
 
     return ConstTensor(qInfo, backing);
@@ -278,6 +281,15 @@ void QuantizerVisitor::VisitElementwiseUnaryLayer(const IConnectableLayer* layer
                                                   const char* name)
 {
     IConnectableLayer* newLayer = m_QuantizedNetwork->AddElementwiseUnaryLayer(elementwiseUnaryDescriptor, name);
+    RecordLayer(layer, newLayer);
+    SetQuantizedInputConnections(layer, newLayer);
+}
+
+void QuantizerVisitor::VisitFillLayer(const IConnectableLayer* layer,
+                                      const FillDescriptor& desc,
+                                      const char* name)
+{
+    IConnectableLayer* newLayer = m_QuantizedNetwork->AddFillLayer(desc, name);
     RecordLayer(layer, newLayer);
     SetQuantizedInputConnections(layer, newLayer);
 }
@@ -557,6 +569,15 @@ void QuantizerVisitor::VisitTransposeConvolution2dLayer(const IConnectableLayer*
                                                                                      optionalQBiases,
                                                                                      name);
 
+    RecordLayer(layer, newLayer);
+    SetQuantizedInputConnections(layer, newLayer);
+}
+
+void QuantizerVisitor::VisitTransposeLayer(const IConnectableLayer* layer,
+                                           const TransposeDescriptor& transposeDescriptor,
+                                           const char* name)
+{
+    IConnectableLayer* newLayer = m_QuantizedNetwork->AddTransposeLayer(transposeDescriptor, name);
     RecordLayer(layer, newLayer);
     SetQuantizedInputConnections(layer, newLayer);
 }

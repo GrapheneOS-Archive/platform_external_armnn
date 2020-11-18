@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -11,15 +11,15 @@
 #include <armnn/TensorFwd.hpp>
 #include <armnn/NetworkFwd.hpp>
 #include <armnn/Exceptions.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
+#include <armnn/utility/TransformIterator.hpp>
 
 #include <list>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-#include <boost/assert.hpp>
-#include <boost/iterator/transform_iterator.hpp>
 
 namespace armnn
 {
@@ -32,7 +32,7 @@ public:
     template <typename LayerType>
     static LayerType* PtrCast(Layer* const layer)
     {
-        return boost::polymorphic_downcast<LayerType*>(layer);
+        return PolymorphicDowncast<LayerType*>(layer);
     }
 
     template <typename Func>
@@ -50,9 +50,9 @@ public:
     using Iterator = LayerList::const_iterator; // Const so pointers in the list can't be modified externally.
     using IteratorDifference = Iterator::difference_type;
 
-    using ConstIterator        = boost::transform_iterator<decltype(&PtrCast<const Layer>),       Iterator>;
-    using ConstIteratorInputs  = boost::transform_iterator<decltype(&PtrCast<const InputLayer>),  Iterator>;
-    using ConstIteratorOutputs = boost::transform_iterator<decltype(&PtrCast<const OutputLayer>), Iterator>;
+    using ConstIterator        = TransformIterator<decltype(&PtrCast<const Layer>),       Iterator>;
+    using ConstIteratorInputs  = TransformIterator<decltype(&PtrCast<const InputLayer>),  Iterator>;
+    using ConstIteratorOutputs = TransformIterator<decltype(&PtrCast<const OutputLayer>), Iterator>;
 
     /// Wrapper class returned by Graph::GetInputLayers()
     struct InputLayersAccessor
@@ -92,7 +92,11 @@ public:
         const Graph& m_Graph;
     };
 
-    Graph() : m_LayersInOrder(true) {}
+    Graph(bool shapeInferenceMethod = false)
+        : m_LayersInOrder(true)
+        , m_ShapeInferenceMethod(shapeInferenceMethod ? ShapeInferenceMethod::InferAndValidate :
+                                                        ShapeInferenceMethod::ValidateOnly)
+        {}
 
     Graph(const Graph& other);
 
@@ -115,8 +119,8 @@ public:
             otherLayer->Reparent(*this, m_Layers.end());
         });
 
-        BOOST_ASSERT(other.m_PosInGraphMap.empty());
-        BOOST_ASSERT(other.m_Layers.empty());
+        ARMNN_ASSERT(other.m_PosInGraphMap.empty());
+        ARMNN_ASSERT(other.m_Layers.empty());
 
         return *this;
     }
@@ -259,6 +263,7 @@ private:
     mutable bool m_LayersInOrder;
 
     std::map<const GraphEvent, std::list<IGraphObservable*>> m_Views;
+    ShapeInferenceMethod m_ShapeInferenceMethod;
 };
 
 /// Common base class for layers in the graph.
@@ -297,8 +302,8 @@ private:
         graph.m_Layers.erase(layerIt);
 
         const size_t numErased = graph.m_PosInGraphMap.erase(this);
-        boost::ignore_unused(numErased);
-        BOOST_ASSERT(numErased == 1);
+        IgnoreUnused(numErased);
+        ARMNN_ASSERT(numErased == 1);
     }
 
 protected:
@@ -355,8 +360,8 @@ public:
     ~LayerInGraph() override
     {
         const size_t numErased = m_Graph->m_InputIds.erase(GetBindingId());
-        boost::ignore_unused(numErased);
-        BOOST_ASSERT(numErased == 1);
+        IgnoreUnused(numErased);
+        ARMNN_ASSERT(numErased == 1);
     }
 };
 
@@ -381,15 +386,15 @@ public:
     ~LayerInGraph() override
     {
         const size_t numErased = m_Graph->m_OutputIds.erase(GetBindingId());
-        boost::ignore_unused(numErased);
-        BOOST_ASSERT(numErased == 1);
+        IgnoreUnused(numErased);
+        ARMNN_ASSERT(numErased == 1);
     }
 };
 
 inline Graph::Iterator Graph::GetPosInGraph(Layer& layer)
 {
     auto it = m_PosInGraphMap.find(&layer);
-    BOOST_ASSERT(it != m_PosInGraphMap.end());
+    ARMNN_ASSERT(it != m_PosInGraphMap.end());
     return it->second;
 }
 
@@ -399,6 +404,8 @@ inline LayerT* Graph::AddLayer(Args&&... args)
     m_LayersInOrder = m_LayersInOrder &&
         ((LayerEnumOf<LayerT>() == LayerType::Input) || (LayerEnumOf<LayerT>() == LayerType::Output));
     LayerT* const layer = new LayerInGraph<LayerT>(*this, std::forward<Args>(args)...);
+
+    layer->SetShapeInferenceMethod(m_ShapeInferenceMethod);
 
     NotifyObservables(GraphEvent::LayerAdded, layer);
 
@@ -429,7 +436,7 @@ inline LayerT* Graph::InsertNewLayer(OutputSlot& insertAfter, Args&&... args)
     const Iterator pos = std::next(GetPosInGraph(owningLayer));
     LayerT* const layer = new LayerInGraph<LayerT>(*this, pos, std::forward<Args>(args)...);
 
-    BOOST_ASSERT(layer->GetNumInputSlots() == 1);
+    ARMNN_ASSERT(layer->GetNumInputSlots() == 1);
 
     insertAfter.MoveAllConnections(layer->GetOutputSlot());
     insertAfter.Connect(layer->GetInputSlot(0));
@@ -449,7 +456,7 @@ inline void Graph::EraseLayer(Iterator pos)
 template <typename LayerT>
 inline void Graph::EraseLayer(LayerT*& layer)
 {
-    BOOST_ASSERT(layer != nullptr);
+    ARMNN_ASSERT(layer != nullptr);
     EraseLayer(GetPosInGraph(*layer));
     layer = nullptr;
 }

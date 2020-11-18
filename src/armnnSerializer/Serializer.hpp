@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -121,6 +121,10 @@ public:
     void VisitEqualLayer(const armnn::IConnectableLayer* layer,
                          const char* name = nullptr) override;
 
+    void VisitFillLayer(const armnn::IConnectableLayer* layer,
+                        const armnn::FillDescriptor& fillDescriptor,
+                        const char* name = nullptr) override;
+
     void VisitFloorLayer(const armnn::IConnectableLayer *layer,
                          const char *name = nullptr) override;
 
@@ -130,7 +134,12 @@ public:
                                   const armnn::Optional<armnn::ConstTensor>& biases,
                                   const char* name = nullptr) override;
 
+    ARMNN_DEPRECATED_MSG("Use VisitGatherLayer with descriptor instead")
     void VisitGatherLayer(const armnn::IConnectableLayer* layer,
+                          const char* name = nullptr) override;
+
+    void VisitGatherLayer(const armnn::IConnectableLayer* layer,
+                          const armnn::GatherDescriptor& gatherDescriptor,
                           const char* name = nullptr) override;
 
     ARMNN_DEPRECATED_MSG("Use VisitComparisonLayer instead")
@@ -148,6 +157,10 @@ public:
     void VisitL2NormalizationLayer(const armnn::IConnectableLayer* layer,
                                    const armnn::L2NormalizationDescriptor& l2NormalizationDescriptor,
                                    const char* name = nullptr) override;
+
+    void VisitLogicalBinaryLayer(const armnn::IConnectableLayer* layer,
+                                 const armnn::LogicalBinaryDescriptor& descriptor,
+                                 const char* name = nullptr) override;
 
     void VisitLogSoftmaxLayer(const armnn::IConnectableLayer* layer,
                               const armnn::LogSoftmaxDescriptor& logSoftmaxDescriptor,
@@ -201,9 +214,17 @@ public:
     void VisitQuantizeLayer(const armnn::IConnectableLayer* layer,
                             const char* name = nullptr) override;
 
+    void VisitQLstmLayer(const armnn::IConnectableLayer* layer,
+                         const armnn::QLstmDescriptor& descriptor,
+                         const armnn::LstmInputParams& params,
+                         const char* name = nullptr) override;
+
     void VisitQuantizedLstmLayer(const armnn::IConnectableLayer* layer,
                                  const armnn::QuantizedLstmInputParams& params,
                                  const char* name = nullptr) override;
+
+    void VisitRankLayer(const armnn::IConnectableLayer* layer,
+                        const char* name = nullptr) override;
 
     void VisitReshapeLayer(const armnn::IConnectableLayer* layer,
                            const armnn::ReshapeDescriptor& reshapeDescriptor,
@@ -270,6 +291,10 @@ public:
                                           const armnn::Optional<armnn::ConstTensor>& biases,
                                           const char* = nullptr) override;
 
+    void VisitTransposeLayer(const armnn::IConnectableLayer* layer,
+                             const armnn::TransposeDescriptor& descriptor,
+                             const char* name = nullptr) override;
+
 private:
 
     /// Creates the Input Slots and Output Slots and LayerBase for the layer.
@@ -283,6 +308,9 @@ private:
     /// Creates the serializer ConstTensor for the armnn ConstTensor.
     flatbuffers::Offset<armnnSerializer::ConstTensor> CreateConstTensorInfo(
             const armnn::ConstTensor& constTensor);
+
+    /// Creates the serializer TensorInfo for the armnn TensorInfo.
+    flatbuffers::Offset<TensorInfo>  CreateTensorInfo(const armnn::TensorInfo& tensorInfo);
 
     template <typename T>
     flatbuffers::Offset<flatbuffers::Vector<T>> CreateDataVector(const void* memory, unsigned int size);

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -12,7 +12,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 namespace armnn
 {
@@ -27,9 +27,7 @@ public:
     ~CounterDirectory() = default;
 
     // Register profiling objects
-    const Category*   RegisterCategory  (const std::string& categoryName,
-                                         const Optional<uint16_t>& deviceUid = EmptyOptional(),
-                                         const Optional<uint16_t>& counterSetUid = EmptyOptional()) override;
+    const Category*   RegisterCategory  (const std::string& categoryName) override;
     const Device*     RegisterDevice    (const std::string& deviceName,
                                          uint16_t cores = 0,
                                          const Optional<std::string>& parentCategoryName = EmptyOptional()) override;
@@ -50,10 +48,10 @@ public:
                                    const Optional<uint16_t>& counterSetUid = EmptyOptional()) override;
 
     // Getters for counts
-    uint16_t GetCategoryCount()   const override { return boost::numeric_cast<uint16_t>(m_Categories.size());  }
-    uint16_t GetDeviceCount()     const override { return boost::numeric_cast<uint16_t>(m_Devices.size());     }
-    uint16_t GetCounterSetCount() const override { return boost::numeric_cast<uint16_t>(m_CounterSets.size()); }
-    uint16_t GetCounterCount()    const override { return boost::numeric_cast<uint16_t>(m_Counters.size());    }
+    uint16_t GetCategoryCount()   const override { return armnn::numeric_cast<uint16_t>(m_Categories.size());  }
+    uint16_t GetDeviceCount()     const override { return armnn::numeric_cast<uint16_t>(m_Devices.size());    }
+    uint16_t GetCounterSetCount() const override { return armnn::numeric_cast<uint16_t>(m_CounterSets.size()); }
+    uint16_t GetCounterCount()    const override { return armnn::numeric_cast<uint16_t>(m_Counters.size());    }
 
     // Getters for collections
     const Categories&  GetCategories()  const override { return m_Categories;  }
@@ -95,8 +93,7 @@ private:
     CountersIt    FindCounter(uint16_t counterUid) const;
     CountersIt    FindCounter(const std::string& counterName) const;
     uint16_t      GetNumberOfCores(const Optional<uint16_t>& numberOfCores,
-                                   uint16_t deviceUid,
-                                   const CategoryPtr& parentCategory);
+                                   uint16_t deviceUid);
 };
 
 } // namespace profiling

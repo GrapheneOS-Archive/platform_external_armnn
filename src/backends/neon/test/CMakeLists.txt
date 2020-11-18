@@ -11,12 +11,14 @@ list(APPEND armnnNeonBackendUnitTests_sources
     NeonLayerTests.cpp
     NeonOptimizedNetworkTests.cpp
     NeonRuntimeTests.cpp
+    NeonTensorHandleTests.cpp
     NeonTimerTest.cpp
     NeonWorkloadFactoryHelper.hpp
 )
 
 if (ARMNNREF)
     list(APPEND armnnNeonBackendUnitTests_sources
+        NeonFallbackTests.cpp
         NeonMemCopyTests.cpp
         )
 endif()
@@ -26,3 +28,5 @@ target_include_directories(armnnNeonBackendUnitTests PRIVATE ${PROJECT_SOURCE_DI
 target_include_directories(armnnNeonBackendUnitTests PRIVATE ${PROJECT_SOURCE_DIR}/src/armnnUtils)
 target_include_directories(armnnNeonBackendUnitTests PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnNeonBackendUnitTests PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
+target_include_directories(armnnNeonBackendUnitTests PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)
+

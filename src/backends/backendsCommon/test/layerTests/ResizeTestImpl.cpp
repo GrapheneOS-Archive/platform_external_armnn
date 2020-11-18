@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,7 +29,9 @@ struct ResizeTestParams
         , m_InQuantScale(1.0f)
         , m_InQuantOffset(0)
         , m_OutQuantScale(1.0f)
-        , m_OutQuantOffset(0) {}
+        , m_OutQuantOffset(0)
+        , m_AlignCorners(false)
+        , m_HalfPixelCenters(false) {}
 
     armnn::ResizeMethod m_ResizeMethod;
     armnn::DataLayout   m_DataLayout;
@@ -45,6 +47,9 @@ struct ResizeTestParams
 
     float               m_OutQuantScale;
     int32_t             m_OutQuantOffset;
+
+    bool m_AlignCorners;
+    bool m_HalfPixelCenters;
 
     void SetInQuantParams(float quantScale, int32_t quantOffset)
     {
@@ -71,9 +76,10 @@ template<size_t NumDims,
 LayerTestResult<T, NumDims> ResizeTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const ResizeTestParams& params)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     armnn::TensorInfo inputInfo(params.m_InputShape, ArmnnType);
     armnn::TensorInfo outputInfo(params.m_OutputShape, ArmnnType);
 
@@ -105,12 +111,14 @@ LayerTestResult<T, NumDims> ResizeTestImpl(
     LayerTestResult<T, NumDims> result(outputInfo);
     result.outputExpected = MakeTensor<T, NumDims>(outputInfo, expectedOutputData);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
 
     armnn::ResizeQueueDescriptor descriptor;
     descriptor.m_Parameters.m_Method     = params.m_ResizeMethod;
     descriptor.m_Parameters.m_DataLayout = params.m_DataLayout;
+    descriptor.m_Parameters.m_AlignCorners = params.m_AlignCorners;
+    descriptor.m_Parameters.m_HalfPixelCenters = params.m_HalfPixelCenters;
 
     armnnUtils::DataLayoutIndexed dataLayoutIndexed(params.m_DataLayout);
     descriptor.m_Parameters.m_TargetWidth  = params.m_OutputShape[dataLayoutIndexed.GetWidthIndex()];
@@ -143,6 +151,7 @@ template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeBilinearNopTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -169,13 +178,14 @@ LayerTestResult<T, 4> ResizeBilinearNopTest(
 
     testParams.SetInOutQuantParams(1.5f, 3);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> SimpleResizeBilinearTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -208,13 +218,14 @@ LayerTestResult<T, 4> SimpleResizeBilinearTest(
 
     testParams.SetInOutQuantParams(0.1567f, 1);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeBilinearSqMinTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -248,13 +259,14 @@ LayerTestResult<T, 4> ResizeBilinearSqMinTest(
 
     testParams.SetInOutQuantParams(3.141592f, 3);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeBilinearMinTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -286,13 +298,14 @@ LayerTestResult<T, 4> ResizeBilinearMinTest(
 
     testParams.SetInOutQuantParams(1.5f, -1);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeBilinearMagTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -326,7 +339,7 @@ LayerTestResult<T, 4> ResizeBilinearMagTest(
 
     testParams.SetInQuantParams(1.0f, 0);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 //
@@ -337,6 +350,7 @@ template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeNearestNeighborNopTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -363,13 +377,14 @@ LayerTestResult<T, 4> ResizeNearestNeighborNopTest(
 
     testParams.SetInOutQuantParams(1.5f, 3);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> SimpleResizeNearestNeighborTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -402,13 +417,14 @@ LayerTestResult<T, 4> SimpleResizeNearestNeighborTest(
 
     testParams.SetInOutQuantParams(0.1567f, 1);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeNearestNeighborSqMinTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
     ResizeTestParams testParams;
@@ -442,13 +458,14 @@ LayerTestResult<T, 4> ResizeNearestNeighborSqMinTest(
 
     testParams.SetInOutQuantParams(3.141592f, 3);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeNearestNeighborMinTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout)
 {
         ResizeTestParams testParams;
@@ -480,13 +497,14 @@ LayerTestResult<T, 4> ResizeNearestNeighborMinTest(
 
     testParams.SetInOutQuantParams(1.5f, -1);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> ResizeNearestNeighborMagTest(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         const armnn::DataLayout dataLayout,
         float inQuantScale,
         int32_t inQuantOffset,
@@ -525,7 +543,134 @@ LayerTestResult<T, 4> ResizeNearestNeighborMagTest(
     testParams.SetInQuantParams(inQuantScale, inQuantOffset);
     testParams.SetOutQuantParams(outQuantScale, outQuantOffset);
 
-    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, testParams);
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
+}
+
+template<armnn::DataType ArmnnType, typename T>
+LayerTestResult<T, 4> HalfPixelCentersResizeBilinearTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout)
+{
+    ResizeTestParams testParams;
+    testParams.m_ResizeMethod = armnn::ResizeMethod::Bilinear;
+    testParams.m_DataLayout   = dataLayout;
+    testParams.m_HalfPixelCenters = true;
+
+    testParams.m_InputShape  = { 2, 1, 2, 2 };
+    testParams.m_OutputShape = { 2, 1, 3, 3 };
+
+    testParams.m_InputData =
+    {
+          1.0f, 2.0f,
+          3.0f, 4.0f,
+
+          1.0f, 2.0f,
+          3.0f, 4.0f
+    };
+
+    testParams.m_ExpectedOutputData =
+    {
+          1.0f, 1.5f, 2.0f,
+          2.0f, 2.5f, 3.0f,
+          3.0f, 3.5f, 4.0f,
+
+          1.0f, 1.5f, 2.0f,
+          2.0f, 2.5f, 3.0f,
+          3.0f, 3.5f, 4.0f,
+    };
+
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
+}
+
+template<armnn::DataType ArmnnType, typename T>
+LayerTestResult<T, 4> AlignCornersResizeBilinearTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout)
+{
+    ResizeTestParams testParams;
+    testParams.m_ResizeMethod = armnn::ResizeMethod::Bilinear;
+    testParams.m_DataLayout   = dataLayout;
+    testParams.m_AlignCorners = true;
+
+    testParams.m_InputShape  = { 1, 1, 2, 2 };
+    testParams.m_OutputShape = { 1, 1, 1, 1 };
+
+    testParams.m_InputData =
+    {
+          1.0f, 2.0f,
+          3.0f, 4.0f,
+    };
+
+    testParams.m_ExpectedOutputData =
+    {
+          1.0f
+    };
+
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
+}
+
+template<armnn::DataType ArmnnType, typename T>
+LayerTestResult<T, 4> HalfPixelCentersResizeNearestNeighbourTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout)
+{
+    ResizeTestParams testParams;
+    testParams.m_ResizeMethod = armnn::ResizeMethod::NearestNeighbor;
+    testParams.m_DataLayout   = dataLayout;
+    testParams.m_HalfPixelCenters = true;
+
+    testParams.m_InputShape  = { 1, 1, 2, 5 };
+    testParams.m_OutputShape = { 1, 1, 2, 2 };
+
+    testParams.m_InputData =
+    {
+          1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
+
+          1.0f, 2.0f, 3.0f, 4.0f, 5.0f
+    };
+
+    testParams.m_ExpectedOutputData =
+    {
+          2.0f, 4.0f,
+          2.0f, 4.0f
+    };
+
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
+}
+
+template<armnn::DataType ArmnnType, typename T>
+LayerTestResult<T, 4> AlignCornersResizeNearestNeighbourTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout)
+{
+    ResizeTestParams testParams;
+    testParams.m_ResizeMethod = armnn::ResizeMethod::NearestNeighbor;
+    testParams.m_DataLayout   = dataLayout;
+    testParams.m_AlignCorners = true;
+
+    testParams.m_InputShape  = { 1, 1, 2, 2 };
+    testParams.m_OutputShape = { 1, 1, 1, 1 };
+
+    testParams.m_InputData =
+    {
+          1.0f, 2.0f,
+          3.0f, 4.0f,
+    };
+
+    testParams.m_ExpectedOutputData =
+    {
+          1.0f
+    };
+
+    return ResizeTestImpl<4, ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory, testParams);
 }
 
 //
@@ -537,257 +682,512 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeBilinearNopTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 SimpleResizeBilinearTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeBilinearSqMinTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeBilinearMinTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeBilinearMagTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeNearestNeighborNopTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 SimpleResizeNearestNeighborTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeNearestNeighborSqMinTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeNearestNeighborMinTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 ResizeNearestNeighborMagTest<armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout,
     float inQuantScale,
     int32_t inQuantOffset,
     float outQuantScale,
     int32_t outQuantOffset);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
+HalfPixelCentersResizeBilinearTest<armnn::DataType::Float32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
+AlignCornersResizeBilinearTest<armnn::DataType::Float32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
+HalfPixelCentersResizeNearestNeighbourTest<armnn::DataType::Float32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
+AlignCornersResizeNearestNeighbourTest<armnn::DataType::Float32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
 
 // Float16
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeBilinearNopTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 SimpleResizeBilinearTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeBilinearSqMinTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeBilinearMinTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeBilinearMagTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeNearestNeighborNopTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 SimpleResizeNearestNeighborTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeNearestNeighborSqMinTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeNearestNeighborMinTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
 ResizeNearestNeighborMagTest<armnn::DataType::Float16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout,
     float inQuantScale,
     int32_t inQuantOffset,
     float outQuantScale,
     int32_t outQuantOffset);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
+HalfPixelCentersResizeBilinearTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
+AlignCornersResizeBilinearTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
+HalfPixelCentersResizeNearestNeighbourTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::Float16>, 4>
+AlignCornersResizeNearestNeighbourTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
 
 // QAsymm8
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeBilinearNopTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 SimpleResizeBilinearTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeBilinearSqMinTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeBilinearMinTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeBilinearMagTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeNearestNeighborNopTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 SimpleResizeNearestNeighborTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeNearestNeighborSqMinTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeNearestNeighborMinTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 ResizeNearestNeighborMagTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout,
     float inQuantScale,
     int32_t inQuantOffset,
     float outQuantScale,
     int32_t outQuantOffset);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+HalfPixelCentersResizeBilinearTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+AlignCornersResizeBilinearTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+HalfPixelCentersResizeNearestNeighbourTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+AlignCornersResizeNearestNeighbourTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+// QAsymmS8
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeBilinearNopTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+SimpleResizeBilinearTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeBilinearSqMinTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeBilinearMinTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeBilinearMagTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeNearestNeighborNopTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+SimpleResizeNearestNeighborTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeNearestNeighborSqMinTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeNearestNeighborMinTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+ResizeNearestNeighborMagTest<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout dataLayout,
+    float inQuantScale,
+    int32_t inQuantOffset,
+    float outQuantScale,
+    int32_t outQuantOffset);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
+HalfPixelCentersResizeBilinearTest<armnn::DataType::QAsymmU8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
+AlignCornersResizeBilinearTest<armnn::DataType::QAsymmU8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
+HalfPixelCentersResizeNearestNeighbourTest<armnn::DataType::QAsymmU8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
+AlignCornersResizeNearestNeighbourTest<armnn::DataType::QAsymmU8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
 
 // QSymm16
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeBilinearNopTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 SimpleResizeBilinearTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeBilinearSqMinTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeBilinearMinTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeBilinearMagTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeNearestNeighborNopTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 SimpleResizeNearestNeighborTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeNearestNeighborSqMinTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeNearestNeighborMinTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 ResizeNearestNeighborMagTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout dataLayout,
     float inQuantScale,
     int32_t inQuantOffset,
     float outQuantScale,
     int32_t outQuantOffset);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
+HalfPixelCentersResizeBilinearTest<armnn::DataType::QSymmS16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
+AlignCornersResizeBilinearTest<armnn::DataType::QSymmS16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
+HalfPixelCentersResizeNearestNeighbourTest<armnn::DataType::QSymmS16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
+AlignCornersResizeNearestNeighbourTest<armnn::DataType::QSymmS16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const armnn::DataLayout dataLayout);

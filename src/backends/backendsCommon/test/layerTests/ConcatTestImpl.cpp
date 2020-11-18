@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -61,7 +61,7 @@ bool NeedPermuteForConcat(
         }
         else
         {
-            BOOST_ASSERT_MSG(nDimensions == tensorInfo.GetShape().GetNumDimensions(),
+            ARMNN_ASSERT_MSG(nDimensions == tensorInfo.GetShape().GetNumDimensions(),
                 "Input shapes must have the same number of dimensions");
         }
     }
@@ -92,7 +92,7 @@ void Generate3dPermuteVectorForConcat(
     unsigned int & concatDim,
     std::pair<PermutationVector, PermutationVector> & permutations)
 {
-    BOOST_ASSERT_MSG(numDimensions <= 3,
+    ARMNN_ASSERT_MSG(numDimensions <= 3,
        "Only dimensions 1,2 and 3 are supported by this helper");
     unsigned int expandedBy = 3 - numDimensions;
     unsigned int expandedConcatAxis = concatDim + expandedBy;
@@ -113,7 +113,7 @@ void Generate3dPermuteVectorForConcat(
     }
     else
     {
-        BOOST_ASSERT(expandedConcatAxis == 0);
+        ARMNN_ASSERT(expandedConcatAxis == 0);
         concatDim = 0;
     }
 }
@@ -121,13 +121,14 @@ void Generate3dPermuteVectorForConcat(
 template<typename T> void PermuteTensorData(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const PermutationVector& mappings,
     TensorInfo & inputTensorInfo,
     const T * inputData,
     std::vector<T>& outputData)
 {
-    boost::ignore_unused(memoryManager);
-    BOOST_ASSERT_MSG(inputData != nullptr, "inputData must not be null");
+    IgnoreUnused(memoryManager);
+    ARMNN_ASSERT_MSG(inputData != nullptr, "inputData must not be null");
     if (inputData == nullptr)
     {
         // Nullptr is an error in the test. By returning without doing the concatenation
@@ -137,9 +138,8 @@ template<typename T> void PermuteTensorData(
     }
 
     TensorInfo outputTensorInfo = armnnUtils::Permuted(inputTensorInfo, mappings);
-
-    std::unique_ptr<ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     PermuteQueueDescriptor queueDescriptor;
     queueDescriptor.m_Parameters = PermuteDescriptor{mappings};
@@ -171,6 +171,7 @@ template<typename T> void PermuteTensorData(
 template<typename T> void PermuteInputsForConcat(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     std::vector<TensorInfo> & inputTensorInfos,
     std::vector<T *> & inputData,
     std::vector<std::vector<T>> & inputDataStorage,
@@ -178,8 +179,8 @@ template<typename T> void PermuteInputsForConcat(
     unsigned int & concatDim,
     TensorInfo & outputTensorInfo)
 {
-    boost::ignore_unused(memoryManager);
-    BOOST_ASSERT_MSG(inputTensorInfos.size() > 1,
+    IgnoreUnused(memoryManager);
+    ARMNN_ASSERT_MSG(inputTensorInfos.size() > 1,
         "Expecting more than one tensor to be concatenated here");
 
     unsigned int numDims = 0;
@@ -200,12 +201,12 @@ template<typename T> void PermuteInputsForConcat(
 
             // Store the reverese permutation.
             permuteVector = permutations.second;
-            BOOST_ASSERT_MSG(!permuteVector.IsEqual(identity),
+            ARMNN_ASSERT_MSG(!permuteVector.IsEqual(identity),
                 "Test logic error, we don't need permutation, so we shouldn't arrive here");
         }
         else
         {
-            BOOST_ASSERT_MSG(numDims == tensorInfo.GetShape().GetNumDimensions(),
+            ARMNN_ASSERT_MSG(numDims == tensorInfo.GetShape().GetNumDimensions(),
                 "All inputs must have the same number of dimensions");
         }
 
@@ -214,6 +215,7 @@ template<typename T> void PermuteInputsForConcat(
 
         PermuteTensorData<T>(workloadFactory,
                              memoryManager,
+                             tensorHandleFactory,
                              permutations.first,
                              newTensorInfo,
                              inputData[nthInput],
@@ -239,12 +241,13 @@ template<typename T> void PermuteInputsForConcat(
 template <typename T> void PermuteOutputForConcat(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const TensorInfo & tensorInfo,
     const PermutationVector & permuteVector,
     std::unique_ptr<ITensorHandle> && inputDataHandle,
     T * data)
 {
-    BOOST_ASSERT_MSG(data != nullptr, "data must not be null");
+    ARMNN_ASSERT_MSG(data != nullptr, "data must not be null");
     if (data == nullptr)
     {
         // Nullptr is an error in the test. By returning without doing the permutation
@@ -261,6 +264,7 @@ template <typename T> void PermuteOutputForConcat(
 
     PermuteTensorData<T>(workloadFactory,
                          memoryManager,
+                         tensorHandleFactory,
                          permuteVector,
                          resultTensorInfo,
                          &inputData[0],
@@ -272,6 +276,7 @@ template <typename T> void PermuteOutputForConcat(
 template<typename T> void Concatenate(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     std::initializer_list<const TensorInfo> inputTensorInfosOrig,
     std::initializer_list<T *> inputsOrig,
     const TensorInfo& outputTensorInfoOrig,
@@ -279,7 +284,7 @@ template<typename T> void Concatenate(
     unsigned int concatDim,
     bool useSubtensor)
 {
-    BOOST_ASSERT_MSG(output != nullptr, "output must not be null");
+    ARMNN_ASSERT_MSG(output != nullptr, "output must not be null");
     if (output == nullptr)
     {
         // Nullptr is an error in the test. By returning without doing the permutation
@@ -310,6 +315,7 @@ template<typename T> void Concatenate(
         //
         PermuteInputsForConcat<T>(workloadFactory,
                                   memoryManager,
+                                  tensorHandleFactory,
                                   inputTensorInfos,
                                   inputs,
                                   tmpInputDataStorage,
@@ -323,7 +329,7 @@ template<typename T> void Concatenate(
     std::vector<std::unique_ptr<ITensorHandle>> inputHandles;
     inputHandles.reserve(inputCount);
 
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     ConcatQueueDescriptor queueDescriptor;
     OriginsDescriptor viewsDescriptor = CreateDescriptorForConcat(inputTensorInfos, concatDim);
@@ -338,28 +344,30 @@ template<typename T> void Concatenate(
                 viewsDescriptor.GetViewOrigin(i) + viewsDescriptor.GetNumDimensions()));
         }
 
-        outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+        outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
         const bool subTensorsSupported = workloadFactory.SupportsSubTensors();
         for (unsigned int i = 0; i < inputCount; ++i)
         {
             const TensorInfo& inputTensorInfo = inputTensorInfos[i];
+
             std::unique_ptr<ITensorHandle> inputHandle =
                 subTensorsSupported ?
-                    workloadFactory.CreateSubTensorHandle(*outputHandle,
+                    tensorHandleFactory.CreateSubTensorHandle(*outputHandle,
                                                           inputTensorInfo.GetShape(),
                                                           queueDescriptor.m_ViewOrigins[i].m_Origin.data()) :
-                    workloadFactory.CreateTensorHandle(inputTensorInfo);
+                                                          tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
 
             inputHandles.emplace_back(std::move(inputHandle));
         }
+
 
     }
     else
     {
         for (unsigned int i = 0; i < inputCount; ++i)
         {
-            std::unique_ptr<ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfos[i]);
+            std::unique_ptr<ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfos[i]);
             inputHandles.emplace_back(std::move(inputHandle));
         }
     }
@@ -394,6 +402,7 @@ template<typename T> void Concatenate(
     {
         PermuteOutputForConcat<T>(workloadFactory,
                                   memoryManager,
+                                  tensorHandleFactory,
                                   outputTensorInfo,
                                   permuteVector,
                                   std::move(outputHandle),
@@ -413,6 +422,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 1> Concat1dTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -428,7 +438,7 @@ LayerTestResult<T, 1> Concat1dTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { inputTensorInfo, inputTensorInfo, inputTensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -450,6 +460,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Concat2dTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const TensorInfo& outputTensorInfo,
     unsigned int dimension,
     const float qScale,
@@ -491,7 +502,7 @@ LayerTestResult<T, 2> Concat2dTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { inputTensorInfo, inputTensorInfo, inputTensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -507,13 +518,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Concat2dDim0TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 6, 3 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 2> result = Concat2dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 0, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 0, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 2>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -544,13 +556,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Concat2dDim1TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 2, 9 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 2> result = Concat2dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 1, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 1, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 2>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -569,6 +582,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Concat2dDim0DiffInputDimsTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -610,7 +624,7 @@ LayerTestResult<T, 2> Concat2dDim0DiffInputDimsTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { input0TensorInfo, input1TensorInfo, input2TensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -648,6 +662,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Concat2dDim1DiffInputDimsTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -689,7 +704,7 @@ LayerTestResult<T, 2> Concat2dDim1DiffInputDimsTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { input0TensorInfo, input1TensorInfo, input2TensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -715,6 +730,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const TensorInfo& outputTensorInfo,
     unsigned int dimension,
     bool useSubtensor,
@@ -793,7 +809,7 @@ LayerTestResult<T, 3> Concat3dTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { inputTensorInfo, inputTensorInfo, inputTensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -809,13 +825,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim0TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 6, 3, 2 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 3> result = Concat3dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 0, true, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 0, true, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 3>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -882,13 +899,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim1TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 2, 9, 2 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 3> result = Concat3dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 1, true, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 1, true, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 3>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -955,6 +973,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim2TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor,
     float qScale,
     int32_t qOffset)
@@ -962,7 +981,7 @@ LayerTestResult<T, 3> Concat3dDim2TestImpl(
     TensorInfo outputTensorInfo({ 2, 3, 6 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 3> result = Concat3dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 2, useSubtensor, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 2, useSubtensor, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 3>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -993,6 +1012,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim0DiffInputDimsTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -1070,7 +1090,7 @@ LayerTestResult<T, 3> Concat3dDim0DiffInputDimsTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { input0TensorInfo, input1TensorInfo, input2TensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -1144,6 +1164,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim1DiffInputDimsTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -1215,7 +1236,7 @@ LayerTestResult<T, 3> Concat3dDim1DiffInputDimsTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { input0TensorInfo, input1TensorInfo, input2TensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -1283,6 +1304,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Concat3dDim2DiffInputDimsTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor,
     float qScale,
     int32_t qOffset)
@@ -1361,7 +1383,7 @@ LayerTestResult<T, 3> Concat3dDim2DiffInputDimsTestImpl(
 
     std::vector<T> output;
     output.resize(outputTensorInfo.GetNumElements());
-    Concatenate<T>(workloadFactory, memoryManager,
+    Concatenate<T>(workloadFactory, memoryManager, tensorHandleFactory,
                    { input0TensorInfo, input1TensorInfo, input2TensorInfo },
                    { input0.data(), input1.data(), input2.data() },
                    outputTensorInfo,
@@ -1399,6 +1421,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dTestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const TensorInfo& outputTensorInfo,
     unsigned int dimension,
     bool useSubtensor,
@@ -1447,6 +1470,7 @@ LayerTestResult<T, 4> Concat4dTestImpl(
 
     Concatenate<T>(workloadFactory,
                    memoryManager,
+                   tensorHandleFactory,
                    {inputTensorInfo, inputTensorInfo, inputTensorInfo},
                    {input0.data(), input1.data(), input2.data()},
                    outputTensorInfo,
@@ -1462,13 +1486,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDim0TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 3, 3, 2, 2 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 4> result = Concat4dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 0, true, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 0, true, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 4>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -1502,13 +1527,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDim1TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 1, 9, 2, 2 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 4> result = Concat4dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 1, true, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 1, true, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 4>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -1542,13 +1568,14 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDim2TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
     TensorInfo outputTensorInfo({ 1, 3, 6, 2 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 4> result = Concat4dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 2, true, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 2, true, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 4>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -1582,6 +1609,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDim3TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset,
     bool useSubtensor)
@@ -1589,7 +1617,7 @@ LayerTestResult<T, 4> Concat4dDim3TestImpl(
     TensorInfo outputTensorInfo({ 1, 3, 2, 6 }, ArmnnType, qScale, qOffset);
 
     LayerTestResult<T, 4> result = Concat4dTestImpl<ArmnnType>(
-        workloadFactory, memoryManager, outputTensorInfo, 3, useSubtensor, qScale, qOffset);
+        workloadFactory, memoryManager, tensorHandleFactory, outputTensorInfo, 3, useSubtensor, qScale, qOffset);
 
     result.outputExpected = MakeTensor<T, 4>(outputTensorInfo, QuantizedVector<T>(
         {
@@ -1623,6 +1651,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDiffShapeDim0TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -1668,6 +1697,7 @@ LayerTestResult<T, 4> Concat4dDiffShapeDim0TestImpl(
     output.resize(outputTensorInfo.GetNumElements());
     Concatenate<T>(workloadFactory,
                    memoryManager,
+                   tensorHandleFactory,
                    {inputTensorInfo0, inputTensorInfo1},
                    {input0.data(), input1.data()},
                    outputTensorInfo,
@@ -1708,6 +1738,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDiffShapeDim1TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -1744,6 +1775,7 @@ LayerTestResult<T, 4> Concat4dDiffShapeDim1TestImpl(
     output.resize(outputTensorInfo.GetNumElements());
     Concatenate<T>(workloadFactory,
                    memoryManager,
+                   tensorHandleFactory,
                    {inputTensorInfo0, inputTensorInfo1},
                    {input0.data(), input1.data()},
                    outputTensorInfo,
@@ -1774,6 +1806,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDiffShapeDim2TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
@@ -1813,6 +1846,7 @@ LayerTestResult<T, 4> Concat4dDiffShapeDim2TestImpl(
     output.resize(outputTensorInfo.GetNumElements());
     Concatenate<T>(workloadFactory,
                    memoryManager,
+                   tensorHandleFactory,
                    {inputTensorInfo0, inputTensorInfo1},
                    {input0.data(), input1.data()},
                    outputTensorInfo,
@@ -1850,6 +1884,7 @@ template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Concat4dDiffShapeDim3TestImpl(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset,
     bool useSubtensor)
@@ -1890,6 +1925,7 @@ LayerTestResult<T, 4> Concat4dDiffShapeDim3TestImpl(
     output.resize(outputTensorInfo.GetNumElements());
     Concatenate<T>(workloadFactory,
                    memoryManager,
+                   tensorHandleFactory,
                    {inputTensorInfo0, inputTensorInfo1},
                    {input0.data(), input1.data()},
                    outputTensorInfo,
@@ -1916,9 +1952,10 @@ template<DataType ArmnnType, typename T>
 LayerTestResult<T, 3> ConcatDifferentInputOutputQParamTest(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     // Defines the tensor descriptors.
     TensorInfo outputTensorInfo({ 3, 6, 3 }, ArmnnType);
@@ -2005,19 +2042,19 @@ LayerTestResult<T, 3> ConcatDifferentInputOutputQParamTest(
     std::vector<unsigned int> wOrigin2 = { 0, 0, 2 }; //Extent of the window is defined by size of input[1].
     ConcatQueueDescriptor::ViewOrigin window2(wOrigin2);
 
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     bool subTensorsSupported = useSubtensor && workloadFactory.SupportsSubTensors();
 
     std::unique_ptr<ITensorHandle> inputHandle1 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo1);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
 
     std::unique_ptr<ITensorHandle> inputHandle2 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo2);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
 
     ConcatQueueDescriptor data;
     OriginsDescriptor desc = CreateDescriptorForConcatenation(
@@ -2057,12 +2094,14 @@ template LayerTestResult<ResolveType<DataType::QAsymmU8>, 3>
 ConcatDifferentInputOutputQParamTest<DataType::QAsymmU8>(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor);
 
 template LayerTestResult<ResolveType<DataType::QSymmS16>, 3>
 ConcatDifferentInputOutputQParamTest<DataType::QSymmS16>(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor);
 
 //
@@ -2071,9 +2110,10 @@ ConcatDifferentInputOutputQParamTest<DataType::QSymmS16>(
 
 LayerTestResult<float,3> ConcatTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     unsigned int outputWidth = 3;
     unsigned int outputHeight = 6;
@@ -2154,19 +2194,19 @@ LayerTestResult<float,3> ConcatTest(
     std::vector<unsigned int> wOrigin2 = {2, 0, 0}; //Extent of the window is defined by size of input[1].
     ConcatQueueDescriptor::ViewOrigin window2(wOrigin2);
 
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     bool subTensorsSupported = workloadFactory.SupportsSubTensors();
 
     std::unique_ptr<ITensorHandle> inputHandle1 =
         subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo1);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
 
     std::unique_ptr<ITensorHandle> inputHandle2  =
         subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo2);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
 
     ConcatQueueDescriptor data;
     WorkloadInfo info;
@@ -2196,157 +2236,196 @@ LayerTestResult<float,3> ConcatTest(
 
 LayerTestResult<float, 1> Concat1dTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat1dTestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat1dTestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 2> Concat2dDim0Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat2dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 2> Concat2dDim1Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat2dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 2> Concat2dDim0DiffInputDimsTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim0DiffInputDimsTestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat2dDim0DiffInputDimsTestImpl<DataType::Float32>(workloadFactory, memoryManager,
+                                                                tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 2> Concat2dDim1DiffInputDimsTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim1DiffInputDimsTestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat2dDim1DiffInputDimsTestImpl<DataType::Float32>(workloadFactory,
+                                                                memoryManager,
+                                                                tensorHandleFactory,
+                                                                0.0f,
+                                                                0);
 }
 
 LayerTestResult<float, 3> Concat3dDim0Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat3dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 3> Concat3dDim1Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat3dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 3> Concat3dDim2Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
-    return Concat3dDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager, useSubtensor, 0.0f, 0);
+    return Concat3dDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory,
+                                                   useSubtensor, 0.0f, 0);
 }
 
 LayerTestResult<float, 3> Concat3dDim0DiffInputDimsTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat3dDim0DiffInputDimsTestImpl<DataType::Float32>(
-        workloadFactory, memoryManager, 0.0f, 0);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 3> Concat3dDim1DiffInputDimsTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim1DiffInputDimsTestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat3dDim1DiffInputDimsTestImpl<DataType::Float32>(workloadFactory, memoryManager,
+                                                                tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 3> Concat3dDim2DiffInputDimsTest(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
     return Concat3dDim2DiffInputDimsTestImpl<DataType::Float32>(
-        workloadFactory, memoryManager, useSubtensor, 0.0f, 0);
+        workloadFactory, memoryManager, tensorHandleFactory, useSubtensor, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDim0Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat4dDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDim1Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat4dDim1TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDim2Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat4dDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDim3Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
-    return Concat4dDim3TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0, useSubtensor);
+    return Concat4dDim3TestImpl<DataType::Float32>(workloadFactory, memoryManager,
+                                                   tensorHandleFactory, 0.0f, 0, useSubtensor);
 }
 
 LayerTestResult<float, 4> Concat4dDiffShapeDim0Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDiffShapeDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat4dDiffShapeDim0TestImpl<DataType::Float32>(workloadFactory, memoryManager,
+                                                            tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDiffShapeDim1Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat4dDiffShapeDim1TestImpl<DataType::Float32>(
-        workloadFactory, memoryManager, 0.0f, 0);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDiffShapeDim2Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDiffShapeDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat4dDiffShapeDim2TestImpl<DataType::Float32>(workloadFactory, memoryManager,
+                                                            tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<float, 4> Concat4dDiffShapeDim3Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
     return Concat4dDiffShapeDim3TestImpl<DataType::Float32>(
-        workloadFactory, memoryManager, 0.0f, 0, useSubtensor);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0, useSubtensor);
 }
 
 LayerTestResult<Half, 3> ConcatFloat16Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim1TestImpl<DataType::Float16>(workloadFactory, memoryManager, 0.0f, 0);
+    return Concat3dDim1TestImpl<DataType::Float16>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
+}
+
+LayerTestResult<BFloat16, 3> ConcatBFloat16Test(
+    IWorkloadFactory& workloadFactory,
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    return Concat3dDim1TestImpl<DataType::BFloat16>(workloadFactory, memoryManager, tensorHandleFactory, 0.0f, 0);
 }
 
 LayerTestResult<uint8_t, 3> ConcatUint8DifferentQParamsTest(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     unsigned int outputWidth = 3;
     unsigned int outputHeight = 6;
@@ -2447,19 +2526,19 @@ LayerTestResult<uint8_t, 3> ConcatUint8DifferentQParamsTest(
     std::vector<unsigned int> wOrigin2 = { 2, 0, 0 }; //Extent of the window is defined by size of input[1].
     ConcatQueueDescriptor::ViewOrigin window2(wOrigin2);
 
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     bool subTensorsSupported = workloadFactory.SupportsSubTensors();
 
     std::unique_ptr<ITensorHandle> inputHandle1 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo1);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
 
     std::unique_ptr<ITensorHandle> inputHandle2 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo2);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
 
     ConcatQueueDescriptor data;
     WorkloadInfo info;
@@ -2489,9 +2568,10 @@ LayerTestResult<uint8_t, 3> ConcatUint8DifferentQParamsTest(
 
 LayerTestResult<uint8_t, 3> ConcatUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     unsigned int outputWidth = 3;
     unsigned int outputHeight = 6;
@@ -2583,20 +2663,19 @@ LayerTestResult<uint8_t, 3> ConcatUint8Test(
     std::vector<unsigned int> wOrigin2 = { 2, 0, 0 }; //Extent of the window is defined by size of input[1].
     ConcatQueueDescriptor::ViewOrigin window2(wOrigin2);
 
-
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     bool subTensorsSupported = workloadFactory.SupportsSubTensors();
 
     std::unique_ptr<ITensorHandle> inputHandle1 =
         subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo1);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
 
     std::unique_ptr<ITensorHandle> inputHandle2 =
         subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo2);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
 
 
     ConcatQueueDescriptor data;
@@ -2627,9 +2706,10 @@ LayerTestResult<uint8_t, 3> ConcatUint8Test(
 
 LayerTestResult<uint16_t, 3> ConcatUint16Test(
         IWorkloadFactory& workloadFactory,
-        const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     unsigned int outputWidth = 3;
     unsigned int outputHeight = 6;
@@ -2719,20 +2799,20 @@ LayerTestResult<uint16_t, 3> ConcatUint16Test(
     ConcatQueueDescriptor::ViewOrigin window2(wOrigin2);
 
 
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     bool subTensorsSupported = workloadFactory.SupportsSubTensors();
 
     std::unique_ptr<ITensorHandle> inputHandle1 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo1);
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo1.GetShape(), wOrigin1.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
 
     std::unique_ptr<ITensorHandle> inputHandle2 =
             subTensorsSupported ?
-            workloadFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
-            workloadFactory.CreateTensorHandle(inputTensorInfo2);
-
+            tensorHandleFactory.CreateSubTensorHandle(*outputHandle, inputTensorInfo2.GetShape(), wOrigin2.data()) :
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
+    
 
     ConcatQueueDescriptor data;
     WorkloadInfo info;
@@ -2762,146 +2842,165 @@ LayerTestResult<uint16_t, 3> ConcatUint16Test(
 
 LayerTestResult<uint8_t, 1> Concat1dUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat1dTestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat1dTestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 2> Concat2dDim0Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat2dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 2> Concat2dDim1Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat2dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat2dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 2> Concat2dDim0DiffInputDimsUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat2dDim0DiffInputDimsTestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 2> Concat2dDim1DiffInputDimsUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat2dDim1DiffInputDimsTestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim0Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat3dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim1Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat3dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim2Uint8Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
     return Concat3dDim2TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, useSubtensor, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, useSubtensor, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim0DiffInputDimsUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat3dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat3dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim1DiffInputDimsUint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat3dDim1DiffInputDimsTestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 3> Concat3dDim2DiffInputDimsUint8Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
     return Concat3dDim2DiffInputDimsTestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, useSubtensor, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, useSubtensor, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDim0Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat4dDim0TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDim1Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat4dDim1TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDim2Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return Concat4dDim2TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, 0.5f, -1);
+    return Concat4dDim2TestImpl<DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDim3Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager, bool useSubtensor)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory, bool useSubtensor)
 {
     return Concat4dDim3TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1, useSubtensor);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1, useSubtensor);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDiffShapeDim0Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat4dDiffShapeDim0TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDiffShapeDim1Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat4dDiffShapeDim1TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDiffShapeDim2Uint8Test(
     IWorkloadFactory& workloadFactory,
-    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     return Concat4dDiffShapeDim2TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1);
 }
 
 LayerTestResult<uint8_t, 4> Concat4dDiffShapeDim3Uint8Test(
     IWorkloadFactory& workloadFactory,
     const IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool useSubtensor)
 {
     return Concat4dDiffShapeDim3TestImpl<DataType::QAsymmU8>(
-        workloadFactory, memoryManager, 0.5f, -1, useSubtensor);
+        workloadFactory, memoryManager, tensorHandleFactory, 0.5f, -1, useSubtensor);
 }

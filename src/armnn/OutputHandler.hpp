@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -16,8 +16,6 @@
 #include <set>
 #include <string>
 #include <vector>
-
-#include <boost/assert.hpp>
 
 namespace armnn
 {

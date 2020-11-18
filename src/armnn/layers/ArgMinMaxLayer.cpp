@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,6 +24,8 @@ ArgMinMaxLayer::ArgMinMaxLayer(const ArgMinMaxDescriptor& param, const char* nam
 std::unique_ptr<IWorkload> ArgMinMaxLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     ArgMinMaxQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateArgMinMax(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -34,7 +36,7 @@ ArgMinMaxLayer* ArgMinMaxLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> ArgMinMaxLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 1);
+    ARMNN_ASSERT(inputShapes.size() == 1);
 
     TensorShape inputShape = inputShapes[0];
     auto inputNumDimensions = inputShape.GetNumDimensions();
@@ -42,7 +44,7 @@ std::vector<TensorShape> ArgMinMaxLayer::InferOutputShapes(const std::vector<Ten
     auto axis = m_Param.m_Axis;
     auto unsignedAxis = armnnUtils::GetUnsignedAxis(inputNumDimensions, axis);
 
-    BOOST_ASSERT(unsignedAxis <= inputNumDimensions);
+    ARMNN_ASSERT(unsignedAxis <= inputNumDimensions);
 
     // 1D input shape results in scalar output
     if (inputShape.GetNumDimensions() == 1)
@@ -73,14 +75,15 @@ void ArgMinMaxLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "ArgMinMaxLayer: TensorShape set on OutputSlot does not match the inferred shape.",
-            GetOutputSlot(0).GetTensorInfo().GetShape(),
-            inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ArgMinMaxLayer");
 }
 
 void ArgMinMaxLayer::Accept(ILayerVisitor& visitor) const

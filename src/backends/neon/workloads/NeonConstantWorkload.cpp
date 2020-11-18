@@ -6,16 +6,43 @@
 #include "NeonConstantWorkload.hpp"
 
 #include <arm_compute/core/Types.h>
+#include <BFloat16.hpp>
 #include <Half.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <neon/NeonTensorHandle.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <backendsCommon/Workload.hpp>
 
-#include <boost/cast.hpp>
-
 namespace armnn
 {
+
+arm_compute::Status NeonConstantWorkloadValidate(const TensorInfo& output)
+{
+    const arm_compute::TensorInfo neonOutputInfo = armcomputetensorutils::BuildArmComputeTensorInfo(output);
+
+    std::array<arm_compute::DataType,9> supportedTypes = {
+            arm_compute::DataType::BFLOAT16,
+            arm_compute::DataType::F16,
+            arm_compute::DataType::F32,
+            arm_compute::DataType::QASYMM8,
+            arm_compute::DataType::QASYMM8_SIGNED,
+            arm_compute::DataType::QSYMM16,
+            arm_compute::DataType::QSYMM8,
+            arm_compute::DataType::QSYMM8_PER_CHANNEL,
+            arm_compute::DataType::S32
+    };
+    auto it = std::find(begin(supportedTypes), end(supportedTypes), neonOutputInfo.data_type());
+
+    if (it != end(supportedTypes))
+    {
+        return arm_compute::Status{};
+    }
+    else
+    {
+        return arm_compute::Status{arm_compute::ErrorCode::RUNTIME_ERROR, "Unsupported DataType"};
+    }
+}
 
 NeonConstantWorkload::NeonConstantWorkload(const ConstantQueueDescriptor& descriptor,
                                            const WorkloadInfo& info)
@@ -38,14 +65,19 @@ void NeonConstantWorkload::Execute() const
     {
         const ConstantQueueDescriptor& data = this->m_Data;
 
-        BOOST_ASSERT(data.m_LayerOutput != nullptr);
+        ARMNN_ASSERT(data.m_LayerOutput != nullptr);
         arm_compute::ITensor& output =
-            boost::polymorphic_downcast<NeonTensorHandle*>(data.m_Outputs[0])->GetTensor();
+            PolymorphicDowncast<NeonTensorHandle*>(data.m_Outputs[0])->GetTensor();
         arm_compute::DataType computeDataType =
-            boost::polymorphic_downcast<NeonTensorHandle*>(data.m_Outputs[0])->GetDataType();
+            PolymorphicDowncast<NeonTensorHandle*>(data.m_Outputs[0])->GetDataType();
 
         switch (computeDataType)
         {
+            case arm_compute::DataType::BFLOAT16:
+            {
+                CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<BFloat16>(), output);
+                break;
+            }
             case arm_compute::DataType::F16:
             {
                 CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<Half>(), output);
@@ -61,9 +93,30 @@ void NeonConstantWorkload::Execute() const
                 CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<uint8_t>(), output);
                 break;
             }
+            case arm_compute::DataType::QASYMM8_SIGNED:
+            {
+                CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<int8_t>(), output);
+                break;
+            }
+            case arm_compute::DataType::QSYMM16:
+            {
+                CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<int16_t>(), output);
+                break;
+            }
+            case arm_compute::DataType::QSYMM8:
+            case arm_compute::DataType::QSYMM8_PER_CHANNEL:
+            {
+                CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<int8_t>(), output);
+                break;
+            }
+            case arm_compute::DataType::S32:
+            {
+                CopyArmComputeITensorData(data.m_LayerOutput->GetConstTensor<int32_t>(), output);
+                break;
+            }
             default:
             {
-                BOOST_ASSERT_MSG(false, "Unknown data type");
+                ARMNN_ASSERT_MSG(false, "Unknown data type");
                 break;
             }
         }

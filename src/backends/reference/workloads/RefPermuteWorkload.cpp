@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -28,8 +28,10 @@ void RefPermuteWorkload<DataType>::Execute() const
                         src->Map(), dst->Map(), sizeof(T));
 }
 
+template class RefPermuteWorkload<DataType::BFloat16>;
 template class RefPermuteWorkload<DataType::Float16>;
 template class RefPermuteWorkload<DataType::Float32>;
+template class RefPermuteWorkload<DataType::QAsymmS8>;
 template class RefPermuteWorkload<DataType::QAsymmU8>;
 template class RefPermuteWorkload<DataType::QSymmS16>;
 

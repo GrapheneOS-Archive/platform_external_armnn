@@ -6,7 +6,7 @@
 #include "RefTensorHandleFactory.hpp"
 #include "RefTensorHandle.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace armnn
 {
@@ -23,20 +23,48 @@ std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateSubTensorHandle(ITe
                                                                              TensorShape const& subTensorShape,
                                                                              unsigned int const* subTensorOrigin) const
 {
-    boost::ignore_unused(parent, subTensorShape, subTensorOrigin);
+    IgnoreUnused(parent, subTensorShape, subTensorOrigin);
     return nullptr;
 }
 
 std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo) const
 {
-    return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager, m_ImportFlags);
+    return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
 }
 
 std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo,
                                                                           DataLayout dataLayout) const
 {
-    boost::ignore_unused(dataLayout);
-    return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager, m_ImportFlags);
+    IgnoreUnused(dataLayout);
+    return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
+}
+
+std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo,
+                                                                          const bool IsMemoryManaged) const
+{
+    if (IsMemoryManaged)
+    {
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
+    }
+    else
+    {
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_ImportFlags);
+    }
+}
+
+std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo,
+                                                                          DataLayout dataLayout,
+                                                                          const bool IsMemoryManaged) const
+{
+    IgnoreUnused(dataLayout);
+    if (IsMemoryManaged)
+    {
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
+    }
+    else
+    {
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_ImportFlags);
+    }
 }
 
 const FactoryId& RefTensorHandleFactory::GetId() const

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -18,7 +18,8 @@ namespace
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<int32_t, 3> ArgMinMaxTestCommon(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr&,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         armnn::ArgMinMaxFunction argMinMaxFunction,
         const armnn::TensorInfo inputTensorInfo,
         const armnn::TensorInfo outputTensorInfo,
@@ -26,14 +27,13 @@ LayerTestResult<int32_t, 3> ArgMinMaxTestCommon(
         const std::vector<int32_t>& outputData,
         int axis = 3)
 {
-    boost::ignore_unused(memoryManager);
     auto inputTensor = MakeTensor<T, 4>(inputTensorInfo, ConvertToDataType<ArmnnType>(inputData, inputTensorInfo));
 
     LayerTestResult<int32_t, 3> result(outputTensorInfo);
     result.outputExpected = MakeTensor<int32_t, 3>(outputTensorInfo, outputData);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::ArgMinMaxQueueDescriptor descriptor;
     descriptor.m_Parameters.m_Function = argMinMaxFunction;
@@ -63,7 +63,8 @@ LayerTestResult<int32_t, 3> ArgMinMaxTestCommon(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMaxSimpleTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 1, 1, 5 };
     const armnn::TensorShape outputShape{ 1, 1, 1 };
@@ -81,7 +82,7 @@ LayerTestResult<int32_t, 3> ArgMaxSimpleTest(
     std::vector<float> inputValues({ 5.0f, 2.0f, 8.0f, 10.0f, 9.0f });
     std::vector<int32_t> outputValues({ 3 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Max,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, -1); // axis -1 === 3
@@ -90,7 +91,8 @@ LayerTestResult<int32_t, 3> ArgMaxSimpleTest(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMinSimpleTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 1, 1, 5 };
     const armnn::TensorShape outputShape{ 1, 1, 1 };
@@ -108,7 +110,7 @@ LayerTestResult<int32_t, 3> ArgMinSimpleTest(
     std::vector<float> inputValues({ 5.0f, 2.0f, 8.0f, 10.0f, 9.0f });
     std::vector<int32_t> outputValues({ 1 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Min,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, 3);
@@ -117,7 +119,8 @@ LayerTestResult<int32_t, 3> ArgMinSimpleTest(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMinChannelTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 3, 2, 4};
     const armnn::TensorShape outputShape{ 1, 2, 4 };
@@ -143,7 +146,7 @@ LayerTestResult<int32_t, 3> ArgMinChannelTest(
     std::vector<int32_t> outputValues({ 0, 0, 0, 0,
                                         0, 0, 0, 0 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Min,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, 1);
@@ -152,7 +155,8 @@ LayerTestResult<int32_t, 3> ArgMinChannelTest(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMaxChannelTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 3, 2, 4};
     const armnn::TensorShape outputShape{ 1, 2, 4 };
@@ -178,7 +182,7 @@ LayerTestResult<int32_t, 3> ArgMaxChannelTest(
     std::vector<int32_t> outputValues({ 2, 2, 2, 2,
                                         2, 2, 2, 2 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Max,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, 1);
@@ -187,7 +191,8 @@ LayerTestResult<int32_t, 3> ArgMaxChannelTest(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMaxHeightTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 3, 2, 4};
     const armnn::TensorShape outputShape{ 1, 3, 4 };
@@ -213,7 +218,7 @@ LayerTestResult<int32_t, 3> ArgMaxHeightTest(
                                         1, 1, 1, 1,
                                         1, 1, 1, 1 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Max,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, 2);
@@ -222,7 +227,8 @@ LayerTestResult<int32_t, 3> ArgMaxHeightTest(
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<int32_t, 3> ArgMinWidthTest(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const armnn::TensorShape inputShape{ 1, 3, 2, 4};
     const armnn::TensorShape outputShape{ 1, 3, 2 };
@@ -248,7 +254,7 @@ LayerTestResult<int32_t, 3> ArgMinWidthTest(
                                         0, 0,
                                         0, 0 });
 
-    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager,
+    return ArgMinMaxTestCommon<ArmnnType>(workloadFactory, memoryManager, tensorHandleFactory,
                                           armnn::ArgMinMaxFunction::Min,
                                           inputTensorInfo, outputTensorInfo,
                                           inputValues, outputValues, 3);
@@ -260,109 +266,203 @@ LayerTestResult<int32_t, 3> ArgMinWidthTest(
 template LayerTestResult<int32_t, 3>
 ArgMaxSimpleTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxSimpleTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxSimpleTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxSimpleTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxSimpleTest<armnn::DataType::QSymmS16>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxSimpleTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinSimpleTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinSimpleTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinSimpleTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinSimpleTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinSimpleTest<armnn::DataType::QSymmS16>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinSimpleTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinChannelTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinChannelTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinChannelTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinChannelTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinChannelTest<armnn::DataType::QSymmS16>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinChannelTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxChannelTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxChannelTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxChannelTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxChannelTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxChannelTest<armnn::DataType::QSymmS16>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxChannelTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxHeightTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxHeightTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxHeightTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMaxHeightTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMaxHeightTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinWidthTest<armnn::DataType::Float32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinWidthTest<armnn::DataType::Float16>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinWidthTest<armnn::DataType::Signed32>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+template LayerTestResult<int32_t, 3>
+ArgMinWidthTest<armnn::DataType::QAsymmS8>(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 template LayerTestResult<int32_t, 3>
 ArgMinWidthTest<armnn::DataType::QAsymmU8>(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager);
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);

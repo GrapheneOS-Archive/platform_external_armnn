@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -44,6 +44,7 @@ void RefDebugWorkload<DataType>::RegisterDebugCallback(const DebugCallbackFuncti
     m_Callback = func;
 }
 
+template class RefDebugWorkload<DataType::BFloat16>;
 template class RefDebugWorkload<DataType::Float16>;
 template class RefDebugWorkload<DataType::Float32>;
 template class RefDebugWorkload<DataType::QAsymmU8>;

@@ -5,7 +5,6 @@
 
 #include "MockBackend.hpp"
 #include "MockBackendId.hpp"
-#include "armnn/backends/profiling/IBackendProfilingContext.hpp"
 
 #include <armnn/BackendRegistry.hpp>
 
@@ -15,8 +14,6 @@
 #include <Optimizer.hpp>
 #include <SubgraphViewSelector.hpp>
 
-#include <boost/cast.hpp>
-
 #include <algorithm>
 
 namespace
@@ -24,7 +21,7 @@ namespace
 
 bool IsLayerSupported(const armnn::Layer* layer)
 {
-    BOOST_ASSERT(layer != nullptr);
+    ARMNN_ASSERT(layer != nullptr);
 
     armnn::LayerType layerType = layer->GetType();
     switch (layerType)
@@ -48,7 +45,7 @@ bool IsLayerSupported(const armnn::Layer& layer)
 
 bool IsLayerOptimizable(const armnn::Layer* layer)
 {
-    BOOST_ASSERT(layer != nullptr);
+    ARMNN_ASSERT(layer != nullptr);
 
     // A Layer is not optimizable if its name contains "unoptimizable"
     const std::string layerName(layer->GetName());
@@ -108,7 +105,7 @@ IBackendInternal::IBackendContextPtr MockBackend::CreateBackendContext(const IRu
 IBackendInternal::IBackendProfilingContextPtr MockBackend::CreateBackendProfilingContext(
     const IRuntime::CreationOptions& options, IBackendProfilingPtr& backendProfiling)
 {
-    boost::ignore_unused(options);
+    IgnoreUnused(options);
     std::shared_ptr<armnn::MockBackendProfilingContext> context =
         std::make_shared<MockBackendProfilingContext>(backendProfiling);
     MockBackendProfilingService::Instance().SetProfilingContextPtr(context);
@@ -192,7 +189,7 @@ OptimizationViews MockBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                       supportedSubgraphs.end(),
                       [&optimizationViews](const SubgraphView::SubgraphViewPtr& supportedSubgraph)
         {
-            BOOST_ASSERT(supportedSubgraph != nullptr);
+            ARMNN_ASSERT(supportedSubgraph != nullptr);
 
             PreCompiledLayer* preCompiledLayer =
                 optimizationViews.GetGraph().AddLayer<PreCompiledLayer>(
@@ -229,7 +226,7 @@ OptimizationViews MockBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                       unsupportedSubgraphs.end(),
                       [&optimizationViews](const SubgraphView::SubgraphViewPtr& unsupportedSubgraph)
         {
-            BOOST_ASSERT(unsupportedSubgraph != nullptr);
+            ARMNN_ASSERT(unsupportedSubgraph != nullptr);
 
             optimizationViews.AddFailedSubgraph(SubgraphView(*unsupportedSubgraph));
         });
@@ -257,7 +254,7 @@ OptimizationViews MockBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                       untouchedSubgraphs.end(),
                       [&optimizationViews](const SubgraphView::SubgraphViewPtr& untouchedSubgraph)
         {
-            BOOST_ASSERT(untouchedSubgraph != nullptr);
+            ARMNN_ASSERT(untouchedSubgraph != nullptr);
 
             optimizationViews.AddUntouchedSubgraph(SubgraphView(*untouchedSubgraph));
         });

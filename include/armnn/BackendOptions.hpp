@@ -11,6 +11,10 @@
 namespace armnn
 {
 
+struct BackendOptions;
+using NetworkOptions = std::vector<BackendOptions>;
+
+using ModelOptions = std::vector<BackendOptions>;
 
 /// Struct for the users to pass backend specific options
 struct BackendOptions
@@ -27,7 +31,7 @@ private:
     };
 public:
 
-    // Very basic type safe variant
+    /// Very basic type safe variant
     class Var
     {
 
@@ -39,7 +43,7 @@ public:
         explicit Var(const char* s) : m_Vals(s), m_Type(VarTypes::String) {};
         explicit Var(std::string s) : m_Vals(s), m_Type(VarTypes::String) {};
 
-        //Disallow implicit conversions from types not explicitly allowed below.
+        /// Disallow implicit conversions from types not explicitly allowed below.
         template<typename DisallowedType>
         Var(DisallowedType)
         {
@@ -161,7 +165,7 @@ public:
             String,
         };
 
-        // Union of potential type values.
+        /// Union of potential type values.
         union Vals
         {
             int i;
@@ -259,5 +263,22 @@ private:
     /// The array of options to pass to the backend context
     std::vector<BackendOption> m_Options;
 };
+
+
+template <typename F>
+void ParseOptions(const std::vector<BackendOptions>& options, BackendId backend, F f)
+{
+    for (auto optionsGroup : options)
+    {
+        if (optionsGroup.GetBackendId() == backend)
+        {
+            for (size_t i=0; i < optionsGroup.GetOptionCount(); i++)
+            {
+                const BackendOptions::BackendOption option = optionsGroup.GetOption(i);
+                f(option.GetName(), option.GetValue());
+            }
+        }
+    }
+}
 
 } //namespace armnn

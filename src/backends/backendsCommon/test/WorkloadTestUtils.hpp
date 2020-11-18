@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -95,15 +95,17 @@ inline armnn::Optional<armnn::DataType> GetBiasTypeFromWeightsType(armnn::Option
 
     switch(weightsType.value())
     {
+        case armnn::DataType::BFloat16:
         case armnn::DataType::Float16:
         case armnn::DataType::Float32:
             return weightsType;
+        case armnn::DataType::QAsymmS8:
         case armnn::DataType::QAsymmU8:
-            return armnn::DataType::Signed32;
+        case armnn::DataType::QSymmS8:
         case armnn::DataType::QSymmS16:
             return armnn::DataType::Signed32;
         default:
-            BOOST_ASSERT_MSG(false, "GetBiasTypeFromWeightsType(): Unsupported data type.");
+            ARMNN_ASSERT_MSG(false, "GetBiasTypeFromWeightsType(): Unsupported data type.");
     }
     return armnn::EmptyOptional();
 }

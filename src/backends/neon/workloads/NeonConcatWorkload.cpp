@@ -8,10 +8,9 @@
 #include "NeonWorkloadUtils.hpp"
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
-
-
 
 namespace armnn
 {
@@ -37,7 +36,7 @@ arm_compute::Status NeonConcatWorkloadValidate(const std::vector<const TensorInf
         aclInputs.emplace_back(aclInputInfo);
     }
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output);
-    std::vector<arm_compute::ITensorInfo*> aclInputPtrs;
+    std::vector<const arm_compute::ITensorInfo*> aclInputPtrs;
     for (arm_compute::ITensorInfo& input : aclInputs)
     {
         aclInputPtrs.emplace_back(&input);
@@ -70,13 +69,13 @@ const ConcatQueueDescriptor& descriptor, const WorkloadInfo& info)
         return;
     }
 
-    std::vector<arm_compute::ITensor *> aclInputs;
+    std::vector<const arm_compute::ITensor *> aclInputs;
     for (auto input : m_Data.m_Inputs)
     {
-        arm_compute::ITensor& aclInput  = boost::polymorphic_pointer_downcast<IAclTensorHandle>(input)->GetTensor();
+        arm_compute::ITensor& aclInput  = armnn::PolymorphicPointerDowncast<IAclTensorHandle>(input)->GetTensor();
         aclInputs.emplace_back(&aclInput);
     }
-    arm_compute::ITensor& output = boost::polymorphic_pointer_downcast<IAclTensorHandle>(
+    arm_compute::ITensor& output = armnn::PolymorphicPointerDowncast<IAclTensorHandle>(
         m_Data.m_Outputs[0])->GetTensor();
 
     // Create the layer function

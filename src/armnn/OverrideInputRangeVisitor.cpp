@@ -7,8 +7,7 @@
 #include "NetworkQuantizerUtils.hpp"
 #include "Layer.hpp"
 
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace armnn
 {
@@ -23,7 +22,7 @@ OverrideInputRangeVisitor::OverrideInputRangeVisitor(RangeTracker& ranges,
 
 void OverrideInputRangeVisitor::VisitInputLayer(const IConnectableLayer* layer, LayerBindingId id, const char* name)
 {
-    boost::ignore_unused(name);
+    IgnoreUnused(name);
     if (m_LayerId == id)
     {
         m_Ranges.SetRange(layer, 0, m_MinMaxRange.first, m_MinMaxRange.second);

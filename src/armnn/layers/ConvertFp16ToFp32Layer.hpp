@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -15,7 +15,6 @@ class ConvertFp16ToFp32Layer : public Layer
 {
 public:
     /// Makes a workload for the ConvertFp16ToFp32 type.
-    /// @param [in] graph The graph where this layer can be found.
     /// @param [in] factory The workload factory which will create the workload.
     /// @return A pointer to the created workload, or nullptr if not created.
     virtual std::unique_ptr<IWorkload> CreateWorkload(const IWorkloadFactory& factory) const override;
@@ -26,6 +25,7 @@ public:
 
     /// Check if the input tensor shape(s)
     /// will lead to a valid configuration of @ref ConvertFp16ToFp32Layer.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     void Accept(ILayerVisitor& visitor) const override;

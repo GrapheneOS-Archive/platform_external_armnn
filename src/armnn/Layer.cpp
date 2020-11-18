@@ -1,16 +1,16 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "Layer.hpp"
 
 #include "Graph.hpp"
 #include <ProfilingService.hpp>
+#include <armnn/utility/NumericCast.hpp>
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 
-#include <boost/cast.hpp>
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include <numeric>
 
@@ -19,7 +19,7 @@ namespace armnn
 
 void InputSlot::Insert(Layer& layer)
 {
-    BOOST_ASSERT(layer.GetNumOutputSlots() == 1);
+    ARMNN_ASSERT(layer.GetNumOutputSlots() == 1);
 
     OutputSlot* const prevSlot = GetConnectedOutputSlot();
 
@@ -29,9 +29,9 @@ void InputSlot::Insert(Layer& layer)
         prevSlot->Disconnect(*this);
 
         // Connects inserted layer to parent.
-        BOOST_ASSERT(layer.GetNumInputSlots() == 1);
+        ARMNN_ASSERT(layer.GetNumInputSlots() == 1);
         int idx = prevSlot->Connect(layer.GetInputSlot(0));
-        prevSlot->SetEdgeStrategy(boost::numeric_cast<unsigned int>(idx), EdgeStrategy::Undefined);
+        prevSlot->SetEdgeStrategy(armnn::numeric_cast<unsigned int>(idx), EdgeStrategy::Undefined);
 
         // Sets tensor info for inserted layer.
         const TensorInfo& tensorInfo = prevSlot->GetTensorInfo();
@@ -67,12 +67,16 @@ const TensorInfo& OutputSlot::GetTensorInfo() const
 
 bool OutputSlot::IsTensorInfoSet() const
 {
+    if (GetOwningLayer().GetShapeInferenceMethod() == ShapeInferenceMethod::InferAndValidate)
+    {
+        GetOwningLayer().ValidateTensorShapesFromInputs();
+    }
     return GetOutputHandler().IsTensorInfoSet();
 }
 
 bool OutputSlot::ValidateTensorShape(const TensorShape& shape) const
 {
-    BOOST_ASSERT_MSG(IsTensorInfoSet(), "TensorInfo must be set in order to validate the shape.");
+    ARMNN_ASSERT_MSG(IsTensorInfoSet(), "TensorInfo must be set in order to validate the shape.");
     return shape == m_OutputHandler.GetTensorInfo().GetShape();
 }
 
@@ -81,7 +85,7 @@ int OutputSlot::Connect(InputSlot& destination)
     destination.SetConnection(this);
     m_Connections.push_back(&destination);
     m_EdgeStrategies.push_back(EdgeStrategy::Undefined);
-    return boost::numeric_cast<int>(m_Connections.size() - 1);
+    return armnn::numeric_cast<int>(m_Connections.size() - 1);
 }
 
 void OutputSlot::Disconnect(InputSlot& slot)
@@ -113,12 +117,13 @@ void OutputSlot::MoveAllConnections(OutputSlot& destination)
 {
     while (GetNumConnections() > 0)
     {
-        BOOST_ASSERT_MSG(m_EdgeStrategies[0] == EdgeStrategy::Undefined,
+        ARMNN_ASSERT_MSG(m_EdgeStrategies[0] == EdgeStrategy::Undefined,
             "Cannot move connections once memory strategies have be established.");
 
         InputSlot& connection = *GetConnection(0);
         Disconnect(connection);
         destination.Connect(connection);
+        destination.GetOutputHandler().SetTensorInfo(GetOutputHandler().GetTensorInfo());
     }
 }
 
@@ -131,7 +136,7 @@ unsigned int OutputSlot::CalculateIndexOnOwner() const
             return i;
         }
     }
-    BOOST_ASSERT_MSG(false, "Did not find slot on owner.");
+    ARMNN_ASSERT_MSG(false, "Did not find slot on owner.");
     return 0; // Error
 }
 
@@ -152,10 +157,9 @@ bool OutputSlot::operator==(const OutputSlot& other) const
 
 void OutputSlot::ValidateConnectionIndex(unsigned int index) const
 {
-    if (boost::numeric_cast<std::size_t>(index) >= m_Connections.size())
+    if (armnn::numeric_cast<std::size_t>(index) >= m_Connections.size())
     {
-        throw InvalidArgumentException(
-            boost::str(boost::format("GetConnection: Invalid index %1% provided") % index));
+        throw InvalidArgumentException((fmt::format("GetConnection: Invalid index {} provided", index)));
     }
 }
 
@@ -190,12 +194,14 @@ Layer::Layer(unsigned int numInputSlots,
              DataLayout layout,
              const char* name)
 : m_OutputHandlers(numOutputSlots)
+, m_ShapeInferenceMethod(ShapeInferenceMethod::ValidateOnly)
 , m_LayerName(name ? name : "")
 , m_Type(type)
 , m_BackendId()
-, m_Guid(profiling::ProfilingService::Instance().NextGuid())
+, m_BackendHint(EmptyOptional())
+, m_Guid(profiling::ProfilingService::GetNextGuid())
 {
-    boost::ignore_unused(layout);
+    IgnoreUnused(layout);
     m_InputSlots.reserve(numInputSlots);
     for (unsigned int i = 0; i < numInputSlots; ++i)
     {
@@ -222,7 +228,7 @@ void Layer::CollectWorkloadInputs(WorkloadDataCollector& dataCollector) const
     for (auto&& inputSlot : GetInputSlots())
     {
         // The graph must be well-formed at this point.
-        BOOST_ASSERT(inputSlot.GetConnection());
+        ARMNN_ASSERT(inputSlot.GetConnection());
         const OutputHandler& outputHandler = inputSlot.GetConnectedOutputSlot()->GetOutputHandler();
         dataCollector.Push(outputHandler.GetData(), outputHandler.GetTensorInfo());
     }
@@ -234,6 +240,11 @@ void Layer::CollectWorkloadOutputs(WorkloadDataCollector& dataCollector) const
     {
         outputHandler.CollectWorkloadOutputs(dataCollector);
     }
+}
+
+void Layer::SetAdditionalInfo(QueueDescriptor& descriptor) const
+{
+    descriptor.m_AdditionalInfoObject = m_AdditionalInfoObject.get();
 }
 
 void Layer::CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
@@ -254,7 +265,7 @@ void Layer::CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
         else
         {
             ITensorHandleFactory* handleFactory = registry.GetFactory(factoryId);
-            BOOST_ASSERT(handleFactory);
+            ARMNN_ASSERT(handleFactory);
             handler.CreateTensorHandles(*handleFactory, IsMemoryManaged);
         }
     }
@@ -336,41 +347,27 @@ LayerPriority Layer::GetPriority() const
 
 void Layer::VerifyLayerConnections(unsigned int expectedConnections, const CheckLocation& location) const
 {
-    BOOST_ASSERT(GetNumInputSlots() == expectedConnections);
+    ARMNN_ASSERT(GetNumInputSlots() == expectedConnections);
 
     for (unsigned int i=0; i<expectedConnections; ++i)
     {
         if (GetInputSlot(i).GetConnection() == nullptr)
         {
             throw LayerValidationException(
-                boost::str(
-                    boost::format(
-                        "Input connection #%1% must be connected "
-                        "for %2% layer %3% %4%")
-                        % i
-                        % GetLayerTypeAsCString(this->GetType())
-                        % GetNameStr()
-                        % location.AsString()));
-        }
-        if(! GetInputSlot(i).GetConnection()->IsTensorInfoSet())
-        {
-            throw LayerValidationException(
-                boost::str(
-                    boost::format(
-                        "TensorInfo of Input connection #%1% must be set on connected OutputSlot for "
-                        "%2% layer %3% %4%")
-                        % i
-                        % GetLayerTypeAsCString(this->GetType())
-                        % GetNameStr()
-                        % location.AsString()));
+                    fmt::format("Input connection #{0} must be connected "
+                                "for {1} layer {2} {3}",
+                                i,
+                                GetLayerTypeAsCString(this->GetType()),
+                                GetNameStr(),
+                                location.AsString()));
         }
     }
 }
 
 std::vector<TensorShape> Layer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(GetNumInputSlots() != 0);
-    BOOST_ASSERT(GetNumOutputSlots() != 0);
+    ARMNN_ASSERT(GetNumInputSlots() != 0);
+    ARMNN_ASSERT(GetNumOutputSlots() != 0);
 
     // By default we return what we got, meaning the output shape(s) are the same as the input(s).
     // This only works if the number of inputs and outputs are the same. Since we are in the Layer
@@ -380,24 +377,81 @@ std::vector<TensorShape> Layer::InferOutputShapes(const std::vector<TensorShape>
     if (GetNumInputSlots() != GetNumOutputSlots())
     {
         throw UnimplementedException(
-            boost::str(
-                boost::format(
-                    "Default implementation for InferOutputShapes can only be used for "
-                    "layers with the same number of input and output slots. This doesn't "
-                    "hold for %1% layer %2% (#inputs=%3% #outputs=%4%) %5%")
-                    % GetLayerTypeAsCString(this->GetType())
-                    % GetNameStr()
-                    % GetNumInputSlots()
-                    % GetNumOutputSlots()
-                    % CHECK_LOCATION().AsString()));
+                fmt::format("Default implementation for InferOutputShapes can only be used for "
+                            "layers with the same number of input and output slots. This doesn't "
+                            "hold for {0} layer {1} (#inputs={2} #outputs={3}) {4}",
+                            GetLayerTypeAsCString(this->GetType()),
+                            GetNameStr(),
+                            GetNumInputSlots(),
+                            GetNumOutputSlots(),
+                            CHECK_LOCATION().AsString()));
     }
     return inputShapes;
 }
 
+void Layer::ValidateAndCopyShape(const TensorShape& outputShape,
+                                 const TensorShape& inferredShape,
+                                 const ShapeInferenceMethod shapeInferenceMethod,
+                                 const std::string& layerName,
+                                 const unsigned int outputSlotIndex)
+{
+    if (shapeInferenceMethod == ShapeInferenceMethod::ValidateOnly)
+    {
+        ConditionalThrowIfNotEqual<LayerValidationException>(
+                layerName + ": TensorShape set on OutputSlot[0] does not match the inferred shape.",
+                outputShape,
+                inferredShape);
+        return;
+    }
+
+    if (outputShape.GetDimensionality() == Dimensionality::Specified)
+    {
+        for (unsigned int i = 0; i < outputShape.GetNumDimensions(); ++i)
+        {
+            if (outputShape.GetDimensionSpecificity(i) && outputShape[i] != inferredShape[i])
+            {
+                std::stringstream ss;
+                ss << layerName << ": TensorShape set on OutputSlot[" << outputSlotIndex <<
+                "] does not match the inferred shape at dimension index [";
+                ss << i << "] " << outputShape << " != " << inferredShape;
+                throw LayerValidationException(ss.str());
+            }
+        }
+    }
+
+    TensorInfo info = GetOutputSlot(outputSlotIndex).GetTensorInfo();
+
+    armnn::TensorInfo inferredTensorInfo(inferredShape,
+                                         info.GetDataType(),
+                                         info.GetQuantizationScale(),
+                                         info.GetQuantizationOffset());
+
+    GetOutputSlot(outputSlotIndex).SetTensorInfo(inferredTensorInfo);
+}
+
+void Layer::VerifyShapeInferenceType(const TensorShape& outputShape, ShapeInferenceMethod shapeInferenceMethod)
+{
+    if (shapeInferenceMethod == ShapeInferenceMethod::ValidateOnly)
+    {
+        ConditionalThrow<LayerValidationException>(
+                outputShape.GetDimensionality() != Dimensionality::NotSpecified,
+                "Dimensionality can not be NotSpecified while using ShapeInferenceMethod::ValidateOnly");
+
+        ConditionalThrow<LayerValidationException>(
+                outputShape.AreAllDimensionsSpecified(),
+                "Unspecified dimension while using ShapeInferenceMethod::ValidateOnly");
+    }
+}
+
 void Layer::SerializeLayerParameters(ParameterStringifyFunction& fn) const
 {
+    std::string guid = std::to_string(m_Guid);
     std::string layerType = GetLayerTypeAsCString(m_Type);
     std::string backendId = std::string(m_BackendId);
+    if (!(guid.compare("") == 0) && !guid.empty())
+    {
+        fn("Guid", guid);
+    }
     if(!(m_LayerName.compare("") == 0) && !m_LayerName.empty())
     {
         fn("LayerName",m_LayerName);
@@ -409,6 +463,13 @@ void Layer::SerializeLayerParameters(ParameterStringifyFunction& fn) const
     if(!(backendId.compare("") == 0) && !backendId.empty())
     {
         fn("BackendID",backendId);
+    }
+    std::shared_ptr<ActivationDescriptor>
+            activationDescPtr = GetAdditionalInformation<ActivationDescriptor>();
+
+    if (activationDescPtr)
+    {
+        StringifyLayerParameters<ActivationDescriptor>::Serialize(fn, *activationDescPtr.get());
     }
 }
 

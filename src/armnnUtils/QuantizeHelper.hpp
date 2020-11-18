@@ -5,16 +5,16 @@
 
 #pragma once
 
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 #include <armnn/TypesUtils.hpp>
 
+#include <BFloat16.hpp>
 #include <Half.hpp>
 
 #include <initializer_list>
 #include <iterator>
 #include <vector>
-
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
 
 namespace armnnUtils
 {
@@ -38,13 +38,13 @@ struct SelectiveQuantizer<T, false>
 {
     static T Quantize(float value, float scale, int32_t offset)
     {
-        boost::ignore_unused(scale, offset);
+        armnn::IgnoreUnused(scale, offset);
         return value;
     }
 
     static float Dequantize(T value, float scale, int32_t offset)
     {
-        boost::ignore_unused(scale, offset);
+        armnn::IgnoreUnused(scale, offset);
         return value;
     }
 };
@@ -54,13 +54,29 @@ struct SelectiveQuantizer<armnn::Half, false>
 {
     static armnn::Half Quantize(float value, float scale, int32_t offset)
     {
-        boost::ignore_unused(scale, offset);
+        armnn::IgnoreUnused(scale, offset);
         return armnn::Half(value);
     }
 
     static float Dequantize(armnn::Half value, float scale, int32_t offset)
     {
-        boost::ignore_unused(scale, offset);
+        armnn::IgnoreUnused(scale, offset);
+        return value;
+    }
+};
+
+template<>
+struct SelectiveQuantizer<armnn::BFloat16, false>
+{
+    static armnn::BFloat16 Quantize(float value, float scale, int32_t offset)
+    {
+        armnn::IgnoreUnused(scale, offset);
+        return armnn::BFloat16(value);
+    }
+
+    static float Dequantize(armnn::BFloat16 value, float scale, int32_t offset)
+    {
+        armnn::IgnoreUnused(scale, offset);
         return value;
     }
 };
@@ -89,7 +105,7 @@ typename std::enable_if<IsFloatingPointIterator<FloatIt>::value, int>::type=0 //
 std::vector<T> QuantizedVector(FloatIt first, FloatIt last, float qScale, int32_t qOffset)
 {
     std::vector<T> quantized;
-    quantized.reserve(boost::numeric_cast<size_t>(std::distance(first, last)));
+    quantized.reserve(armnn::numeric_cast<size_t>(std::distance(first, last)));
 
     for (auto it = first; it != last; ++it)
     {

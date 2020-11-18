@@ -1,15 +1,19 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ProfilingUtils.hpp"
 
+#include <common/include/CommonProfilingUtils.hpp>
+#include <common/include/ProfilingException.hpp>
+#include <common/include/SwTrace.hpp>
+
 #include <armnn/Version.hpp>
 
 #include <WallClockTimer.hpp>
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -88,7 +92,7 @@ std::vector<uint16_t> GetNextCounterUids(uint16_t firstUid, uint16_t cores)
 
 void WriteBytes(const IPacketBufferPtr& packetBuffer, unsigned int offset,  const void* value, unsigned int valueSize)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     WriteBytes(packetBuffer->GetWritableData(), offset, value, valueSize);
 }
@@ -96,187 +100,128 @@ void WriteBytes(const IPacketBufferPtr& packetBuffer, unsigned int offset,  cons
 uint32_t ConstructHeader(uint32_t packetFamily,
                          uint32_t packetId)
 {
-    return ((packetFamily & 0x3F) << 26)|
-           ((packetId & 0x3FF) << 16);
+    return (( packetFamily & 0x0000003F ) << 26 )|
+           (( packetId     & 0x000003FF ) << 16 );
 }
 
-uint32_t ConstructHeader(uint32_t packetFamily,
-                         uint32_t packetClass,
-                         uint32_t packetType)
+uint32_t ConstructHeader(uint32_t packetFamily, uint32_t packetClass, uint32_t packetType)
 {
-    return ((packetFamily & 0x3F) << 26)|
-           ((packetClass & 0x3FF) << 19)|
-           ((packetType & 0x3FFF) << 16);
+    return ((packetFamily & 0x0000003F) << 26) |
+           ((packetClass  & 0x0000007F) << 19) |
+           ((packetType   & 0x00000007) << 16);
 }
 
 void WriteUint64(const std::unique_ptr<IPacketBuffer>& packetBuffer, unsigned int offset, uint64_t value)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     WriteUint64(packetBuffer->GetWritableData(), offset, value);
 }
 
 void WriteUint32(const IPacketBufferPtr& packetBuffer, unsigned int offset, uint32_t value)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     WriteUint32(packetBuffer->GetWritableData(), offset, value);
 }
 
 void WriteUint16(const IPacketBufferPtr& packetBuffer, unsigned int offset, uint16_t value)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     WriteUint16(packetBuffer->GetWritableData(), offset, value);
 }
 
 void WriteUint8(const IPacketBufferPtr& packetBuffer, unsigned int offset, uint8_t value)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     WriteUint8(packetBuffer->GetWritableData(), offset, value);
 }
 
 void WriteBytes(unsigned char* buffer, unsigned int offset, const void* value, unsigned int valueSize)
 {
-    BOOST_ASSERT(buffer);
-    BOOST_ASSERT(value);
-
-    for (unsigned int i = 0; i < valueSize; i++, offset++)
-    {
-        buffer[offset] = *(reinterpret_cast<const unsigned char*>(value) + i);
-    }
+    arm::pipe::WriteBytes(buffer, offset, value, valueSize);
 }
 
 void WriteUint64(unsigned char* buffer, unsigned int offset, uint64_t value)
 {
-    BOOST_ASSERT(buffer);
-
-    buffer[offset]     = static_cast<unsigned char>(value & 0xFF);
-    buffer[offset + 1] = static_cast<unsigned char>((value >> 8) & 0xFF);
-    buffer[offset + 2] = static_cast<unsigned char>((value >> 16) & 0xFF);
-    buffer[offset + 3] = static_cast<unsigned char>((value >> 24) & 0xFF);
-    buffer[offset + 4] = static_cast<unsigned char>((value >> 32) & 0xFF);
-    buffer[offset + 5] = static_cast<unsigned char>((value >> 40) & 0xFF);
-    buffer[offset + 6] = static_cast<unsigned char>((value >> 48) & 0xFF);
-    buffer[offset + 7] = static_cast<unsigned char>((value >> 56) & 0xFF);
+    arm::pipe::WriteUint64(buffer, offset, value);
 }
 
 void WriteUint32(unsigned char* buffer, unsigned int offset, uint32_t value)
 {
-    BOOST_ASSERT(buffer);
-
-    buffer[offset]     = static_cast<unsigned char>(value & 0xFF);
-    buffer[offset + 1] = static_cast<unsigned char>((value >> 8) & 0xFF);
-    buffer[offset + 2] = static_cast<unsigned char>((value >> 16) & 0xFF);
-    buffer[offset + 3] = static_cast<unsigned char>((value >> 24) & 0xFF);
+    arm::pipe::WriteUint32(buffer, offset, value);
 }
 
 void WriteUint16(unsigned char* buffer, unsigned int offset, uint16_t value)
 {
-    BOOST_ASSERT(buffer);
-
-    buffer[offset]     = static_cast<unsigned char>(value & 0xFF);
-    buffer[offset + 1] = static_cast<unsigned char>((value >> 8) & 0xFF);
+    arm::pipe::WriteUint16(buffer, offset, value);
 }
 
 void WriteUint8(unsigned char* buffer, unsigned int offset, uint8_t value)
 {
-    BOOST_ASSERT(buffer);
-
-    buffer[offset] = static_cast<unsigned char>(value);
+    arm::pipe::WriteUint8(buffer, offset, value);
 }
 
 void ReadBytes(const IPacketBufferPtr& packetBuffer, unsigned int offset, unsigned int valueSize, uint8_t outValue[])
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     ReadBytes(packetBuffer->GetReadableData(), offset, valueSize, outValue);
 }
 
 uint64_t ReadUint64(const IPacketBufferPtr& packetBuffer, unsigned int offset)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     return ReadUint64(packetBuffer->GetReadableData(), offset);
 }
 
 uint32_t ReadUint32(const IPacketBufferPtr& packetBuffer, unsigned int offset)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     return ReadUint32(packetBuffer->GetReadableData(), offset);
 }
 
 uint16_t ReadUint16(const IPacketBufferPtr& packetBuffer, unsigned int offset)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     return ReadUint16(packetBuffer->GetReadableData(), offset);
 }
 
 uint8_t ReadUint8(const IPacketBufferPtr& packetBuffer, unsigned int offset)
 {
-    BOOST_ASSERT(packetBuffer);
+    ARMNN_ASSERT(packetBuffer);
 
     return ReadUint8(packetBuffer->GetReadableData(), offset);
 }
 
 void ReadBytes(const unsigned char* buffer, unsigned int offset, unsigned int valueSize, uint8_t outValue[])
 {
-    BOOST_ASSERT(buffer);
-    BOOST_ASSERT(outValue);
-
-    for (unsigned int i = 0; i < valueSize; i++, offset++)
-    {
-        outValue[i] = static_cast<uint8_t>(buffer[offset]);
-    }
+    arm::pipe::ReadBytes(buffer, offset, valueSize, outValue);
 }
 
 uint64_t ReadUint64(const unsigned char* buffer, unsigned int offset)
 {
-    BOOST_ASSERT(buffer);
-
-    uint64_t value = 0;
-    value  = static_cast<uint64_t>(buffer[offset]);
-    value |= static_cast<uint64_t>(buffer[offset + 1]) << 8;
-    value |= static_cast<uint64_t>(buffer[offset + 2]) << 16;
-    value |= static_cast<uint64_t>(buffer[offset + 3]) << 24;
-    value |= static_cast<uint64_t>(buffer[offset + 4]) << 32;
-    value |= static_cast<uint64_t>(buffer[offset + 5]) << 40;
-    value |= static_cast<uint64_t>(buffer[offset + 6]) << 48;
-    value |= static_cast<uint64_t>(buffer[offset + 7]) << 56;
-
-    return value;
+    return arm::pipe::ReadUint64(buffer, offset);
 }
 
 uint32_t ReadUint32(const unsigned char* buffer, unsigned int offset)
 {
-    BOOST_ASSERT(buffer);
-
-    uint32_t value = 0;
-    value  = static_cast<uint32_t>(buffer[offset]);
-    value |= static_cast<uint32_t>(buffer[offset + 1]) << 8;
-    value |= static_cast<uint32_t>(buffer[offset + 2]) << 16;
-    value |= static_cast<uint32_t>(buffer[offset + 3]) << 24;
-    return value;
+    return arm::pipe::ReadUint32(buffer, offset);
 }
 
 uint16_t ReadUint16(const unsigned char* buffer, unsigned int offset)
 {
-    BOOST_ASSERT(buffer);
-
-    uint32_t value = 0;
-    value  = static_cast<uint32_t>(buffer[offset]);
-    value |= static_cast<uint32_t>(buffer[offset + 1]) << 8;
-    return static_cast<uint16_t>(value);
+    return arm::pipe::ReadUint16(buffer, offset);
 }
 
 uint8_t ReadUint8(const unsigned char* buffer, unsigned int offset)
 {
-    BOOST_ASSERT(buffer);
-
-    return buffer[offset];
+    return arm::pipe::ReadUint8(buffer, offset);
 }
 
 std::string GetSoftwareInfo()
@@ -291,8 +236,7 @@ std::string GetHardwareVersion()
 
 std::string GetSoftwareVersion()
 {
-    std::string armnnVersion(ARMNN_VERSION);
-    std::string result = "Armnn " + armnnVersion.substr(2,2) + "." + armnnVersion.substr(4,2);
+    std::string result = "Armnn " + std::to_string(ARMNN_MAJOR_VERSION) + "." + std::to_string(ARMNN_MINOR_VERSION);
     return result;
 }
 
@@ -302,91 +246,6 @@ std::string GetProcessName()
     std::string name;
     getline(comm, name);
     return name;
-}
-
-// Calculate the actual length an SwString will be including the terminating null character
-// padding to bring it to the next uint32_t boundary but minus the leading uint32_t encoding
-// the size to allow the offset to be correctly updated when decoding a binary packet.
-uint32_t CalculateSizeOfPaddedSwString(const std::string& str)
-{
-    std::vector<uint32_t> swTraceString;
-    StringToSwTraceString<SwTraceCharPolicy>(str, swTraceString);
-    unsigned int uint32_t_size = sizeof(uint32_t);
-    uint32_t size = (boost::numeric_cast<uint32_t>(swTraceString.size()) - 1) * uint32_t_size;
-    return size;
-}
-
-// Read TimelineMessageDirectoryPacket from given IPacketBuffer and offset
-SwTraceMessage ReadSwTraceMessage(const unsigned char* packetBuffer, unsigned int& offset)
-{
-    BOOST_ASSERT(packetBuffer);
-
-    unsigned int uint32_t_size = sizeof(uint32_t);
-
-    SwTraceMessage swTraceMessage;
-
-    // Read the decl_id
-    uint32_t readDeclId = ReadUint32(packetBuffer, offset);
-    swTraceMessage.m_Id = readDeclId;
-
-    // SWTrace "namestring" format
-    // length of the string (first 4 bytes) + string + null terminator
-
-    // Check the decl_name
-    offset += uint32_t_size;
-    uint32_t swTraceDeclNameLength = ReadUint32(packetBuffer, offset);
-
-    offset += uint32_t_size;
-    std::vector<unsigned char> swTraceStringBuffer(swTraceDeclNameLength - 1);
-    std::memcpy(swTraceStringBuffer.data(),
-                packetBuffer + offset, swTraceStringBuffer.size());
-
-    swTraceMessage.m_Name.assign(swTraceStringBuffer.begin(), swTraceStringBuffer.end()); // name
-
-    // Check the ui_name
-    offset += CalculateSizeOfPaddedSwString(swTraceMessage.m_Name);
-    uint32_t swTraceUINameLength = ReadUint32(packetBuffer, offset);
-
-    offset += uint32_t_size;
-    swTraceStringBuffer.resize(swTraceUINameLength - 1);
-    std::memcpy(swTraceStringBuffer.data(),
-                packetBuffer  + offset, swTraceStringBuffer.size());
-
-    swTraceMessage.m_UiName.assign(swTraceStringBuffer.begin(), swTraceStringBuffer.end()); // ui_name
-
-    // Check arg_types
-    offset += CalculateSizeOfPaddedSwString(swTraceMessage.m_UiName);
-    uint32_t swTraceArgTypesLength = ReadUint32(packetBuffer, offset);
-
-    offset += uint32_t_size;
-    swTraceStringBuffer.resize(swTraceArgTypesLength - 1);
-    std::memcpy(swTraceStringBuffer.data(),
-                packetBuffer  + offset, swTraceStringBuffer.size());
-
-    swTraceMessage.m_ArgTypes.assign(swTraceStringBuffer.begin(), swTraceStringBuffer.end()); // arg_types
-
-    std::string swTraceString(swTraceStringBuffer.begin(), swTraceStringBuffer.end());
-
-    // Check arg_names
-    offset += CalculateSizeOfPaddedSwString(swTraceString);
-    uint32_t swTraceArgNamesLength = ReadUint32(packetBuffer, offset);
-
-    offset += uint32_t_size;
-    swTraceStringBuffer.resize(swTraceArgNamesLength - 1);
-    std::memcpy(swTraceStringBuffer.data(),
-                packetBuffer  + offset, swTraceStringBuffer.size());
-
-    swTraceString.assign(swTraceStringBuffer.begin(), swTraceStringBuffer.end());
-    std::stringstream stringStream(swTraceString);
-    std::string argName;
-    while (std::getline(stringStream, argName, ','))
-    {
-        swTraceMessage.m_ArgNames.push_back(argName);
-    }
-
-    offset += CalculateSizeOfPaddedSwString(swTraceString);
-
-    return swTraceMessage;
 }
 
 /// Creates a timeline packet header
@@ -454,14 +313,14 @@ std::pair<uint32_t, uint32_t> CreateTimelineMessagePacketHeader(unsigned int dat
 TimelinePacketStatus WriteTimelineLabelBinaryPacket(uint64_t profilingGuid,
                                                     const std::string& label,
                                                     unsigned char* buffer,
-                                                    unsigned int bufferSize,
+                                                    unsigned int remainingBufferSize,
                                                     unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
 
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -472,41 +331,28 @@ TimelinePacketStatus WriteTimelineLabelBinaryPacket(uint64_t profilingGuid,
 
     // Convert the label into a SWTrace string
     std::vector<uint32_t> swTraceLabel;
-    bool result = StringToSwTraceString<SwTraceCharPolicy>(label, swTraceLabel);
+    bool result = arm::pipe::StringToSwTraceString<arm::pipe::SwTraceCharPolicy>(label, swTraceLabel);
     if (!result)
     {
         return TimelinePacketStatus::Error;
     }
 
     // Calculate the size of the SWTrace string label (in bytes)
-    unsigned int swTraceLabelSize = boost::numeric_cast<unsigned int>(swTraceLabel.size()) * uint32_t_size;
+    unsigned int swTraceLabelSize = armnn::numeric_cast<unsigned int>(swTraceLabel.size()) * uint32_t_size;
 
     // Calculate the length of the data (in bytes)
     unsigned int timelineLabelPacketDataLength = uint32_t_size +   // decl_Id
                                                  uint64_t_size +   // Profiling GUID
                                                  swTraceLabelSize; // Label
 
-    // Calculate the timeline binary packet size (in bytes)
-    unsigned int timelineLabelPacketSize = 2 * uint32_t_size +            // Header (2 words)
-                                           timelineLabelPacketDataLength; // decl_Id + Profiling GUID + label
-
     // Check whether the timeline binary packet fits in the given buffer
-    if (timelineLabelPacketSize > bufferSize)
+    if (timelineLabelPacketDataLength > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
-    // Create packet header
-    std::pair<uint32_t, uint32_t> packetHeader = CreateTimelineMessagePacketHeader(timelineLabelPacketDataLength);
-
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
-
-    // Write the timeline binary packet header to the buffer
-    WriteUint32(buffer, offset, packetHeader.first);
-    offset += uint32_t_size;
-    WriteUint32(buffer, offset, packetHeader.second);
-    offset += uint32_t_size;
 
     // Write decl_Id to the buffer
     WriteUint32(buffer, offset, 0u);
@@ -522,21 +368,21 @@ TimelinePacketStatus WriteTimelineLabelBinaryPacket(uint64_t profilingGuid,
     }
 
     // Update the number of bytes written
-    numberOfBytesWritten = timelineLabelPacketSize;
+    numberOfBytesWritten = timelineLabelPacketDataLength;
 
     return TimelinePacketStatus::Ok;
 }
 
-TimelinePacketStatus WriteTimelineEntityBinaryPacket(uint64_t profilingGuid,
-                                                     unsigned char* buffer,
-                                                     unsigned int bufferSize,
-                                                     unsigned int& numberOfBytesWritten)
+TimelinePacketStatus WriteTimelineEntityBinary(uint64_t profilingGuid,
+                                               unsigned char* buffer,
+                                               unsigned int remainingBufferSize,
+                                               unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
 
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -546,30 +392,16 @@ TimelinePacketStatus WriteTimelineEntityBinaryPacket(uint64_t profilingGuid,
     unsigned int uint64_t_size = sizeof(uint64_t);
 
     // Calculate the length of the data (in bytes)
-    unsigned int timelineEntityPacketDataLength = uint32_t_size + uint64_t_size;  // decl_id + Profiling GUID
-
-
-    // Calculate the timeline binary packet size (in bytes)
-    unsigned int timelineEntityPacketSize = 2 * uint32_t_size +             // Header (2 words)
-                                            timelineEntityPacketDataLength; // Profiling GUID
+    unsigned int timelineEntityDataLength = uint32_t_size + uint64_t_size;  // decl_id + Profiling GUID
 
     // Check whether the timeline binary packet fits in the given buffer
-    if (timelineEntityPacketSize > bufferSize)
+    if (timelineEntityDataLength > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
-    // Create packet header
-    std::pair<uint32_t, uint32_t> packetHeader = CreateTimelineMessagePacketHeader(timelineEntityPacketDataLength);
-
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
-
-    // Write the timeline binary packet header to the buffer
-    WriteUint32(buffer, offset, packetHeader.first);
-    offset += uint32_t_size;
-    WriteUint32(buffer, offset, packetHeader.second);
-    offset += uint32_t_size;
 
     // Write the decl_Id to the buffer
     WriteUint32(buffer, offset, 1u);
@@ -579,24 +411,25 @@ TimelinePacketStatus WriteTimelineEntityBinaryPacket(uint64_t profilingGuid,
     WriteUint64(buffer, offset, profilingGuid); // Profiling GUID
 
     // Update the number of bytes written
-    numberOfBytesWritten = timelineEntityPacketSize;
+    numberOfBytesWritten = timelineEntityDataLength;
 
     return TimelinePacketStatus::Ok;
 }
 
-TimelinePacketStatus WriteTimelineRelationshipBinaryPacket(ProfilingRelationshipType relationshipType,
-                                                           uint64_t relationshipGuid,
-                                                           uint64_t headGuid,
-                                                           uint64_t tailGuid,
-                                                           unsigned char* buffer,
-                                                           unsigned int bufferSize,
-                                                           unsigned int& numberOfBytesWritten)
+TimelinePacketStatus WriteTimelineRelationshipBinary(ProfilingRelationshipType relationshipType,
+                                                     uint64_t relationshipGuid,
+                                                     uint64_t headGuid,
+                                                     uint64_t tailGuid,
+                                                     uint64_t attributeGuid,
+                                                     unsigned char* buffer,
+                                                     unsigned int remainingBufferSize,
+                                                     unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
 
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -606,31 +439,18 @@ TimelinePacketStatus WriteTimelineRelationshipBinaryPacket(ProfilingRelationship
     unsigned int uint64_t_size = sizeof(uint64_t);
 
     // Calculate the length of the data (in bytes)
-    unsigned int timelineRelationshipPacketDataLength = uint32_t_size * 2 + // decl_id + Relationship Type
-                                                        uint64_t_size * 3; // Relationship GUID + Head GUID + tail GUID
+    unsigned int timelineRelationshipDataLength = uint32_t_size * 2 + // decl_id + Relationship Type
+                                                  uint64_t_size * 4;  // Relationship GUID + Head GUID +
+                                                                      // tail GUID + attributeGuid
 
-    // Calculate the timeline binary packet size (in bytes)
-    unsigned int timelineRelationshipPacketSize = 2 * uint32_t_size + // Header (2 words)
-                                                  timelineRelationshipPacketDataLength;
-
-    // Check whether the timeline binary packet fits in the given buffer
-    if (timelineRelationshipPacketSize > bufferSize)
+    // Check whether the timeline binary fits in the given buffer
+    if (timelineRelationshipDataLength > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
-    // Create packet header
-    uint32_t dataLength = boost::numeric_cast<uint32_t>(timelineRelationshipPacketDataLength);
-    std::pair<uint32_t, uint32_t> packetHeader = CreateTimelineMessagePacketHeader(dataLength);
-
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
-
-    // Write the timeline binary packet header to the buffer
-    WriteUint32(buffer, offset, packetHeader.first);
-    offset += uint32_t_size;
-    WriteUint32(buffer, offset, packetHeader.second);
-    offset += uint32_t_size;
 
     uint32_t relationshipTypeUint = 0;
 
@@ -652,7 +472,7 @@ TimelinePacketStatus WriteTimelineRelationshipBinaryPacket(ProfilingRelationship
             throw InvalidArgumentException("Unknown relationship type given.");
     }
 
-    // Write the timeline binary packet payload to the buffer
+    // Write the timeline binary payload to the buffer
     // decl_id of the timeline message
     uint32_t declId = 3;
     WriteUint32(buffer, offset, declId); // decl_id
@@ -664,22 +484,25 @@ TimelinePacketStatus WriteTimelineRelationshipBinaryPacket(ProfilingRelationship
     WriteUint64(buffer, offset, headGuid); // head of relationship GUID
     offset += uint64_t_size;
     WriteUint64(buffer, offset, tailGuid); // tail of relationship GUID
+    offset += uint64_t_size;
+    WriteUint64(buffer, offset, attributeGuid); // attribute of relationship GUID
+
 
     // Update the number of bytes written
-    numberOfBytesWritten = timelineRelationshipPacketSize;
+    numberOfBytesWritten = timelineRelationshipDataLength;
 
     return TimelinePacketStatus::Ok;
 }
 
 TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
-                                                          unsigned int bufferSize,
+                                                          unsigned int remainingBufferSize,
                                                           unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
 
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -688,7 +511,6 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
     unsigned int uint8_t_size  = sizeof(uint8_t);
     unsigned int uint32_t_size = sizeof(uint32_t);
     unsigned int uint64_t_size = sizeof(uint64_t);
-    unsigned int threadId_size = sizeof(std::thread::id);
 
     // The payload/data of the packet consists of swtrace event definitions encoded according
     // to the swtrace directory specification. The messages being the five defined below:
@@ -697,17 +519,17 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
     // |-----------|---------------------|-----------------------|-------------|-------------------------------------|
     // |    0      |   declareLabel      |   declare label       |    ps       |  guid,value                         |
     // |    1      |   declareEntity     |   declare entity      |    p        |  guid                               |
-    // |    2      | declareEventClass   |  declare event class  |    p        |  guid                               |
-    // |    3      | declareRelationship | declare relationship  |    Ippp     |  relationshipType,relationshipGuid, |
-    // |           |                     |                       |             |  headGuid,tailGuid                  |
+    // |    2      | declareEventClass   |  declare event class  |    pp       |  guid,nameGuid                      |
+    // |    3      | declareRelationship | declare relationship  |    Ipppp    |  relationshipType,relationshipGuid, |
+    // |           |                     |                       |             |  headGuid,tailGuid,attributeGuid    |
     // |    4      |   declareEvent      |   declare event       |    @tp      |  timestamp,threadId,eventGuid       |
     std::vector<std::vector<std::string>> timelineDirectoryMessages
     {
         { "0", "declareLabel", "declare label", "ps", "guid,value" },
         { "1", "declareEntity", "declare entity", "p", "guid" },
-        { "2", "declareEventClass", "declare event class", "p", "guid" },
-        { "3", "declareRelationship", "declare relationship", "Ippp",
-          "relationshipType,relationshipGuid,headGuid,tailGuid" },
+        { "2", "declareEventClass", "declare event class", "pp", "guid,nameGuid" },
+        { "3", "declareRelationship", "declare relationship", "Ipppp",
+          "relationshipType,relationshipGuid,headGuid,tailGuid,attributeGuid" },
         { "4", "declareEvent", "declare event", "@tp", "timestamp,threadId,eventGuid" }
     };
 
@@ -719,7 +541,7 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
         uint32_t declId = 0;
         try
         {
-            declId = boost::numeric_cast<uint32_t>(std::stoul(directoryComponent[0]));
+            declId = armnn::numeric_cast<uint32_t>(std::stoul(directoryComponent[0]));
         }
         catch (const std::exception&)
         {
@@ -728,10 +550,14 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
         swTraceBuffer.push_back(declId);
 
         bool result = true;
-        result &= ConvertDirectoryComponent<SwTraceNameCharPolicy>(directoryComponent[1], swTraceBuffer); // decl_name
-        result &= ConvertDirectoryComponent<SwTraceCharPolicy>    (directoryComponent[2], swTraceBuffer); // ui_name
-        result &= ConvertDirectoryComponent<SwTraceTypeCharPolicy>(directoryComponent[3], swTraceBuffer); // arg_types
-        result &= ConvertDirectoryComponent<SwTraceCharPolicy>    (directoryComponent[4], swTraceBuffer); // arg_names
+        result &= arm::pipe::ConvertDirectoryComponent<arm::pipe::SwTraceNameCharPolicy>(
+                      directoryComponent[1], swTraceBuffer); // decl_name
+        result &= arm::pipe::ConvertDirectoryComponent<arm::pipe::SwTraceCharPolicy>    (
+                      directoryComponent[2], swTraceBuffer); // ui_name
+        result &= arm::pipe::ConvertDirectoryComponent<arm::pipe::SwTraceTypeCharPolicy>(
+                      directoryComponent[3], swTraceBuffer); // arg_types
+        result &= arm::pipe::ConvertDirectoryComponent<arm::pipe::SwTraceCharPolicy>    (
+                      directoryComponent[4], swTraceBuffer); // arg_names
         if (!result)
         {
             return TimelinePacketStatus::Error;
@@ -739,7 +565,7 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
     }
 
     unsigned int dataLength = 3 * uint8_t_size +  // Stream header (3 bytes)
-                              boost::numeric_cast<unsigned int>(swTraceBuffer.size()) *
+                              armnn::numeric_cast<unsigned int>(swTraceBuffer.size()) *
                                   uint32_t_size; // Trace directory (5 messages)
 
     // Calculate the timeline directory binary packet size (in bytes)
@@ -747,13 +573,13 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
                                                dataLength;         // Payload
 
     // Check whether the timeline directory binary packet fits in the given buffer
-    if (timelineDirectoryPacketSize > bufferSize)
+    if (timelineDirectoryPacketSize > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
     // Create packet header
-    auto packetHeader = CreateTimelinePacketHeader(1, 0, 0, 0, 0, boost::numeric_cast<uint32_t>(dataLength));
+    auto packetHeader = CreateTimelinePacketHeader(1, 0, 0, 0, 0, armnn::numeric_cast<uint32_t>(dataLength));
 
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
@@ -766,8 +592,8 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
 
     // Write the stream header
     uint8_t streamVersion = 4;
-    uint8_t pointerBytes  = boost::numeric_cast<uint8_t>(uint64_t_size); // All GUIDs are uint64_t
-    uint8_t threadIdBytes = boost::numeric_cast<uint8_t>(threadId_size);
+    uint8_t pointerBytes  = armnn::numeric_cast<uint8_t>(uint64_t_size); // All GUIDs are uint64_t
+    uint8_t threadIdBytes = armnn::numeric_cast<uint8_t>(ThreadIdSize);
     switch (threadIdBytes)
     {
     case 4: // Typically Windows and Android
@@ -784,7 +610,7 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
     offset += uint8_t_size;
 
     // Write the SWTrace directory
-    uint32_t numberOfDeclarations = boost::numeric_cast<uint32_t>(timelineDirectoryMessages.size());
+    uint32_t numberOfDeclarations = armnn::numeric_cast<uint32_t>(timelineDirectoryMessages.size());
     WriteUint32(buffer, offset, numberOfDeclarations); // Number of declarations
     offset += uint32_t_size;
     for (uint32_t i : swTraceBuffer)
@@ -799,16 +625,17 @@ TimelinePacketStatus WriteTimelineMessageDirectoryPackage(unsigned char* buffer,
     return TimelinePacketStatus::Ok;
 }
 
-TimelinePacketStatus WriteTimelineEventClassBinaryPacket(uint64_t profilingGuid,
-                                                         unsigned char* buffer,
-                                                         unsigned int bufferSize,
-                                                         unsigned int& numberOfBytesWritten)
+TimelinePacketStatus WriteTimelineEventClassBinary(uint64_t profilingGuid,
+                                                   uint64_t nameGuid,
+                                                   unsigned char* buffer,
+                                                   unsigned int remainingBufferSize,
+                                                   unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
 
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -821,53 +648,41 @@ TimelinePacketStatus WriteTimelineEventClassBinaryPacket(uint64_t profilingGuid,
     uint32_t declId = 2;
 
     // Calculate the length of the data (in bytes)
-    unsigned int packetBodySize = uint32_t_size + uint64_t_size; // decl_id + Profiling GUID
+    unsigned int dataSize = uint32_t_size + (uint64_t_size * 2); // decl_id + Profiling GUID + Name GUID
 
-    // Calculate the timeline binary packet size (in bytes)
-    unsigned int packetSize = 2 * uint32_t_size + // Header (2 words)
-                              packetBodySize;     // Body
-
-    // Check whether the timeline binary packet fits in the given buffer
-    if (packetSize > bufferSize)
+    // Check whether the timeline binary fits in the given buffer
+    if (dataSize > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
-    // Create packet header
-    std::pair<uint32_t, uint32_t> packetHeader = CreateTimelineMessagePacketHeader(packetBodySize);
-
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
 
-    // Write the timeline binary packet header to the buffer
-    WriteUint32(buffer, offset, packetHeader.first);
-    offset += uint32_t_size;
-    WriteUint32(buffer, offset, packetHeader.second);
-    offset += uint32_t_size;
-
-    // Write the timeline binary packet payload to the buffer
+    // Write the timeline binary payload to the buffer
     WriteUint32(buffer, offset, declId);        // decl_id
     offset += uint32_t_size;
     WriteUint64(buffer, offset, profilingGuid); // Profiling GUID
+    offset += uint64_t_size;
+    WriteUint64(buffer, offset, nameGuid); // Name GUID
 
     // Update the number of bytes written
-    numberOfBytesWritten = packetSize;
+    numberOfBytesWritten = dataSize;
 
     return TimelinePacketStatus::Ok;
 }
 
-TimelinePacketStatus WriteTimelineEventBinaryPacket(uint64_t timestamp,
-                                                    std::thread::id threadId,
-                                                    uint64_t profilingGuid,
-                                                    unsigned char* buffer,
-                                                    unsigned int bufferSize,
-                                                    unsigned int& numberOfBytesWritten)
+TimelinePacketStatus WriteTimelineEventBinary(uint64_t timestamp,
+                                              int threadId,
+                                              uint64_t profilingGuid,
+                                              unsigned char* buffer,
+                                              unsigned int remainingBufferSize,
+                                              unsigned int& numberOfBytesWritten)
 {
     // Initialize the output value
     numberOfBytesWritten = 0;
-
     // Check that the given buffer is valid
-    if (buffer == nullptr || bufferSize == 0)
+    if (buffer == nullptr || remainingBufferSize == 0)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
@@ -875,73 +690,43 @@ TimelinePacketStatus WriteTimelineEventBinaryPacket(uint64_t timestamp,
     // Utils
     unsigned int uint32_t_size = sizeof(uint32_t);
     unsigned int uint64_t_size = sizeof(uint64_t);
-    unsigned int threadId_size = sizeof(std::thread::id);
 
     // decl_id of the timeline message
     uint32_t declId = 4;
 
     // Calculate the length of the data (in bytes)
-    unsigned int timelineEventPacketDataLength = uint32_t_size + // decl_id
-                                                 uint64_t_size + // Timestamp
-                                                 threadId_size + // Thread id
-                                                 uint64_t_size;  // Profiling GUID
-
-    // Calculate the timeline binary packet size (in bytes)
-    unsigned int timelineEventPacketSize = 2 * uint32_t_size +            // Header (2 words)
-                                           timelineEventPacketDataLength; // Timestamp + thread id + profiling GUID
+    unsigned int timelineEventDataLength = uint32_t_size + // decl_id
+                                           uint64_t_size + // Timestamp
+                                           ThreadIdSize +  // Thread id
+                                           uint64_t_size;  // Profiling GUID
 
     // Check whether the timeline binary packet fits in the given buffer
-    if (timelineEventPacketSize > bufferSize)
+    if (timelineEventDataLength > remainingBufferSize)
     {
         return TimelinePacketStatus::BufferExhaustion;
     }
 
-    // Create packet header
-    std::pair<uint32_t, uint32_t> packetHeader = CreateTimelineMessagePacketHeader(timelineEventPacketDataLength);
-
     // Initialize the offset for writing in the buffer
     unsigned int offset = 0;
 
-    // Write the timeline binary packet header to the buffer
-    WriteUint32(buffer, offset, packetHeader.first);
-    offset += uint32_t_size;
-    WriteUint32(buffer, offset, packetHeader.second);
-    offset += uint32_t_size;
-
-    // Write the timeline binary packet payload to the buffer
+    // Write the timeline binary payload to the buffer
     WriteUint32(buffer, offset, declId); // decl_id
     offset += uint32_t_size;
     WriteUint64(buffer, offset, timestamp); // Timestamp
     offset += uint64_t_size;
-    WriteBytes(buffer, offset, &threadId, threadId_size); // Thread id
-    offset += threadId_size;
+    WriteBytes(buffer, offset, &threadId, ThreadIdSize); // Thread id
+    offset += ThreadIdSize;
     WriteUint64(buffer, offset, profilingGuid); // Profiling GUID
     offset += uint64_t_size;
-
     // Update the number of bytes written
-    numberOfBytesWritten = timelineEventPacketSize;
+    numberOfBytesWritten = timelineEventDataLength;
 
     return TimelinePacketStatus::Ok;
 }
 
 std::string CentreAlignFormatting(const std::string& stringToPass, const int spacingWidth)
 {
-    std::stringstream outputStream, centrePadding;
-    int padding = spacingWidth - static_cast<int>(stringToPass.size());
-
-    for (int i = 0; i < padding / 2; ++i)
-    {
-        centrePadding << " ";
-    }
-
-    outputStream << centrePadding.str() << stringToPass << centrePadding.str();
-
-    if (padding > 0 && padding %2 != 0)
-    {
-        outputStream << " ";
-    }
-
-    return outputStream.str();
+    return arm::pipe::CentreAlignFormatting(stringToPass, spacingWidth);
 }
 
 void PrintDeviceDetails(const std::pair<const unsigned short, std::unique_ptr<Device>>& devicePair)
@@ -1014,18 +799,10 @@ void PrintCategoryDetails(const std::unique_ptr<Category>& category,
 
     categoryHeader.append(CentreAlignFormatting("Name", 20));
     categoryHeader.append(" | ");
-    categoryHeader.append(CentreAlignFormatting("Device", 12));
-    categoryHeader.append(" | ");
-    categoryHeader.append(CentreAlignFormatting("Counter set UID:", 16));
-    categoryHeader.append(" | ");
     categoryHeader.append(CentreAlignFormatting("Event Count", 14));
     categoryHeader.append("\n");
 
     categoryBody.append(CentreAlignFormatting(category->m_Name, 20));
-    categoryBody.append(" | ");
-    categoryBody.append(CentreAlignFormatting(std::to_string(category->m_DeviceUid), 12));
-    categoryBody.append(" | ");
-    categoryBody.append(CentreAlignFormatting(std::to_string(category->m_CounterSetUid), 16));
     categoryBody.append(" | ");
     categoryBody.append(CentreAlignFormatting(std::to_string(category->m_Counters.size()), 14));
 
@@ -1133,9 +910,36 @@ uint64_t GetTimestamp()
 #endif
 
     // Take a timestamp
-    auto timestamp = clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(clock::now().time_since_epoch());
 
-    return static_cast<uint64_t>(timestamp.time_since_epoch().count());
+    return static_cast<uint64_t>(timestamp.count());
+}
+
+arm::pipe::Packet ReceivePacket(const unsigned char* buffer, uint32_t length)
+{
+    if (buffer == nullptr)
+    {
+        throw arm::pipe::ProfilingException("data buffer is nullptr");
+    }
+    if (length < 8)
+    {
+        throw arm::pipe::ProfilingException("length of data buffer is less than 8");
+    }
+
+    uint32_t metadataIdentifier = 0;
+    std::memcpy(&metadataIdentifier, buffer, sizeof(metadataIdentifier));
+
+    uint32_t dataLength = 0;
+    std::memcpy(&dataLength, buffer + 4u, sizeof(dataLength));
+
+    std::unique_ptr<unsigned char[]> packetData;
+    if (dataLength > 0)
+    {
+        packetData = std::make_unique<unsigned char[]>(dataLength);
+        std::memcpy(packetData.get(), buffer + 8u, dataLength);
+    }
+
+    return arm::pipe::Packet(metadataIdentifier, dataLength, packetData);
 }
 
 } // namespace profiling
@@ -1145,7 +949,7 @@ uint64_t GetTimestamp()
 namespace std
 {
 
-bool operator==(const std::vector<uint8_t>& left, std::thread::id right)
+bool operator==(const std::vector<uint8_t>& left, int right)
 {
     return std::memcmp(left.data(), &right, left.size()) == 0;
 }

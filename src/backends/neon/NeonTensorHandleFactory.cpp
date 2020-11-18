@@ -6,7 +6,11 @@
 #include "NeonTensorHandleFactory.hpp"
 #include "NeonTensorHandle.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include "Layer.hpp"
+
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -26,17 +30,18 @@ std::unique_ptr<ITensorHandle> NeonTensorHandleFactory::CreateSubTensorHandle(IT
     {
         // Arm compute indexes tensor coords in reverse order.
         unsigned int revertedIndex = subTensorShape.GetNumDimensions() - i - 1;
-        coords.set(i, boost::numeric_cast<int>(subTensorOrigin[revertedIndex]));
+        coords.set(i, armnn::numeric_cast<int>(subTensorOrigin[revertedIndex]));
     }
 
     const arm_compute::TensorShape parentShape = armcomputetensorutils::BuildArmComputeTensorShape(parent.GetShape());
+
     if (!::arm_compute::error_on_invalid_subtensor(__func__, __FILE__, __LINE__, parentShape, coords, shape))
     {
         return nullptr;
     }
 
     return std::make_unique<NeonSubTensorHandle>(
-            boost::polymorphic_downcast<IAclTensorHandle*>(&parent), shape, coords);
+            PolymorphicDowncast<IAclTensorHandle*>(&parent), shape, coords);
 }
 
 std::unique_ptr<ITensorHandle> NeonTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo) const
@@ -92,6 +97,11 @@ const FactoryId& NeonTensorHandleFactory::GetId() const
     return GetIdStatic();
 }
 
+bool NeonTensorHandleFactory::SupportsInPlaceComputation() const
+{
+    return true;
+}
+
 bool NeonTensorHandleFactory::SupportsSubTensors() const
 {
     return true;
@@ -99,12 +109,31 @@ bool NeonTensorHandleFactory::SupportsSubTensors() const
 
 MemorySourceFlags NeonTensorHandleFactory::GetExportFlags() const
 {
-    return 0;
+    return m_ExportFlags;
 }
 
 MemorySourceFlags NeonTensorHandleFactory::GetImportFlags() const
 {
-    return 0;
+    return m_ImportFlags;
+}
+
+std::vector<Capability> NeonTensorHandleFactory::GetCapabilities(const IConnectableLayer* layer,
+                                                                 const IConnectableLayer* connectedLayer,
+                                                                 CapabilityClass capabilityClass)
+
+{
+    IgnoreUnused(connectedLayer);
+    std::vector<Capability> capabilities;
+    if (capabilityClass == CapabilityClass::PaddingRequired)
+    {
+        auto search = paddingRequiredLayers.find((PolymorphicDowncast<const Layer*>(layer))->GetType());
+        if ( search != paddingRequiredLayers.end())
+        {
+            Capability paddingCapability(CapabilityClass::PaddingRequired, true);
+            capabilities.push_back(paddingCapability);
+        }
+    }
+    return capabilities;
 }
 
 } // namespace armnn

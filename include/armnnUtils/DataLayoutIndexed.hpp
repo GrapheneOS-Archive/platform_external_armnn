@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -8,12 +8,12 @@
 #include <armnn/Types.hpp>
 #include <armnn/Tensor.hpp>
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 namespace armnnUtils
 {
 
-// Provides access to the appropriate indexes for Channels, Height and Width based on DataLayout
+/// Provides access to the appropriate indexes for Channels, Height and Width based on DataLayout
 class DataLayoutIndexed
 {
 public:
@@ -28,33 +28,33 @@ public:
                                  unsigned int batchIndex, unsigned int channelIndex,
                                  unsigned int heightIndex, unsigned int widthIndex) const
     {
-        BOOST_ASSERT( batchIndex < shape[0] || ( shape[0] == 0 && batchIndex == 0 ) );
-        BOOST_ASSERT( channelIndex < shape[m_ChannelsIndex] ||
+        ARMNN_ASSERT( batchIndex < shape[0] || ( shape[0] == 0 && batchIndex == 0 ) );
+        ARMNN_ASSERT( channelIndex < shape[m_ChannelsIndex] ||
                     ( shape[m_ChannelsIndex] == 0 && channelIndex == 0) );
-        BOOST_ASSERT( heightIndex < shape[m_HeightIndex] ||
+        ARMNN_ASSERT( heightIndex < shape[m_HeightIndex] ||
                     ( shape[m_HeightIndex] == 0 && heightIndex == 0) );
-        BOOST_ASSERT( widthIndex < shape[m_WidthIndex] ||
+        ARMNN_ASSERT( widthIndex < shape[m_WidthIndex] ||
                     ( shape[m_WidthIndex] == 0 && widthIndex == 0) );
 
-        // Offset the given indices appropriately depending on the data layout
+        /// Offset the given indices appropriately depending on the data layout
         switch (m_DataLayout)
         {
         case armnn::DataLayout::NHWC:
             batchIndex  *= shape[1] * shape[2] * shape[3]; // batchIndex *= heightIndex * widthIndex * channelIndex
             heightIndex *= shape[m_WidthIndex] * shape[m_ChannelsIndex];
             widthIndex  *= shape[m_ChannelsIndex];
-            // channelIndex stays unchanged
+            /// channelIndex stays unchanged
             break;
         case armnn::DataLayout::NCHW:
         default:
             batchIndex   *= shape[1] * shape[2] * shape[3]; // batchIndex *= heightIndex * widthIndex * channelIndex
             channelIndex *= shape[m_HeightIndex] * shape[m_WidthIndex];
             heightIndex  *= shape[m_WidthIndex];
-            // widthIndex stays unchanged
+            /// widthIndex stays unchanged
             break;
         }
 
-        // Get the value using the correct offset
+        /// Get the value using the correct offset
         return batchIndex + channelIndex + heightIndex + widthIndex;
     }
 
@@ -65,7 +65,7 @@ private:
     unsigned int      m_WidthIndex;
 };
 
-// Equality methods
+/// Equality methods
 bool operator==(const armnn::DataLayout& dataLayout, const DataLayoutIndexed& indexed);
 bool operator==(const DataLayoutIndexed& indexed, const armnn::DataLayout& dataLayout);
 

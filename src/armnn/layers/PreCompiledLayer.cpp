@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -32,11 +32,14 @@ std::unique_ptr<IWorkload> PreCompiledLayer::CreateWorkload(const armnn::IWorklo
 {
     PreCompiledQueueDescriptor descriptor;
     descriptor.m_PreCompiledObject = m_PreCompiledObject.get();
+    SetAdditionalInfo(descriptor);
+
     return factory.CreatePreCompiled(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 void PreCompiledLayer::ValidateTensorShapesFromInputs()
 {
+
     // NOTE: since the PreCompiledLayer is an internal layer created from a valid SubgraphView,
     // we do not need to validate its input shapes
 }
@@ -48,7 +51,7 @@ void PreCompiledLayer::SetPreCompiledObject(PreCompiledObjectPtr preCompiledObje
 
 void PreCompiledLayer::Accept(ILayerVisitor& visitor) const
 {
-    boost::ignore_unused(visitor);
+    IgnoreUnused(visitor);
     throw armnn::Exception("PreCompiledLayer should not appear in an input graph");
 }
 

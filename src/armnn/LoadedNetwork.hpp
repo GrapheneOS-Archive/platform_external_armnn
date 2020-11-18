@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -15,6 +15,7 @@
 #include <backendsCommon/TensorHandleFactoryRegistry.hpp>
 #include <backendsCommon/Workload.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
+#include <ProfilingService.hpp>
 #include <TimelineUtilityMethods.hpp>
 
 #include <mutex>
@@ -43,7 +44,8 @@ public:
 
     static std::unique_ptr<LoadedNetwork> MakeLoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
                                                             std::string & errorMessage,
-                                                            const INetworkProperties& networkProperties);
+                                                            const INetworkProperties& networkProperties,
+                                                            profiling::ProfilingService& profilingService);
 
     // NOTE we return by reference as the purpose of this method is only to provide
     // access to the private m_Profiler and in theory we should not need to increment
@@ -54,10 +56,16 @@ public:
 
     void RegisterDebugCallback(const DebugCallbackFunction& func);
 
-private:
-    void AllocateWorkingMemory();
+    void SendNetworkStructure();
 
-    LoadedNetwork(std::unique_ptr<OptimizedNetwork> net, const INetworkProperties& networkProperties);
+    profiling::ProfilingGuid GetNetworkGuid();
+
+private:
+    void AllocateWorkingMemory(std::lock_guard<std::mutex>& lock);
+
+    LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
+                  const INetworkProperties& networkProperties,
+                  profiling::ProfilingService& profilingService);
 
     void EnqueueInput(const BindableLayer& layer, ITensorHandle* tensorHandle, const TensorInfo& tensorInfo);
 
@@ -92,6 +100,8 @@ private:
     bool m_IsExportEnabled=false;
 
     TensorHandleFactoryRegistry m_TensorHandleFactoryRegistry;
+
+    profiling::ProfilingService&  m_ProfilingService;
 };
 
 }

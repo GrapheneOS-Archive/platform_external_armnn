@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -184,6 +184,14 @@ public:
     virtual void VisitEqualLayer(const IConnectableLayer* layer,
                                  const char* name = nullptr) = 0;
 
+    /// Function a fill layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param fillDescriptor - Description of the layer
+    /// @param name - Optional name for the layer.
+    virtual void VisitFillLayer(const IConnectableLayer* layer,
+                                const FillDescriptor& fillDescriptor,
+                                const char* name = nullptr) = 0;
+
     /// Function a floor layer should call back to when its Accept(ILayerVisitor&) function is invoked.
     /// @param layer - pointer to the layer which is calling back to this visit function.
     /// @param name - Optional name for the layer.
@@ -206,7 +214,16 @@ public:
     /// Function a Gather layer should call back to when its Accept(ILayerVisitor&) function is invoked.
     /// @param layer - pointer to the layer which is calling back to this visit function.
     /// @param name - Optional name for the layer.
+    ARMNN_DEPRECATED_MSG("Use VisitGatherLayer with descriptor instead")
     virtual void VisitGatherLayer(const IConnectableLayer* layer,
+                                  const char* name = nullptr) = 0;
+
+    /// Function a Gather layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param gatherDescriptor - Parameters for the gather operation.
+    /// @param name - Optional name for the layer.
+    virtual void VisitGatherLayer(const IConnectableLayer* layer,
+                                  const GatherDescriptor& gatherDescriptor,
                                   const char* name = nullptr) = 0;
 
     /// Function a Greater layer should call back to when its Accept(ILayerVisitor&) function is invoked.
@@ -250,6 +267,14 @@ public:
     virtual void VisitLogSoftmaxLayer(const IConnectableLayer* layer,
                                       const LogSoftmaxDescriptor& logSoftmaxDescriptor,
                                       const char* name = nullptr) = 0;
+
+    /// Function that a logical binary layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param logicalBinaryDescriptor - LogicalBinaryDescriptor to configure the logical unary layer.
+    /// @param name - Optional name for the layer.
+    virtual void VisitLogicalBinaryLayer(const IConnectableLayer* layer,
+                                         const LogicalBinaryDescriptor& logicalBinaryDescriptor,
+                                         const char* name = nullptr) = 0;
 
     /// Function an Lstm layer should call back to when its Accept(ILayerVisitor&) function is invoked.
     /// @param layer - pointer to the layer which is calling back to this visit function.
@@ -360,6 +385,16 @@ public:
     virtual void VisitQuantizeLayer(const IConnectableLayer* layer,
                                     const char* name = nullptr) = 0;
 
+    /// Function a QLstm layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param descriptor - Parameters controlling the operation of the QLstm operation.
+    /// @param params - The weights and biases for the layer
+    /// @param name - Optional name for the layer.
+    virtual void VisitQLstmLayer(const IConnectableLayer* layer,
+                                 const QLstmDescriptor& descriptor,
+                                 const LstmInputParams& params,
+                                 const char* name = nullptr) = 0;
+
     /// Function a QuantizedLstm layer should call back to when its Accept(ILayerVisitor&) function is invoked.
     /// @param layer - pointer to the layer which is calling back to this visit function.
     /// @param params - The weights and biases for the Quantized LSTM cell
@@ -367,6 +402,12 @@ public:
     virtual void VisitQuantizedLstmLayer(const IConnectableLayer* layer,
                                          const QuantizedLstmInputParams& params,
                                          const char* name = nullptr) = 0;
+
+    /// Function a rank layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param name - Optional name for the layer.
+    virtual void VisitRankLayer(const IConnectableLayer* layer,
+                                const char* name = nullptr) = 0;
 
     /// Function a reshape layer should call back to when its Accept(ILayerVisitor&) function is invoked.
     /// @param layer - pointer to the layer which is calling back to this visit function.
@@ -493,6 +534,14 @@ public:
                                                   const ConstTensor& weights,
                                                   const Optional<ConstTensor>& biases,
                                                   const char* name = nullptr) = 0;
+
+    /// Function that a transpose  layer should call back to when its Accept(ILayerVisitor&) function is invoked.
+    /// @param layer - pointer to the layer which is calling back to this visit function.
+    /// @param transposeDescriptor - TransposeDescriptor to configure the transpose.
+    /// @param name - Optional name for the layer.
+    virtual void VisitTransposeLayer(const IConnectableLayer* layer,
+                                     const TransposeDescriptor& transposeDescriptor,
+                                     const char* name = nullptr) = 0;
 
     virtual void StartVisit() {}
     virtual void FinishVisit() {}

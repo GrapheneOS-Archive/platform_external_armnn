@@ -5,6 +5,7 @@
 
 #include <backendsCommon/test/EndToEndTestImpl.hpp>
 
+#include <backendsCommon/test/ActivationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ArgMinMaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/BatchToSpaceNdEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ComparisonEndToEndTestImpl.hpp>
@@ -13,10 +14,13 @@
 #include <backendsCommon/test/DequantizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DetectionPostProcessEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ElementwiseUnaryEndToEndTestImpl.hpp>
+#include <backendsCommon/test/FillEndToEndTestImpl.hpp>
 #include <backendsCommon/test/GatherEndToEndTestImpl.hpp>
 #include <backendsCommon/test/InstanceNormalizationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/LogSoftmaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/PreluEndToEndTestImpl.hpp>
+#include <backendsCommon/test/QLstmEndToEndTestImpl.hpp>
+#include <backendsCommon/test/RankEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ResizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SpaceToDepthEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SplitterEndToEndTestImpl.hpp>
@@ -550,6 +554,51 @@ BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim3Uint8Test)
     ConcatDim3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestFloat32)
+{
+    EluEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestFloat16)
+{
+    EluEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestBFloat16)
+{
+    EluEndToEndTest<armnn::DataType::BFloat16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQAsymmS8)
+{
+    EluEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQAsymmU8)
+{
+    EluEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQSymmS16)
+{
+    EluEndToEndTest<armnn::DataType::QSymmS16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTest)
+{
+    FillEndToEnd<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestFloat16)
+{
+    FillEndToEnd<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestInt32)
+{
+    FillEndToEnd<armnn::DataType::Signed32>(defaultBackends);
+}
+
 BOOST_AUTO_TEST_CASE(RefGatherFloatTest)
 {
     GatherEndToEnd<armnn::DataType::Float32>(defaultBackends);
@@ -804,6 +853,37 @@ BOOST_AUTO_TEST_CASE(RefDetectionPostProcessFastNmsUint8Test)
     DetectionPostProcessFastNmsEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, qBoxEncodings,
                                                                           qScores, qAnchors,
                                                                           1.0f, 1, 0.01f, 0, 0.5f, 0);
+}
+
+// HardSwish
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestFloat32)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestFloat16)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestBFloat16)
+{
+HardSwishEndToEndTest<armnn::DataType::BFloat16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQAsymmS8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQAsymmU8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQSymmS16)
+{
+    HardSwishEndToEndTest<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
 // LogSoftmax
@@ -1173,6 +1253,41 @@ BOOST_AUTO_TEST_CASE(RefArgMinAxis3Uint8Test)
     ArgMinAxis3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
+BOOST_AUTO_TEST_CASE(RefQLstmEndToEndTest)
+{
+    QLstmEndToEnd(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTest)
+{
+    RankEndToEnd<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestFloat16)
+{
+    RankEndToEnd<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestInt32)
+{
+    RankEndToEnd<armnn::DataType::Signed32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQAsymmS8)
+{
+    RankEndToEnd<armnn::DataType::QAsymmS8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQSymmS16)
+{
+    RankEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQSymmS8)
+{
+    RankEndToEnd<armnn::DataType::QSymmS8>(defaultBackends);
+}
+
 #if !defined(__ANDROID__)
 // Only run these tests on non Android platforms
 BOOST_AUTO_TEST_CASE(RefImportNonAlignedPointerTest)
@@ -1208,6 +1323,11 @@ BOOST_AUTO_TEST_CASE(RefImportAndExportWorkload)
 BOOST_AUTO_TEST_CASE(RefExportOutputWithSeveralOutputSlotConnectionsTest)
 {
     ExportOutputWithSeveralOutputSlotConnectionsTest(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefStridedSliceInvalidSliceEndToEndTest)
+{
+    StridedSliceInvalidSliceEndToEndTest(defaultBackends);
 }
 
 #endif

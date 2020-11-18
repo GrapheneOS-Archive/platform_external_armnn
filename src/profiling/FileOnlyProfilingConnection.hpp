@@ -1,19 +1,24 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "CounterDirectory.hpp"
+#include <armnn/profiling/ILocalPacketHandler.hpp>
 #include "DirectoryCaptureCommandHandler.hpp"
 #include "IProfilingConnection.hpp"
 #include "ProfilingUtils.hpp"
 #include "Runtime.hpp"
 
+#include <common/include/Packet.hpp>
+
+#include <atomic>
 #include <condition_variable>
 #include <fstream>
+#include <mutex>
 #include <queue>
+#include <thread>
 
 namespace armnn
 {
@@ -21,30 +26,54 @@ namespace armnn
 namespace profiling
 {
 
-enum class TargetEndianness
-{
-    BeWire,
-    LeWire
-};
+// forward declaration
+class FileOnlyProfilingConnection;
 
-enum class PackageActivity
-{
-    StreamMetaData,
-    CounterDirectory,
-    Unknown
-};
-
-class FileOnlyProfilingConnection : public IProfilingConnection
+class StreamMetaDataProcessor : public ILocalPacketHandler
 {
 public:
-    FileOnlyProfilingConnection(const Runtime::CreationOptions::ExternalProfilingOptions& options,
-                                const bool quietOp = true)
-        : m_Options(options)
-        , m_QuietOp(quietOp)
-        , m_Endianness(TargetEndianness::LeWire)    // Set a sensible default. WaitForStreamMeta will set a real value.
-        {};
+    explicit StreamMetaDataProcessor(FileOnlyProfilingConnection* fileOnlyProfilingConnection) :
+            m_FileOnlyProfilingConnection(fileOnlyProfilingConnection),
+            m_MetaDataPacketHeader(ConstructHeader(0, 0)) {};
 
-    ~FileOnlyProfilingConnection();
+    std::vector<uint32_t> GetHeadersAccepted() override;
+
+    void HandlePacket(const arm::pipe::Packet& packet) override;
+
+private:
+    FileOnlyProfilingConnection* m_FileOnlyProfilingConnection;
+    uint32_t m_MetaDataPacketHeader;
+
+    static uint32_t ToUint32(const unsigned char* data, TargetEndianness endianness);
+};
+
+class FileOnlyProfilingConnection : public IProfilingConnection, public IInternalProfilingConnection
+{
+public:
+    explicit FileOnlyProfilingConnection(const Runtime::CreationOptions::ExternalProfilingOptions& options)
+        : m_Options(options)
+        , m_Endianness(TargetEndianness::LeWire)    // Set a sensible default.
+                                                    // StreamMetaDataProcessor will set a real value.
+        , m_IsRunning(false)
+        , m_KeepRunning(false)
+        , m_Timeout(1000)
+    {
+        // add the StreamMetaDataProcessor
+        auto streamMetaDataProcessor = std::make_shared<StreamMetaDataProcessor>(this);
+        AddLocalPacketHandler(streamMetaDataProcessor);
+        // and any additional ones added by the users
+        for (const ILocalPacketHandlerSharedPtr& localPacketHandler : options.m_LocalPacketHandlers)
+        {
+            AddLocalPacketHandler(localPacketHandler);
+        }
+        if (!m_PacketHandlers.empty())
+        {
+            StartProcessingThread();
+        }
+        // NOTE: could add timeout to the external profiling options
+    };
+
+    ~FileOnlyProfilingConnection() override;
 
     bool IsOpen() const override;
 
@@ -54,31 +83,49 @@ public:
     bool WritePacket(const unsigned char* buffer, uint32_t length) override;
 
     // Sending a packet back to ArmNN.
-    Packet ReadPacket(uint32_t timeout) override;
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override;
+
+    void SetEndianess(const TargetEndianness& endianness) override //IInternalProfilingConnection
+    {
+        m_Endianness = endianness;
+    }
+
+    void ReturnPacket(arm::pipe::Packet& packet) override; //IInternalProfilingConnection
 
 private:
-    bool WaitForStreamMeta(const unsigned char* buffer, uint32_t length);
-
-    uint32_t ToUint32(const unsigned char* data, TargetEndianness endianness);
-
-    void SendConnectionAck();
-
-    bool SendCounterSelectionPacket();
-
-    PackageActivity GetPackageActivity(const unsigned char* buffer, uint32_t headerAsWords[2]);
+    void AddLocalPacketHandler(ILocalPacketHandlerSharedPtr localPacketHandler);
+    void StartProcessingThread();
+    void ClearReadableList();
+    void DispatchPacketToHandlers(const arm::pipe::Packet& packet);
 
     void Fail(const std::string& errorMessage);
 
-    static const uint32_t PIPE_MAGIC = 0x45495434;
+    void ForwardPacketToHandlers(arm::pipe::Packet& packet);
+    void ServiceLocalHandlers();
 
     Runtime::CreationOptions::ExternalProfilingOptions m_Options;
-    bool m_QuietOp;
-    std::vector<uint16_t> m_IdList;
-    std::queue<Packet> m_PacketQueue;
+    std::queue<arm::pipe::Packet> m_PacketQueue;
     TargetEndianness m_Endianness;
 
     std::mutex m_PacketAvailableMutex;
     std::condition_variable m_ConditionPacketAvailable;
+
+    std::vector<ILocalPacketHandlerSharedPtr> m_PacketHandlers;
+    std::map<uint32_t, std::vector<ILocalPacketHandlerSharedPtr>> m_IndexedHandlers;
+    std::vector<ILocalPacketHandlerSharedPtr> m_UniversalHandlers;
+
+    // List of readable packets for the local packet handlers
+    std::queue<arm::pipe::Packet> m_ReadableList;
+    // Mutex and condition variable for the readable packet list
+    std::mutex m_ReadableMutex;
+    std::condition_variable m_ConditionPacketReadable;
+    // thread that takes items from the readable list and dispatches them
+    // to the handlers.
+    std::thread m_LocalHandlersThread;
+    // atomic booleans that control the operation of the local handlers thread
+    std::atomic<bool> m_IsRunning;
+    std::atomic<bool> m_KeepRunning;
+    int m_Timeout;
 };
 
 }    // namespace profiling

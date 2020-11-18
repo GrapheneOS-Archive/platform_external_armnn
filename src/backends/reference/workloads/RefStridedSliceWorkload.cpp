@@ -7,8 +7,6 @@
 #include "RefWorkloadUtils.hpp"
 #include "StridedSlice.hpp"
 
-#include <boost/format.hpp>
-
 namespace armnn
 {
 
@@ -27,8 +25,8 @@ void RefStridedSliceWorkload::Execute() const
     DataType inputDataType  = inputInfo.GetDataType();
     DataType outputDataType = outputInfo.GetDataType();
 
-    BOOST_ASSERT(inputDataType == outputDataType);
-    boost::ignore_unused(outputDataType);
+    ARMNN_ASSERT(inputDataType == outputDataType);
+    IgnoreUnused(outputDataType);
 
     StridedSlice(inputInfo,
                  m_Data.m_Parameters,

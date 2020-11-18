@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace armnn
@@ -38,10 +37,10 @@ public:
 
     /// Create and write a TimelineEventBinaryPacket from the parameters to the buffer.
     virtual void
-        SendTimelineEventBinaryPacket(uint64_t timestamp, std::thread::id threadId, uint64_t profilingGuid) = 0;
+        SendTimelineEventBinaryPacket(uint64_t timestamp, int threadId, uint64_t profilingGuid) = 0;
 
     /// Create and write a TimelineEventClassBinaryPacket from the parameters to the buffer.
-    virtual void SendTimelineEventClassBinaryPacket(uint64_t profilingGuid) = 0;
+    virtual void SendTimelineEventClassBinaryPacket(uint64_t profilingGuid, uint64_t nameGuid) = 0;
 
     /// Create and write a TimelineLabelBinaryPacket from the parameters to the buffer.
     virtual void SendTimelineLabelBinaryPacket(uint64_t profilingGuid, const std::string& label) = 0;
@@ -53,7 +52,8 @@ public:
     virtual void SendTimelineRelationshipBinaryPacket(ProfilingRelationshipType relationshipType,
                                                       uint64_t relationshipGuid,
                                                       uint64_t headGuid,
-                                                      uint64_t tailGuid) = 0;
+                                                      uint64_t tailGuid,
+                                                      uint64_t attributeGuid) = 0;
 };
 
 }    // namespace profiling

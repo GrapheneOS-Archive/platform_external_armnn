@@ -5,30 +5,29 @@
 
 #include "SampleTensorHandle.hpp"
 
-namespace armnn
+namespace sdb // sample dynamic backend
 {
 
-SampleTensorHandle::SampleTensorHandle(const TensorInfo &tensorInfo,
+SampleTensorHandle::SampleTensorHandle(const armnn::TensorInfo &tensorInfo,
                                        std::shared_ptr<SampleMemoryManager> &memoryManager)
     : m_TensorInfo(tensorInfo),
       m_MemoryManager(memoryManager),
       m_Pool(nullptr),
       m_UnmanagedMemory(nullptr),
-      m_ImportFlags(static_cast<MemorySourceFlags>(MemorySource::Undefined)),
+      m_ImportFlags(static_cast<armnn::MemorySourceFlags>(armnn::MemorySource::Undefined)),
       m_Imported(false)
 {
 
 }
 
-SampleTensorHandle::SampleTensorHandle(const TensorInfo& tensorInfo,
-                                       std::shared_ptr<SampleMemoryManager> &memoryManager,
-                                       MemorySourceFlags importFlags)
+SampleTensorHandle::SampleTensorHandle(const armnn::TensorInfo& tensorInfo,
+                                       armnn::MemorySourceFlags importFlags)
     : m_TensorInfo(tensorInfo),
-      m_MemoryManager(memoryManager),
+      m_MemoryManager(nullptr),
       m_Pool(nullptr),
       m_UnmanagedMemory(nullptr),
       m_ImportFlags(importFlags),
-      m_Imported(false)
+      m_Imported(true)
 {
 
 }
@@ -66,8 +65,9 @@ void SampleTensorHandle::Allocate()
     }
     else
     {
-        throw InvalidArgumentException("SampleTensorHandle::Allocate Trying to allocate a SampleTensorHandle"
-                                       "that already has allocated memory.");
+        throw armnn::InvalidArgumentException("SampleTensorHandle::Allocate Trying to allocate a "
+                                              "SampleTensorHandle that already has allocated "
+                                              "memory.");
     }
 }
 
@@ -88,12 +88,12 @@ void* SampleTensorHandle::GetPointer() const
     }
 }
 
-bool SampleTensorHandle::Import(void* memory, MemorySource source)
+bool SampleTensorHandle::Import(void* memory, armnn::MemorySource source)
 {
 
-    if (m_ImportFlags & static_cast<MemorySourceFlags>(source))
+    if (m_ImportFlags & static_cast<armnn::MemorySourceFlags>(source))
     {
-        if (source == MemorySource::Malloc)
+        if (source == armnn::MemorySource::Malloc)
         {
             // Check memory alignment
             constexpr uintptr_t alignment = sizeof(size_t);
@@ -134,4 +134,18 @@ bool SampleTensorHandle::Import(void* memory, MemorySource source)
     return false;
 }
 
+void SampleTensorHandle::CopyOutTo(void* dest) const
+{
+    const void *src = GetPointer();
+    ARMNN_ASSERT(src);
+    memcpy(dest, src, m_TensorInfo.GetNumBytes());
 }
+
+void SampleTensorHandle::CopyInFrom(const void* src)
+{
+    void *dest = GetPointer();
+    ARMNN_ASSERT(dest);
+    memcpy(dest, src, m_TensorInfo.GetNumBytes());
+}
+
+} // namespace sdb

@@ -1,16 +1,18 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
+#include "InferenceModel.hpp"
+
 #include <armnn/ArmNN.hpp>
 #include <armnn/Logging.hpp>
 #include <armnn/TypesUtils.hpp>
-#include "InferenceModel.hpp"
+#include <armnn/utility/IgnoreUnused.hpp>
 
-#include <boost/core/ignore_unused.hpp>
-#include <boost/program_options.hpp>
+#include <cxxopts/cxxopts.hpp>
+#include <fmt/format.h>
 
 
 namespace armnn
@@ -24,7 +26,7 @@ inline std::istream& operator>>(std::istream& in, armnn::Compute& compute)
     if (compute == armnn::Compute::Undefined)
     {
         in.setstate(std::ios_base::failbit);
-        throw boost::program_options::validation_error(boost::program_options::validation_error::invalid_option_value);
+        throw cxxopts::OptionException(fmt::format("Unrecognised compute device: {}", token));
     }
     return in;
 }
@@ -37,7 +39,7 @@ inline std::istream& operator>>(std::istream& in, armnn::BackendId& backend)
     if (compute == armnn::Compute::Undefined)
     {
         in.setstate(std::ios_base::failbit);
-        throw boost::program_options::validation_error(boost::program_options::validation_error::invalid_option_value);
+        throw cxxopts::OptionException(fmt::format("Unrecognised compute device: {}", token));
     }
     backend = compute;
     return in;
@@ -91,13 +93,13 @@ class IInferenceTestCaseProvider
 public:
     virtual ~IInferenceTestCaseProvider() {}
 
-    virtual void AddCommandLineOptions(boost::program_options::options_description& options)
+    virtual void AddCommandLineOptions(cxxopts::Options& options, std::vector<std::string>& required)
     {
-        boost::ignore_unused(options);
+        IgnoreUnused(options, required);
     };
     virtual bool ProcessCommandLineOptions(const InferenceTestOptions &commonOptions)
     {
-        boost::ignore_unused(commonOptions);
+        IgnoreUnused(commonOptions);
         return true;
     };
     virtual std::unique_ptr<IInferenceTestCase> GetTestCase(unsigned int testCaseId) = 0;
@@ -108,7 +110,7 @@ template <typename TModel>
 class InferenceModelTestCase : public IInferenceTestCase
 {
 public:
-    using TContainer = boost::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
+    using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
     InferenceModelTestCase(TModel& model,
                            unsigned int testCaseId,
@@ -179,7 +181,7 @@ public:
     template <typename TConstructDatabaseCallable, typename TConstructModelCallable>
     ClassifierTestCaseProvider(TConstructDatabaseCallable constructDatabase, TConstructModelCallable constructModel);
 
-    virtual void AddCommandLineOptions(boost::program_options::options_description& options) override;
+    virtual void AddCommandLineOptions(cxxopts::Options& options, std::vector<std::string>& required) override;
     virtual bool ProcessCommandLineOptions(const InferenceTestOptions &commonOptions) override;
     virtual std::unique_ptr<IInferenceTestCase> GetTestCase(unsigned int testCaseId) override;
     virtual bool OnInferenceTestFinished() override;

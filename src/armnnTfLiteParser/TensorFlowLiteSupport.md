@@ -20,7 +20,13 @@ The Arm NN SDK TensorFlow Lite parser currently supports the following operators
 
 * DEQUANTIZE
 
+* DIV
+
+* EXP
+
 * FULLY_CONNECTED, Supported Fused Activation: RELU , RELU6 , TANH, NONE
+
+* LEAKY_RELU
 
 * LOGISTIC
 
@@ -35,6 +41,8 @@ The Arm NN SDK TensorFlow Lite parser currently supports the following operators
 * MINIMUM
 
 * MUL
+
+* NEG
 
 * PACK
 
@@ -59,6 +67,8 @@ The Arm NN SDK TensorFlow Lite parser currently supports the following operators
 * SPACE_TO_BATCH
 
 * SPLIT
+
+* SPLIT_V
 
 * SQUEEZE
 
@@ -89,5 +99,21 @@ Arm tested these operators with the following TensorFlow Lite neural network:
 * DeepSpeech v1 converted from [TensorFlow model](https://github.com/mozilla/DeepSpeech/releases/tag/v0.4.1)
 
 * DeepSpeaker
+
+* [DeepLab v3+](https://www.tensorflow.org/lite/models/segmentation/overview)
+
+* FSRCNN
+
+* RDN converted from [TensorFlow model](https://github.com/hengchuan/RDN-TensorFlow)
+
+* Quantized RDN (CpuRef)
+
+* [Quantized Inception v3](http://download.tensorflow.org/models/tflite_11_05_08/inception_v3_quant.tgz)
+
+* [Quantized Inception v4](http://download.tensorflow.org/models/inception_v4_299_quant_20181026.tgz) (CpuRef)
+
+* Quantized ResNet v2 50 (CpuRef)
+
+* Quantized Yolo v3 (CpuRef)
 
 More machine learning operators will be supported in future releases.

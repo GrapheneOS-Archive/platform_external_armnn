@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -6,6 +6,7 @@
 
 #include "ProfilingEvent.hpp"
 
+#include <armnn/utility/IgnoreUnused.hpp>
 #include "armnn/IProfiler.hpp"
 
 #include "WallClockTimer.hpp"
@@ -16,8 +17,6 @@
 #include <vector>
 #include <stack>
 #include <map>
-
-#include <boost/core/ignore_unused.hpp>
 
 namespace armnn
 {
@@ -116,7 +115,7 @@ public:
     using InstrumentPtr = std::unique_ptr<Instrument>;
 
     template<typename... Args>
-    ScopedProfilingEvent(const BackendId& backendId, const std::string& name, Args... args)
+    ScopedProfilingEvent(const BackendId& backendId, const std::string& name, Args&&... args)
         : m_Event(nullptr)
         , m_Profiler(ProfilerManager::GetInstance().GetProfiler())
     {
@@ -124,7 +123,7 @@ public:
         {
             std::vector<InstrumentPtr> instruments(0);
             instruments.reserve(sizeof...(args)); //One allocation
-            ConstructNextInVector(instruments, args...);
+            ConstructNextInVector(instruments, std::forward<Args>(args)...);
             m_Event = m_Profiler->BeginEvent(backendId, name, std::move(instruments));
         }
     }
@@ -141,14 +140,14 @@ private:
 
     void ConstructNextInVector(std::vector<InstrumentPtr>& instruments)
     {
-        boost::ignore_unused(instruments);
+        IgnoreUnused(instruments);
     }
 
     template<typename Arg, typename... Args>
-    void ConstructNextInVector(std::vector<InstrumentPtr>& instruments, Arg arg, Args... args)
+    void ConstructNextInVector(std::vector<InstrumentPtr>& instruments, Arg&& arg, Args&&... args)
     {
-        instruments.emplace_back(std::make_unique<Arg>(arg));
-        ConstructNextInVector(instruments, args...);
+        instruments.emplace_back(std::make_unique<Arg>(std::forward<Arg>(arg)));
+        ConstructNextInVector(instruments, std::forward<Args>(args)...);
     }
 
     Event* m_Event;       ///< Event to track
@@ -157,15 +156,21 @@ private:
 
 } // namespace armnn
 
+#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, /*name,*/ ...) \
+    armnn::ScopedProfilingEvent e_ ## lineNumber(backendId, /*name,*/ __VA_ARGS__);
 
-#include <boost/preprocessor.hpp>
+#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(lineNumber, backendId, /*name,*/ ...) \
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, /*name,*/ __VA_ARGS__)
 
-#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(backendId, /*name,*/ ...) \
-    armnn::ScopedProfilingEvent BOOST_PP_CAT(e_,__LINE__)(backendId, /*name,*/ __VA_ARGS__);
-
-// The event name must be known at compile time
+// The event name must be known at compile time i.e. if you are going to use this version of the macro
+// in code the first argument you supply after the backendId must be the name.
+// NOTE: need to pass the line number as an argument from here so by the time it gets to the UNIQUE_LOC_INNER
+//       above it has expanded to a string and will concat (##) correctly with the 'e_' prefix to yield a
+//       legal and unique variable name (so long as you don't use the macro twice on the same line).
+//       The concat preprocessing operator (##) very unhelpfully will not expand macros see
+//       https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html for the gory details.
 #define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, /*name,*/ ...) \
-    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(backendId, /*name,*/ __VA_ARGS__);
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(__LINE__,backendId, /*name,*/ __VA_ARGS__)
 
 #define ARMNN_SCOPED_PROFILING_EVENT(backendId, name) \
     ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, name, armnn::WallClockTimer())

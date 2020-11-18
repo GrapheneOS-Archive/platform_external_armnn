@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -31,6 +31,7 @@ public:
 
     /// Check if the input tensor shape(s)
     /// will lead to a valid configuration of @ref StridedSliceLayer.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     void Accept(ILayerVisitor& visitor) const override;

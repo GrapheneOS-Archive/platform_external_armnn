@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -38,6 +38,8 @@ constexpr char const* GetActivationFunctionAsCString(ActivationFunction activati
         case ActivationFunction::Abs:           return "Abs";
         case ActivationFunction::Sqrt:          return "Sqrt";
         case ActivationFunction::Square:        return "Square";
+        case ActivationFunction::Elu:           return "Elu";
+        case ActivationFunction::HardSwish:     return "HardSwish";
         default:                                return "Unknown";
     }
 }
@@ -70,12 +72,23 @@ constexpr char const* GetUnaryOperationAsCString(UnaryOperation operation)
 {
     switch (operation)
     {
-        case UnaryOperation::Abs:   return "Abs";
-        case UnaryOperation::Exp:   return "Exp";
-        case UnaryOperation::Sqrt:  return "Sqrt";
-        case UnaryOperation::Rsqrt: return "Rsqrt";
-        case UnaryOperation::Neg:   return "Neg";
-        default:                    return "Unknown";
+        case UnaryOperation::Abs:        return "Abs";
+        case UnaryOperation::Exp:        return "Exp";
+        case UnaryOperation::Sqrt:       return "Sqrt";
+        case UnaryOperation::Rsqrt:      return "Rsqrt";
+        case UnaryOperation::Neg:        return "Neg";
+        case UnaryOperation::LogicalNot: return "LogicalNot";
+        default:                         return "Unknown";
+    }
+}
+
+constexpr char const* GetLogicalBinaryOperationAsCString(LogicalBinaryOperation operation)
+{
+    switch (operation)
+    {
+        case LogicalBinaryOperation::LogicalAnd: return "LogicalAnd";
+        case LogicalBinaryOperation::LogicalOr:  return "LogicalOr";
+        default:                                 return "Unknown";
     }
 }
 
@@ -114,9 +127,11 @@ constexpr unsigned int GetDataTypeSize(DataType dataType)
 {
     switch (dataType)
     {
+        case DataType::BFloat16:
         case DataType::Float16:               return 2U;
         case DataType::Float32:
         case DataType::Signed32:              return 4U;
+        case DataType::Signed64:              return 8U;
         case DataType::QAsymmU8:              return 1U;
         case DataType::QAsymmS8:              return 1U;
         case DataType::QSymmS8:               return 1U;
@@ -168,6 +183,7 @@ constexpr const char* GetDataTypeName(DataType dataType)
     {
         case DataType::Float16:               return "Float16";
         case DataType::Float32:               return "Float32";
+        case DataType::Signed64:              return "Signed64";
         case DataType::QAsymmU8:              return "QAsymmU8";
         case DataType::QAsymmS8:              return "QAsymmS8";
         case DataType::QSymmS8:               return "QSymmS8";
@@ -177,6 +193,7 @@ constexpr const char* GetDataTypeName(DataType dataType)
         case DataType::QSymmS16:              return "QSymm16";
         case DataType::Signed32:              return "Signed32";
         case DataType::Boolean:               return "Boolean";
+        case DataType::BFloat16:              return "BFloat16";
 
         default:
             return "Unknown";

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,7 +9,7 @@
 #include "armnn/profiling/ISendTimelinePacket.hpp"
 #include "ProfilingUtils.hpp"
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #include <memory>
 
@@ -25,8 +25,8 @@ public:
     SendTimelinePacket(IBufferManager& bufferManager)
       : m_BufferManager(bufferManager)
       , m_WriteBuffer(nullptr)
-      , m_Offset(0u)
-      , m_BufferSize(0u)
+      , m_Offset(8u)
+      , m_RemainingBufferSize(0u)
     {}
 
     /// Commits the current buffer and reset the member variables
@@ -36,10 +36,10 @@ public:
     void SendTimelineEntityBinaryPacket(uint64_t profilingGuid) override;
 
     /// Create and write a TimelineEventBinaryPacket from the parameters to the buffer.
-    void SendTimelineEventBinaryPacket(uint64_t timestamp, std::thread::id threadId, uint64_t profilingGuid) override;
+    void SendTimelineEventBinaryPacket(uint64_t timestamp, int threadId, uint64_t profilingGuid) override;
 
     /// Create and write a TimelineEventClassBinaryPacket from the parameters to the buffer.
-    void SendTimelineEventClassBinaryPacket(uint64_t profilingGuid) override;
+    void SendTimelineEventClassBinaryPacket(uint64_t profilingGuid, uint64_t nameGuid) override;
 
     /// Create and write a TimelineLabelBinaryPacket from the parameters to the buffer.
     void SendTimelineLabelBinaryPacket(uint64_t profilingGuid, const std::string& label) override;
@@ -51,7 +51,8 @@ public:
     virtual void SendTimelineRelationshipBinaryPacket(ProfilingRelationshipType relationshipType,
                                                       uint64_t relationshipGuid,
                                                       uint64_t headGuid,
-                                                      uint64_t tailGuid) override;
+                                                      uint64_t tailGuid,
+                                                      uint64_t attributeGuid) override;
 private:
     /// Reserves maximum packet size from buffer
     void ReserveBuffer();
@@ -59,46 +60,68 @@ private:
     template <typename Func, typename ... Params>
     void ForwardWriteBinaryFunction(Func& func, Params&& ... params);
 
-    IBufferManager& m_BufferManager;
+    IBufferManager&  m_BufferManager;
     IPacketBufferPtr m_WriteBuffer;
-    unsigned int m_Offset;
-    unsigned int m_BufferSize;
+    unsigned int     m_Offset;
+    unsigned int     m_RemainingBufferSize;
+
+    const unsigned int m_uint32_t_size = sizeof(uint32_t);
+
+    std::pair<uint32_t, uint32_t> m_PacketHeader;
+    uint32_t                      m_PacketDataLength;
+
+    bool m_DirectoryPackage = false;
 };
 
-template <typename Func, typename ... Params>
+template<typename Func, typename ... Params>
 void SendTimelinePacket::ForwardWriteBinaryFunction(Func& func, Params&& ... params)
 {
     try
     {
         ReserveBuffer();
-        BOOST_ASSERT(m_WriteBuffer);
+        ARMNN_ASSERT(m_WriteBuffer);
         unsigned int numberOfBytesWritten = 0;
-        while (true)
+        // Header will be prepended to the buffer on Commit()
+        while ( true )
         {
             TimelinePacketStatus result = func(std::forward<Params>(params)...,
                                                &m_WriteBuffer->GetWritableData()[m_Offset],
-                                               m_BufferSize,
+                                               m_RemainingBufferSize,
                                                numberOfBytesWritten);
-            switch (result)
+            switch ( result )
             {
-            case TimelinePacketStatus::BufferExhaustion:
-                Commit();
-                ReserveBuffer();
-                continue;
+                case TimelinePacketStatus::BufferExhaustion:
+                    Commit();
+                    ReserveBuffer();
+                    continue;
 
-            case TimelinePacketStatus::Error:
-                throw RuntimeException("Error processing while sending TimelineBinaryPacket", CHECK_LOCATION());
+                case TimelinePacketStatus::Error:
+                    throw RuntimeException("Error processing while sending TimelineBinaryPacket", CHECK_LOCATION());
 
-            default:
-                m_Offset     += numberOfBytesWritten;
-                m_BufferSize -= numberOfBytesWritten;
-                return;
+                default:
+                    m_Offset += numberOfBytesWritten;
+                    m_RemainingBufferSize -= numberOfBytesWritten;
+                    return;
             }
         }
     }
-    catch (...)
+    catch (const RuntimeException& ex)
     {
-        throw RuntimeException("Error processing while sending TimelineBinaryPacket", CHECK_LOCATION());
+        // don't swallow in the catch all block
+        throw ex;
+    }
+    catch (const BufferExhaustion& ex)
+    {
+        // ditto
+        throw ex;
+    }
+    catch (const Exception& ex)
+    {
+        throw ex;
+    }
+    catch ( ... )
+    {
+        throw RuntimeException("Unknown Exception thrown while sending TimelineBinaryPacket", CHECK_LOCATION());
     }
 }
 

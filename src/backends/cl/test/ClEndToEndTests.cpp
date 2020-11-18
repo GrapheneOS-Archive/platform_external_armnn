@@ -5,14 +5,17 @@
 
 #include <backendsCommon/test/EndToEndTestImpl.hpp>
 
+#include <backendsCommon/test/ActivationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ArgMinMaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ComparisonEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ConcatEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DepthToSpaceEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DequantizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ElementwiseUnaryEndToEndTestImpl.hpp>
+#include <backendsCommon/test/FillEndToEndTestImpl.hpp>
 #include <backendsCommon/test/InstanceNormalizationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/PreluEndToEndTestImpl.hpp>
+#include <backendsCommon/test/QLstmEndToEndTestImpl.hpp>
 #include <backendsCommon/test/QuantizedLstmEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SpaceToDepthEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SplitterEndToEndTestImpl.hpp>
@@ -126,6 +129,21 @@ BOOST_AUTO_TEST_CASE(DequantizeEndToEndOffsetTest)
     DequantizeEndToEndOffset<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
+BOOST_AUTO_TEST_CASE(ClStridedSliceInvalidSliceEndToEndTest)
+{
+    StridedSliceInvalidSliceEndToEndTest(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClEluEndToEndTestFloat32)
+{
+    EluEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClEluEndToEndTestFloat16)
+{
+    EluEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
 BOOST_AUTO_TEST_CASE(ClGreaterSimpleEndToEndTest)
 {
     const std::vector<uint8_t> expectedOutput({ 0, 0, 0, 0,  1, 1, 1, 1,
@@ -166,6 +184,32 @@ BOOST_AUTO_TEST_CASE(ClGreaterBroadcastEndToEndUint8Test)
                                                                   expectedOutput);
 }
 
+// HardSwish
+BOOST_AUTO_TEST_CASE(ClHardSwishEndToEndTestFloat32)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClHardSwishEndToEndTestFloat16)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClHardSwishEndToEndTestQAsymmS8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClHardSwishEndToEndTestQAsymmU8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClHardSwishEndToEndTestQSymmS16)
+{
+    HardSwishEndToEndTest<armnn::DataType::QSymmS16>(defaultBackends);
+}
+
 // InstanceNormalization
 BOOST_AUTO_TEST_CASE(ClInstanceNormalizationNhwcEndToEndTest1)
 {
@@ -187,6 +231,23 @@ BOOST_AUTO_TEST_CASE(ClInstanceNormalizationNchwEndToEndTest2)
     InstanceNormalizationNchwEndToEndTest2(defaultBackends);
 }
 
+// Fill
+BOOST_AUTO_TEST_CASE(ClFillEndToEndTest)
+{
+    FillEndToEnd<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestFloat16)
+{
+    FillEndToEnd<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClFillEndToEndTestInt32)
+{
+    FillEndToEnd<armnn::DataType::Signed32>(defaultBackends);
+}
+
+// Prelu
 BOOST_AUTO_TEST_CASE(ClPreluEndToEndFloat32Test)
 {
     PreluEndToEndNegativeTest<armnn::DataType::Float32>(defaultBackends);
@@ -446,6 +507,11 @@ BOOST_AUTO_TEST_CASE(ClArgMaxAxis3TestQAsymmU8)
 BOOST_AUTO_TEST_CASE(ClArgMinAxis3TestQAsymmU8)
 {
     ArgMinAxis3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(ClQLstmEndToEndTest)
+{
+    QLstmEndToEnd(defaultBackends);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -1,11 +1,13 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <armnn/IRuntime.hpp>
 #include <armnn/Optional.hpp>
+
+#include <armnn/backends/IBackendInternal.hpp>
 
 #include <backendsCommon/WorkloadFactoryBase.hpp>
 #include <aclCommon/BaseMemoryManager.hpp>
@@ -19,21 +21,32 @@ class ClWorkloadFactory : public WorkloadFactoryBase
 public:
     ClWorkloadFactory(const std::shared_ptr<ClMemoryManager>& memoryManager);
 
+    ClWorkloadFactory(const std::shared_ptr<ClMemoryManager>& memoryManager,
+                      const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr);
+
     const BackendId& GetBackendId() const override;
 
     static bool IsLayerSupported(const Layer& layer,
                                  Optional<DataType> dataType,
                                  std::string& outReasonIfUnsupported);
 
+    static bool IsLayerSupported(const IConnectableLayer& layer,
+                                 Optional<DataType> dataType,
+                                 std::string& outReasonIfUnsupported,
+                                 const ModelOptions& modelOptions);
+
     bool SupportsSubTensors() const override { return true; }
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateSubTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateSubTensorHandle(ITensorHandle& parent,
                                                          TensorShape const& subTensorShape,
                                                          unsigned int const* subTensorOrigin) const override;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                       const bool IsMemoryManaged = true) const override;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                       DataLayout dataLayout,
                                                       const bool IsMemoryManaged = true) const override;
@@ -96,8 +109,12 @@ public:
     std::unique_ptr<IWorkload> CreateElementwiseUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
                                                       const WorkloadInfo& info) const override;
 
+    ARMNN_DEPRECATED_MSG("Use CreateComparison instead")
     std::unique_ptr<IWorkload> CreateEqual(const EqualQueueDescriptor& descriptor,
                                            const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateFill(const FillQueueDescriptor& descriptor,
+                                          const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateFloor(const FloorQueueDescriptor& descriptor,
                                            const WorkloadInfo& info) const override;
@@ -108,6 +125,7 @@ public:
     std::unique_ptr<IWorkload> CreateGather(const GatherQueueDescriptor& descriptor,
                                             const WorkloadInfo& info) const override;
 
+    ARMNN_DEPRECATED_MSG("Use CreateComparison instead")
     std::unique_ptr<IWorkload> CreateGreater(const GreaterQueueDescriptor& descriptor,
                                              const WorkloadInfo& info) const override;
 
@@ -119,6 +137,9 @@ public:
 
     std::unique_ptr<IWorkload> CreateL2Normalization(const L2NormalizationQueueDescriptor& descriptor,
                                                      const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
+                                                const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateLstm(const LstmQueueDescriptor& descriptor,
                                           const WorkloadInfo& info) const override;
@@ -166,6 +187,9 @@ public:
     std::unique_ptr<IWorkload> CreatePrelu(const PreluQueueDescriptor& descriptor,
                                            const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateQLstm(const QLstmQueueDescriptor& descriptor,
+                                           const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateQuantize(const QuantizeQueueDescriptor& descriptor,
                                               const WorkloadInfo& info) const override;
 
@@ -210,6 +234,9 @@ public:
     std::unique_ptr<IWorkload> CreateSubtraction(const SubtractionQueueDescriptor& descriptor,
                                                  const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateTranspose(const TransposeQueueDescriptor& descriptor,
+                                               const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateTransposeConvolution2d(const TransposeConvolution2dQueueDescriptor& descriptor,
                                                             const WorkloadInfo& info) const override;
 
@@ -225,6 +252,7 @@ private:
                                                    Args&&... args);
 
     mutable std::shared_ptr<ClMemoryManager> m_MemoryManager;
+    const IBackendInternal::IBackendSpecificModelContextPtr m_ModelContextPtr;
 };
 
 } // namespace armnn

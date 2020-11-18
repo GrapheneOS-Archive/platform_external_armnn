@@ -1,15 +1,14 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "OutputLayer.hpp"
 
 #include "LayerCloneBase.hpp"
 
+#include <armnn/utility/IgnoreUnused.hpp>
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
-
-#include <boost/core/ignore_unused.hpp>
 
 namespace armnn
 {
@@ -21,7 +20,7 @@ OutputLayer::OutputLayer(LayerBindingId id, const char* name)
 
 std::unique_ptr<IWorkload> OutputLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    boost::ignore_unused(factory);
+    IgnoreUnused(factory);
     return nullptr;
 }
 
@@ -32,6 +31,7 @@ OutputLayer* OutputLayer::Clone(Graph& graph) const
 
 void OutputLayer::ValidateTensorShapesFromInputs()
 {
+
     // Just validates that the input is connected.
     ConditionalThrow<LayerValidationException>(GetInputSlot(0).GetConnection() != nullptr,
                                                "OutputLayer: Input slot must be connected.");

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -11,14 +11,14 @@
 #include <ResolveType.hpp>
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <boost/test/unit_test.hpp>
-#include <boost/cast.hpp>
-#include <boost/core/ignore_unused.hpp>
 
 #include <utility>
 
@@ -31,14 +31,16 @@ using namespace std;
 
 // Calls CreateWorkload for a layer, and checks the returned pointer is of the correct type.
 template<typename Workload>
-std::unique_ptr<Workload> MakeAndCheckWorkload(Layer& layer, const IWorkloadFactory& factory)
+std::unique_ptr<Workload> MakeAndCheckWorkload(Layer& layer,
+                                               const IWorkloadFactory& factory,
+                                               const ModelOptions& modelOptions = {})
 {
     std::unique_ptr<IWorkload> workload = layer.CreateWorkload(factory);
-    BOOST_TEST(workload.get() == boost::polymorphic_downcast<Workload*>(workload.get()),
+    BOOST_TEST(workload.get() == PolymorphicDowncast<Workload*>(workload.get()),
                "Cannot convert to derived class");
     std::string reasonIfUnsupported;
     layer.SetBackendId(factory.GetBackendId());
-    BOOST_TEST(factory.IsLayerSupported(layer, layer.GetDataType(), reasonIfUnsupported));
+    BOOST_TEST(factory.IsLayerSupported(layer, layer.GetDataType(), reasonIfUnsupported, modelOptions));
     return std::unique_ptr<Workload>(static_cast<Workload*>(workload.release()));
 }
 
@@ -131,7 +133,177 @@ std::unique_ptr<WorkloadType> CreateElementwiseWorkloadTest(armnn::IWorkloadFact
     return workload;
 }
 
-template <typename WorkloadType, 
+template<typename WorkloadType,
+         typename DescriptorType,
+         armnn::DataType DataType>
+std::unique_ptr<WorkloadType> CreateSubtractionWithBlobWorkloadTest(armnn::IWorkloadFactory& factory,
+                                                                    armnn::Graph& graph)
+{
+    // Creates the layer we're testing.
+    SubtractionLayer* const layer = graph.AddLayer<SubtractionLayer>("layer");
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Creates extra layers.
+    Layer* const input1 = graph.AddLayer<InputLayer>(1, "input1");
+    Layer* const input2 = graph.AddLayer<InputLayer>(2, "input2");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    armnn::TensorInfo tensorInfo({2, 3}, DataType);
+    Connect(input1, layer, tensorInfo, 0, 0);
+    Connect(input2, layer, tensorInfo, 0, 1);
+    Connect(layer, output, tensorInfo);
+    CreateTensorHandles(graph, factory);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor>
+        activationDescPtr = layer->GetAdditionalInformation<ActivationDescriptor>();
+
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(activationDescPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<WorkloadType>(*layer, factory);
+
+    DescriptorType queueDescriptor = workload->GetData();
+
+    const ActivationDescriptor* queueDescBlobPtr =
+        queueDescriptor.template GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 2);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+
+    return workload;
+}
+
+template<typename WorkloadType,
+         typename DescriptorType,
+         armnn::DataType DataType>
+std::unique_ptr<WorkloadType> CreateMultiplicationWithBlobWorkloadTest(armnn::IWorkloadFactory& factory,
+                                                                       armnn::Graph& graph)
+{
+    // Creates the layer we're testing.
+    MultiplicationLayer* const layer = graph.AddLayer<MultiplicationLayer>("layer");
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Creates extra layers.
+    Layer* const input1 = graph.AddLayer<InputLayer>(1, "input1");
+    Layer* const input2 = graph.AddLayer<InputLayer>(2, "input2");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    armnn::TensorInfo tensorInfo({2, 3}, DataType);
+    Connect(input1, layer, tensorInfo, 0, 0);
+    Connect(input2, layer, tensorInfo, 0, 1);
+    Connect(layer, output, tensorInfo);
+    CreateTensorHandles(graph, factory);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor>
+        activationDescPtr = layer->GetAdditionalInformation<ActivationDescriptor>();
+
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(activationDescPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<WorkloadType>(*layer, factory);
+
+    DescriptorType queueDescriptor = workload->GetData();
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 2);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    const ActivationDescriptor* queueDescBlobPtr =
+        queueDescriptor.template GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    return workload;// Returns so we can do extra, backend-specific tests.
+}
+
+template<typename WorkloadType,
+         typename DescriptorType,
+         armnn::DataType DataType>
+std::unique_ptr<WorkloadType> CreateAdditionWithBlobWorkloadTest(armnn::IWorkloadFactory& factory,
+                                                                 armnn::Graph& graph)
+{
+    // Creates the layer we're testing.
+    AdditionLayer* const layer = graph.AddLayer<AdditionLayer>("layer");
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Creates extra layers.
+    Layer* const input1 = graph.AddLayer<InputLayer>(1, "input1");
+    Layer* const input2 = graph.AddLayer<InputLayer>(2, "input2");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    armnn::TensorInfo tensorInfo({2, 3}, DataType);
+    Connect(input1, layer, tensorInfo, 0, 0);
+    Connect(input2, layer, tensorInfo, 0, 1);
+    Connect(layer, output, tensorInfo);
+    CreateTensorHandles(graph, factory);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor>
+        activationDescPtr = layer->template GetAdditionalInformation<ActivationDescriptor>();
+
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(activationDescPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<WorkloadType>(*layer, factory);
+
+    DescriptorType queueDescriptor = workload->GetData();
+    const ActivationDescriptor* queueDescBlobPtr =
+        queueDescriptor.template GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 2);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    return workload;
+}
+
+template <typename WorkloadType,
           typename DescriptorType,
           armnn::DataType DataType>
 std::unique_ptr<WorkloadType> CreateElementwiseUnaryWorkloadTest(armnn::IWorkloadFactory & factory,
@@ -216,10 +388,92 @@ std::unique_ptr<BatchNormalizationWorkloadType> CreateBatchNormalizationWorkload
     return workload;
 }
 
+template <typename BatchNormalizationWorkloadType, armnn::DataType DataType>
+std::unique_ptr<BatchNormalizationWorkloadType> CreateBatchNormalizationWithBlobWorkloadTest(
+    armnn::IWorkloadFactory& factory, armnn::Graph& graph, DataLayout dataLayout = DataLayout::NCHW)
+{
+    TensorShape tensorShape;
+    switch (dataLayout)
+    {
+        case DataLayout::NHWC:
+            tensorShape = { 2, 4, 4, 3 };
+            break;
+        case DataLayout::NCHW:
+        default:
+            tensorShape = { 2, 3, 4, 4 };
+    }
+
+    // Creates the layer we're testing.
+    BatchNormalizationDescriptor layerDesc;
+    layerDesc.m_Eps = 0.05f;
+    layerDesc.m_DataLayout = dataLayout;
+
+    BatchNormalizationLayer* const layer = graph.AddLayer<BatchNormalizationLayer>(layerDesc, "layer");
+
+    armnn::TensorInfo weightInfo({3}, DataType);
+    layer->m_Mean     = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Variance = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Beta     = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Gamma    = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Mean->Allocate();
+    layer->m_Variance->Allocate();
+    layer->m_Beta->Allocate();
+    layer->m_Gamma->Allocate();
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor> activationDescPtr = layer->GetAdditionalInformation<ActivationDescriptor>();
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(activationDescPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    // Creates extra layers.
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    armnn::TensorInfo tensorInfo(tensorShape, DataType);
+    Connect(input, layer, tensorInfo);
+    Connect(layer, output, tensorInfo);
+    CreateTensorHandles(graph, factory);
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<BatchNormalizationWorkloadType>(*layer, factory);
+    BatchNormalizationQueueDescriptor queueDescriptor = workload->GetData();
+    const ActivationDescriptor* queueDescBlobPtr = queueDescriptor.GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    BOOST_TEST(queueDescriptor.m_Parameters.m_Eps == 0.05f);
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    BOOST_TEST((queueDescriptor.m_Mean->GetTensorInfo() == TensorInfo({3}, DataType)));
+    BOOST_TEST((queueDescriptor.m_Variance->GetTensorInfo() == TensorInfo({3}, DataType)));
+    BOOST_TEST((queueDescriptor.m_Gamma->GetTensorInfo() == TensorInfo({3}, DataType)));
+    BOOST_TEST((queueDescriptor.m_Beta->GetTensorInfo() == TensorInfo({3}, DataType)));
+    BOOST_TEST((queueDescriptor.m_Parameters.m_DataLayout == dataLayout));
+
+    // Returns so we can do extra, backend-specific tests.
+    return workload;
+}
+
 template <typename Convolution2dWorkload, armnn::DataType DataType>
 std::unique_ptr<Convolution2dWorkload> CreateConvolution2dWorkloadTest(armnn::IWorkloadFactory& factory,
                                                                        armnn::Graph&            graph,
-                                                                       DataLayout dataLayout = DataLayout::NCHW)
+                                                                       DataLayout dataLayout = DataLayout::NCHW,
+                                                                       const ModelOptions& modelOptions = {})
 {
     // Creates the layer we're testing.
     Convolution2dDescriptor layerDesc;
@@ -254,7 +508,7 @@ std::unique_ptr<Convolution2dWorkload> CreateConvolution2dWorkloadTest(armnn::IW
     CreateTensorHandles(graph, factory);
 
     // Makes the workload and checks it.
-    auto workload = MakeAndCheckWorkload<Convolution2dWorkload>(*layer, factory);
+    auto workload = MakeAndCheckWorkload<Convolution2dWorkload>(*layer, factory, modelOptions);
 
     Convolution2dQueueDescriptor queueDescriptor = workload->GetData();
     BOOST_TEST(queueDescriptor.m_Parameters.m_StrideX == 2);
@@ -271,6 +525,150 @@ std::unique_ptr<Convolution2dWorkload> CreateConvolution2dWorkloadTest(armnn::IW
     BOOST_TEST((queueDescriptor.m_Weight->GetTensorInfo() == TensorInfo(weightShape, DataType)));
     BOOST_TEST((queueDescriptor.m_Bias->GetTensorInfo() ==
         TensorInfo({2}, GetBiasDataType(DataType))));
+
+    // Returns so we can do extra, backend-specific tests.
+    return workload;
+}
+
+template<typename Convolution2dWorkload, armnn::DataType DataType>
+std::unique_ptr<Convolution2dWorkload> CreateConvolution2dFusedActivationWithBlobWorkloadTest(
+    armnn::IWorkloadFactory& factory,
+    armnn::Graph& graph,
+    DataLayout dataLayout = DataLayout::NCHW,
+    const ModelOptions& modelOptions = {})
+{
+    // Creates the layer we're testing.
+    Convolution2dDescriptor layerDesc;
+    layerDesc.m_PadLeft = 3;
+    layerDesc.m_PadRight = 3;
+    layerDesc.m_PadTop = 1;
+    layerDesc.m_PadBottom = 1;
+    layerDesc.m_StrideX = 2;
+    layerDesc.m_StrideY = 4;
+    layerDesc.m_BiasEnabled = true;
+    layerDesc.m_DataLayout = dataLayout;
+
+
+    Convolution2dLayer* const layer = graph.AddLayer<Convolution2dLayer>(layerDesc, "layer");
+
+    TensorShape weightShape = (dataLayout == DataLayout::NCHW) ? TensorShape{2, 3, 5, 3} : TensorShape{2, 5, 3, 3};
+    TensorShape inputShape  = (dataLayout == DataLayout::NCHW) ? TensorShape{2, 3, 8, 16} : TensorShape{2, 8, 16, 3};
+    TensorShape outputShape = (dataLayout == DataLayout::NCHW) ? TensorShape{2, 2, 2, 10} : TensorShape{2, 2, 10, 2};
+
+    layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo(weightShape, DataType));
+    layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({2}, GetBiasDataType(DataType)));
+
+    layer->m_Weight->Allocate();
+    layer->m_Bias->Allocate();
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor> activationDescPtr = layer->GetAdditionalInformation<ActivationDescriptor>();
+
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(activationDescPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    // Creates extra layers.
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    Connect(input, layer, TensorInfo(inputShape, DataType));
+    Connect(layer, output, TensorInfo(outputShape, DataType));
+    CreateTensorHandles(graph, factory);
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<Convolution2dWorkload>(*layer, factory, modelOptions);
+
+    Convolution2dQueueDescriptor queueDescriptor = workload->GetData();
+    const ActivationDescriptor* queueDescBlobPtr = queueDescriptor.GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    BOOST_TEST(queueDescriptor.m_Parameters.m_StrideX == 2);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_StrideY == 4);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadLeft == 3);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadRight == 3);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadTop == 1);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadBottom == 1);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_BiasEnabled);
+    BOOST_TEST((queueDescriptor.m_Parameters.m_DataLayout == dataLayout));
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    BOOST_TEST((queueDescriptor.m_Weight->GetTensorInfo() == TensorInfo(weightShape, DataType)));
+    BOOST_TEST((queueDescriptor.m_Bias->GetTensorInfo() ==
+        TensorInfo({2}, GetBiasDataType(DataType))));
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 1);
+
+    // Returns so we can do extra, backend-specific tests.
+    return workload;
+}
+
+template <typename Convolution2dWorkload, armnn::DataType DataType>
+std::unique_ptr<Convolution2dWorkload> CreateConvolution2dWorkloadFastMathTest(armnn::IWorkloadFactory& factory,
+                                                                               armnn::Graph&            graph,
+                                                                               DataLayout dataLayout = DataLayout::NCHW,
+                                                                               const ModelOptions& modelOptions = {})
+{
+    // Creates the layer we're testing.
+    Convolution2dDescriptor layerDesc;
+    layerDesc.m_PadLeft = 0;
+    layerDesc.m_PadRight = 0;
+    layerDesc.m_PadTop = 0;
+    layerDesc.m_PadBottom = 0;
+    layerDesc.m_StrideX = 1;
+    layerDesc.m_StrideY = 1;
+    layerDesc.m_BiasEnabled = false;
+    layerDesc.m_DataLayout = dataLayout;
+
+    Convolution2dLayer* const layer = graph.AddLayer<Convolution2dLayer>(layerDesc, "layer");
+
+    TensorShape weightShape = TensorShape{32, 32, 3, 3};
+    TensorShape inputShape  = TensorShape{1, 32, 149, 149};
+    TensorShape outputShape = TensorShape{1, 32, 147, 147};
+
+    layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo(weightShape, DataType));
+    layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({2}, GetBiasDataType(DataType)));
+
+    layer->m_Weight->Allocate();
+    layer->m_Bias->Allocate();
+
+    // Creates extra layers.
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    Connect(input, layer, TensorInfo(inputShape, DataType));
+    Connect(layer, output, TensorInfo(outputShape, DataType));
+    CreateTensorHandles(graph, factory);
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<Convolution2dWorkload>(*layer, factory, modelOptions);
+
+    Convolution2dQueueDescriptor queueDescriptor = workload->GetData();
+    BOOST_TEST(queueDescriptor.m_Parameters.m_StrideX == 1);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_StrideY == 1);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadLeft == 0);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadRight == 0);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadTop == 0);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_PadBottom == 0);
+    BOOST_TEST((queueDescriptor.m_Parameters.m_DataLayout == dataLayout));
+
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    BOOST_TEST((queueDescriptor.m_Weight->GetTensorInfo() == TensorInfo(weightShape, DataType)));
 
     // Returns so we can do extra, backend-specific tests.
     return workload;
@@ -515,6 +913,167 @@ std::unique_ptr<QuantizedLstmWorkload> CreateQuantizedLstmWorkloadTest(armnn::IW
     return workload;
 }
 
+template <typename QLstmWorkload>
+std::unique_ptr<QLstmWorkload> CreateQLstmWorkloadTest(armnn::IWorkloadFactory& factory,
+                                                       armnn::Graph& graph)
+{
+    QLstmDescriptor layerDesc;
+    layerDesc.m_CifgEnabled       = true;
+    layerDesc.m_PeepholeEnabled   = false;
+    layerDesc.m_ProjectionEnabled = false;
+    layerDesc.m_LayerNormEnabled  = true;
+
+    layerDesc.m_CellClip       = 0.0f;
+    layerDesc.m_ProjectionClip = 0.0f;
+
+    layerDesc.m_HiddenStateZeroPoint = 0;
+    layerDesc.m_HiddenStateScale     = 0.007f;
+
+    layerDesc.m_InputIntermediateScale  = 0.007059f;
+    layerDesc.m_ForgetIntermediateScale = 0.007812f;
+    layerDesc.m_CellIntermediateScale   = 0.007059f;
+    layerDesc.m_OutputIntermediateScale = 0.007812f;
+
+    QLstmLayer* const layer = graph.AddLayer<QLstmLayer>(layerDesc, "qLstm");
+
+    unsigned int numBatches = 2;
+    unsigned int inputSize  = 4;
+    unsigned int numUnits   = 4;
+    unsigned int outputSize = 4;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078125f;
+    int32_t inputOffset = 0;
+
+    // if (!projectionEnabled) outputScale == hiddenStateScale
+    float outputScale    = layerDesc.m_HiddenStateScale;
+    int32_t outputOffset = layerDesc.m_HiddenStateZeroPoint;
+
+    float cellStateScale    = 3.05176e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.00784314f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.05182e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({outputSize, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({outputSize, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({outputSize}, armnn::DataType::Signed32, biasScale, biasOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits}, armnn::DataType::QSymmS16, layerNormScale, layerNormOffset);
+
+    // Create and allocate tensors
+    layer->m_BasicParameters.m_InputToForgetWeights = std::make_unique<ScopedCpuTensorHandle>(inputWeightsInfo);
+    layer->m_BasicParameters.m_InputToCellWeights = std::make_unique<ScopedCpuTensorHandle>(inputWeightsInfo);
+    layer->m_BasicParameters.m_InputToOutputWeights = std::make_unique<ScopedCpuTensorHandle>(inputWeightsInfo);
+
+    layer->m_BasicParameters.m_RecurrentToForgetWeights =
+            std::make_unique<ScopedCpuTensorHandle>(recurrentWeightsInfo);
+    layer->m_BasicParameters.m_RecurrentToCellWeights =
+            std::make_unique<ScopedCpuTensorHandle>(recurrentWeightsInfo);
+    layer->m_BasicParameters.m_RecurrentToOutputWeights =
+            std::make_unique<ScopedCpuTensorHandle>(recurrentWeightsInfo);
+
+    layer->m_BasicParameters.m_ForgetGateBias = std::make_unique<ScopedCpuTensorHandle>(biasInfo);
+    layer->m_BasicParameters.m_CellBias = std::make_unique<ScopedCpuTensorHandle>(biasInfo);
+    layer->m_BasicParameters.m_OutputGateBias = std::make_unique<ScopedCpuTensorHandle>(biasInfo);
+
+    layer->m_LayerNormParameters.m_ForgetLayerNormWeights =
+            std::make_unique<ScopedCpuTensorHandle>(layerNormWeightsInfo);
+    layer->m_LayerNormParameters.m_CellLayerNormWeights =
+            std::make_unique<ScopedCpuTensorHandle>(layerNormWeightsInfo);
+    layer->m_LayerNormParameters.m_OutputLayerNormWeights =
+            std::make_unique<ScopedCpuTensorHandle>(layerNormWeightsInfo);
+
+    layer->m_BasicParameters.m_InputToForgetWeights->Allocate();
+    layer->m_BasicParameters.m_InputToCellWeights->Allocate();
+    layer->m_BasicParameters.m_InputToOutputWeights->Allocate();
+
+    layer->m_BasicParameters.m_RecurrentToForgetWeights->Allocate();
+    layer->m_BasicParameters.m_RecurrentToCellWeights->Allocate();
+    layer->m_BasicParameters.m_RecurrentToOutputWeights->Allocate();
+
+    layer->m_BasicParameters.m_ForgetGateBias->Allocate();
+    layer->m_BasicParameters.m_CellBias->Allocate();
+    layer->m_BasicParameters.m_OutputGateBias->Allocate();
+
+    layer->m_LayerNormParameters.m_ForgetLayerNormWeights->Allocate();
+    layer->m_LayerNormParameters.m_CellLayerNormWeights->Allocate();
+    layer->m_LayerNormParameters.m_OutputLayerNormWeights->Allocate();
+
+    // Input and output layers
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const outputStateIn = graph.AddLayer<InputLayer>(1, "outputStateIn");
+    Layer* const cellStateIn = graph.AddLayer<InputLayer>(2, "cellStateIn");
+
+    Layer* const outputStateOut = graph.AddLayer<OutputLayer>(0, "outputStateOut");
+    Layer* const cellStateOut = graph.AddLayer<OutputLayer>(1, "cellStateOut");
+    Layer* const output = graph.AddLayer<OutputLayer>(2, "output");
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    // Connect layers to slots
+    Connect(input, layer, inputInfo, 0, 0);
+    Connect(outputStateIn, layer, outputStateInfo, 0, 1);
+    Connect(cellStateIn, layer, cellStateInfo, 0, 2);
+
+    Connect(layer, outputStateOut, outputStateInfo, 0, 0);
+    Connect(layer, cellStateOut, cellStateInfo, 1, 0);
+    Connect(layer, output, outputStateInfo, 2, 0);
+
+    CreateTensorHandles(graph, factory);
+
+    // Create and check workload
+    auto workload = MakeAndCheckWorkload<QLstmWorkload>(*layer, factory);
+    QLstmQueueDescriptor queueDescriptor = workload->GetData();
+    BOOST_TEST(queueDescriptor.m_Parameters.m_CellClip == 0.0f);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_ProjectionClip == 0.0f);
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 3);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 3);
+
+    BOOST_TEST((queueDescriptor.m_InputToForgetWeights->GetTensorInfo() == inputWeightsInfo));
+    BOOST_TEST((queueDescriptor.m_InputToCellWeights->GetTensorInfo() == inputWeightsInfo));
+    BOOST_TEST((queueDescriptor.m_InputToOutputWeights->GetTensorInfo() == inputWeightsInfo));
+
+    BOOST_TEST((queueDescriptor.m_RecurrentToForgetWeights->GetTensorInfo() == recurrentWeightsInfo));
+    BOOST_TEST((queueDescriptor.m_RecurrentToCellWeights->GetTensorInfo() == recurrentWeightsInfo));
+    BOOST_TEST((queueDescriptor.m_RecurrentToOutputWeights->GetTensorInfo() == recurrentWeightsInfo));
+
+    BOOST_TEST((queueDescriptor.m_ForgetGateBias->GetTensorInfo() == biasInfo));
+    BOOST_TEST((queueDescriptor.m_CellBias->GetTensorInfo() == biasInfo));
+    BOOST_TEST((queueDescriptor.m_OutputGateBias->GetTensorInfo() == biasInfo));
+
+    return workload;
+}
+
 template <typename Convolution2dWorkload, armnn::DataType DataType>
 std::unique_ptr<Convolution2dWorkload> CreateDirectConvolution2dWorkloadTest(armnn::IWorkloadFactory& factory,
                                                                        armnn::Graph&            graph)
@@ -671,6 +1230,75 @@ std::unique_ptr<FullyConnectedWorkload> CreateFullyConnectedWorkloadTest(armnn::
     return workload;
 }
 
+template <typename FullyConnectedWorkload, armnn::DataType DataType>
+std::unique_ptr<FullyConnectedWorkload> CreateFullyConnectedWithBlobWorkloadTest
+    (armnn::IWorkloadFactory& factory,
+     armnn::Graph& graph)
+{
+    // Creates the layer we're testing.
+    FullyConnectedDescriptor layerDesc;
+    layerDesc.m_BiasEnabled = true;
+    layerDesc.m_TransposeWeightMatrix = true;
+
+    FullyConnectedLayer* const layer = graph.AddLayer<FullyConnectedLayer>(layerDesc, "layer");
+
+    float inputsQScale = DataType == armnn::DataType::QAsymmU8 ? 1.0f : 0.0;
+    float outputQScale = DataType == armnn::DataType::QAsymmU8 ? 2.0f : 0.0;
+
+    layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({7, 20}, DataType, inputsQScale, 0));
+    layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({7}, GetBiasDataType(DataType), inputsQScale));
+    layer->m_Weight->Allocate();
+    layer->m_Bias->Allocate();
+
+    auto activationDesc = std::make_shared<ActivationDescriptor>();
+    activationDesc->m_A        = 10.0f;
+    activationDesc->m_B        = 5.0f;
+    activationDesc->m_Function = armnn::ActivationFunction::BoundedReLu;
+
+    layer->SetAdditionalInfoForObject(activationDesc);
+
+    // Check that the additional information can be queried from the layer
+    std::shared_ptr<ActivationDescriptor> activationDescPtr = layer->GetAdditionalInformation<ActivationDescriptor>();
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(activationDescPtr->m_B) == 5.0f);
+    BOOST_ASSERT(static_cast<ActivationFunction>(activationDescPtr->m_Function) ==
+        armnn::ActivationFunction::BoundedReLu);
+
+    // Creates extra layers.
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connects up.
+    Connect(input, layer, TensorInfo({3, 1, 4, 5}, DataType, inputsQScale));
+    Connect(layer, output, TensorInfo({3, 7}, DataType, outputQScale));
+    CreateTensorHandles(graph, factory);
+
+    // Makes the workload and checks it.
+    auto workload = MakeAndCheckWorkload<FullyConnectedWorkload>(*layer, factory);
+
+    FullyConnectedQueueDescriptor queueDescriptor = workload->GetData();
+
+    const ActivationDescriptor* queueDescBlobPtr = queueDescriptor.GetAdditionalInformation<ActivationDescriptor>();
+    IgnoreUnused(queueDescBlobPtr);
+
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_A) == 10.0f);
+    BOOST_ASSERT(static_cast<float>(queueDescBlobPtr->m_B) == 5.0f);
+    BOOST_ASSERT(
+        static_cast<ActivationFunction>(queueDescBlobPtr->m_Function) == armnn::ActivationFunction::BoundedReLu
+    );
+
+    BOOST_TEST(queueDescriptor.m_Parameters.m_BiasEnabled == true);
+    BOOST_TEST(queueDescriptor.m_Parameters.m_TransposeWeightMatrix == true);
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+    BOOST_TEST((queueDescriptor.m_Weight->GetTensorInfo() == TensorInfo({7, 20}, DataType, inputsQScale)));
+    BOOST_TEST((queueDescriptor.m_Bias->GetTensorInfo() == TensorInfo({7}, GetBiasDataType(DataType), inputsQScale)));
+
+    // Returns so we can do extra, backend-specific tests.
+    return workload;
+}
+
+
 template <typename NormalizationWorkload, armnn::DataType DataType>
 std::unique_ptr<NormalizationWorkload> CreateNormalizationWorkloadTest(armnn::IWorkloadFactory& factory,
                                                                        armnn::Graph& graph,
@@ -785,10 +1413,10 @@ std::unique_ptr<SoftmaxWorkload> CreateSoftmaxWorkloadTest(armnn::IWorkloadFacto
 {
     // Create the layer we're testing.
     SoftmaxDescriptor softmaxDescriptor;
-    // Set Axis to 1 if CL or Neon until further Axes are supported.
+    // Set Axis to -1 if CL or Neon until further Axes are supported.
     if (factory.GetBackendId() == armnn::Compute::CpuAcc || factory.GetBackendId() == armnn::Compute::GpuAcc)
     {
-        softmaxDescriptor.m_Axis = 1;
+        softmaxDescriptor.m_Axis = -1;
     }
 
     Layer* const layer = graph.AddLayer<SoftmaxLayer>(softmaxDescriptor, "layer");
@@ -798,6 +1426,17 @@ std::unique_ptr<SoftmaxWorkload> CreateSoftmaxWorkloadTest(armnn::IWorkloadFacto
 
     // Connect up
     armnn::TensorInfo tensorInfo({4, 1}, DataType);
+    if (DataType == armnn::DataType::QAsymmU8)
+    {
+        tensorInfo.SetQuantizationOffset(0);
+        tensorInfo.SetQuantizationScale(1.f / 256);
+    }
+    else if (DataType == armnn::DataType::QAsymmS8)
+    {
+        tensorInfo.SetQuantizationOffset(-128);
+        tensorInfo.SetQuantizationScale(1.f / 256);
+    }
+
     Connect(input, layer, tensorInfo);
     Connect(layer, output, tensorInfo);
     CreateTensorHandles(graph, factory);
@@ -1089,6 +1728,41 @@ std::unique_ptr<BatchToSpaceNdWorkload> CreateBatchToSpaceNdWorkloadTest(armnn::
     return workload;
 }
 
+template <typename LogSoftmaxWorkload, armnn::DataType DataType>
+std::unique_ptr<LogSoftmaxWorkload> CreateLogSoftmaxWorkloadTest(armnn::IWorkloadFactory& factory,
+                                                                 armnn::Graph& graph)
+{
+    // Create the layer we're testing.
+    LogSoftmaxDescriptor logSoftmaxDescriptor;
+    // Set Axis to -1 if CL or Neon until further Axes are supported.
+    if (factory.GetBackendId() == armnn::Compute::CpuAcc || factory.GetBackendId() == armnn::Compute::GpuAcc)
+    {
+        logSoftmaxDescriptor.m_Axis = -1;
+    }
+
+    Layer* const layer = graph.AddLayer<LogSoftmaxLayer>(logSoftmaxDescriptor, "layer");
+    // Create extra layers.
+    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+
+    // Connect up
+    armnn::TensorInfo tensorInfo({4, 1}, DataType);
+
+    Connect(input, layer, tensorInfo);
+    Connect(layer, output, tensorInfo);
+    CreateTensorHandles(graph, factory);
+
+    // Make the workload and checks it.
+    auto workload = MakeAndCheckWorkload<LogSoftmaxWorkload>(*layer, factory);
+
+    LogSoftmaxQueueDescriptor queueDescriptor = workload->GetData();
+    BOOST_TEST(queueDescriptor.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor.m_Outputs.size() == 1);
+
+    // Return so we can do extra, backend-specific tests.
+    return workload;
+}
+
 template <typename L2NormalizationWorkload, armnn::DataType DataType>
 std::unique_ptr<L2NormalizationWorkload> CreateL2NormalizationWorkloadTest(armnn::IWorkloadFactory& factory,
     armnn::Graph& graph, DataLayout dataLayout = DataLayout::NCHW)
@@ -1298,7 +1972,7 @@ std::pair<armnn::IOptimizedNetworkPtr, std::unique_ptr<PreCompiledWorkload>> Cre
     armnn::Graph& graph,
     bool biasEnabled = false)
 {
-    boost::ignore_unused(graph);
+    IgnoreUnused(graph);
 
     // To create a PreCompiled layer, create a network and Optimize it.
     armnn::Network net;

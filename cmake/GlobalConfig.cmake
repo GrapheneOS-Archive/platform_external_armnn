@@ -1,3 +1,8 @@
+#
+# Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+# Copyright 2020 NXP
+# SPDX-License-Identifier: MIT
+#
 option(BUILD_CAFFE_PARSER "Build Caffe parser" OFF)
 option(BUILD_TF_PARSER "Build Tensorflow parser" OFF)
 option(BUILD_ONNX_PARSER "Build Onnx parser" OFF)
@@ -21,13 +26,23 @@ option(FLATC_DIR "Path to Flatbuffers compiler" OFF)
 option(TF_LITE_GENERATED_PATH "Tensorflow lite generated C++ schema location" OFF)
 option(FLATBUFFERS_ROOT "Location where the flatbuffers 'include' and 'lib' folders to be found" Off)
 option(DYNAMIC_BACKEND_PATHS "Colon seperated list of paths where to load the dynamic backends from" "")
+option(SAMPLE_DYNAMIC_BACKEND "Include the sample dynamic backend and its tests in the build" OFF)
 option(BUILD_GATORD_MOCK "Build the Gatord simulator for external profiling testing." ON)
+option(BUILD_TIMELINE_DECODER "Build the Timeline Decoder for external profiling." ON)
 option(SHARED_BOOST "Use dynamic linking for boost libraries" OFF)
+option(BUILD_BASE_PIPE_SERVER "Build the server to handle external profiling pipe traffic" ON)
+option(BUILD_PYTHON_WHL "Build Python wheel package" OFF)
+option(BUILD_PYTHON_SRC "Build Python source package" OFF)
+option(BUILD_STATIC_PIPE_LIBS "Build Static PIPE libraries" OFF)
+option(BUILD_PIPE_ONLY "Build the PIPE libraries only" OFF)
+option(BUILD_ARMNN_TFLITE_DELEGATE "Build the Arm NN TfLite delegate" OFF)
 
 include(SelectLibraryConfigurations)
 
 set(COMPILER_IS_GNU_LIKE 0)
-if(${CMAKE_CXX_COMPILER_ID} STREQUAL GNU OR ${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL GNU OR
+   ${CMAKE_CXX_COMPILER_ID} STREQUAL Clang OR
+   ${CMAKE_CXX_COMPILER_ID} STREQUAL AppleClang)
     set(COMPILER_IS_GNU_LIKE 1)
 endif()
 
@@ -59,7 +74,7 @@ if(COMPILER_IS_GNU_LIKE)
 elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL MSVC)
 	# Disable C4996 (use of deprecated identifier) due to https://developercommunity.visualstudio.com/content/problem/252574/deprecated-compilation-warning-for-virtual-overrid.html
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /MP /wd4996")
-    add_definitions(-DNOMINMAX=1 -DNO_STRICT=1)
+    add_definitions(-DNO_STRICT=1)
 endif()
 if("${CMAKE_SYSTEM_NAME}" STREQUAL Android)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -llog")
@@ -109,20 +124,39 @@ endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules ${CMAKE_MODULE_PATH})
 
-# Boost
-if(SHARED_BOOST)
+include(CMakeFindDependencyMacro)
+
+if (NOT BUILD_PIPE_ONLY)
+  # Boost
+  message(STATUS "Finding Boost")
+  if(SHARED_BOOST)
     add_definitions(-DBOOST_ALL_DYN_LINK)
     set(Boost_USE_STATIC_LIBS OFF)
-else()
+  else()
     set(Boost_USE_STATIC_LIBS ON)
+  endif()
+  if (BUILD_UNIT_TESTS)
+    add_definitions("-DBOOST_ALL_NO_LIB") # Turn off auto-linking as we specify the libs manually
+    find_package(Boost 1.59 REQUIRED COMPONENTS unit_test_framework)
+    include_directories(SYSTEM "${Boost_INCLUDE_DIRS}")
+    link_directories(${Boost_LIBRARY_DIRS})
+  endif()
 endif()
-add_definitions("-DBOOST_ALL_NO_LIB") # Turn off auto-linking as we specify the libs manually
-find_package(Boost 1.59 REQUIRED COMPONENTS unit_test_framework system filesystem program_options)
-include_directories(SYSTEM "${Boost_INCLUDE_DIRS}")
-link_directories(${Boost_LIBRARY_DIRS})
+
+if (NOT BUILD_PIPE_ONLY)
+  # cxxopts (Alternative to boost::program_options)
+  find_path(CXXOPTS_INCLUDE cxxopts/cxxopts.hpp PATHS third-party NO_CMAKE_FIND_ROOT_PATH)
+  include_directories(SYSTEM "${CXXOPTS_INCLUDE}")
+endif()
+
+if (NOT BUILD_PIPE_ONLY)
+  # ghc (Alternative to boost::filesystem)
+  find_path(GHC_INCLUDE ghc/filesystem.hpp PATHS third-party NO_CMAKE_FIND_ROOT_PATH)
+  include_directories(SYSTEM "${GHC_INCLUDE}")
+endif()
 
 # pthread
-find_package (Threads)
+find_dependency(Threads)
 
 # Favour the protobuf passed on command line
 if(BUILD_TF_PARSER OR BUILD_CAFFE_PARSER OR BUILD_ONNX_PARSER)
@@ -177,6 +211,9 @@ if(BUILD_ONNX_PARSER)
     include_directories(SYSTEM "${ONNX_GENERATED_SOURCES}")
 endif()
 
+if(BUILD_ARMNN_TFLITE_DELEGATE)
+    add_definitions(-DARMNN_TFLITE_DELEGATE)
+endif()
 # Flatbuffers support for TF Lite and Armnn Serializer
 if(BUILD_TF_LITE_PARSER OR BUILD_ARMNN_SERIALIZER)
     # verify we have a valid flatbuffers include path
@@ -209,17 +246,18 @@ if(BUILD_ARMNN_SERIALIZER)
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/profiling)
 
 # ARM Compute
 # Note that ARM Compute has a different folder layout depending on the branch but also on
 # whether it comes from a prepackaged archive (this is why we add several hints below)
 if(ARMCOMPUTENEON OR ARMCOMPUTECL)
-    find_path(ARMCOMPUTE_INCLUDE arm_compute/core/CL/ICLKernel.h
+    find_path(ARMCOMPUTE_INCLUDE arm_compute/core/CL/OpenCL.h
               PATHS ${ARMCOMPUTE_ROOT}/include
               PATHS ${ARMCOMPUTE_ROOT}/applications/arm_compute
               PATHS ${ARMCOMPUTE_ROOT}
               NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-    find_path(ARMCOMPUTE_INCLUDE arm_compute/core/CL/ICLKernel.h)
+    find_path(ARMCOMPUTE_INCLUDE arm_compute/core/CL/OpenCL.h)
     include_directories(SYSTEM "${ARMCOMPUTE_INCLUDE}")
 
     # Find the Arm Compute libraries if not already specified (the user may have already defined this in advance,
@@ -228,6 +266,11 @@ if(ARMCOMPUTENEON OR ARMCOMPUTECL)
         # We link to the static variant so that customers don't need to find and build a compatible version of clframework.
         # First try the folders specified ARMCOMPUTE_BUILD_DIR (with PATH_SUFFIXES for
         # Windows builds)
+        if ((NOT DEFINED ARMCOMPUTE_BUILD_DIR) AND (DEFINED ARMCOMPUTE_ROOT))
+            # Default build directory for ComputeLibrary is under the root
+            set(ARMCOMPUTE_BUILD_DIR ${ARMCOMPUTE_ROOT}/build)
+        endif()
+
         find_library(ARMCOMPUTE_LIBRARY_DEBUG NAMES arm_compute-static
                      PATHS ${ARMCOMPUTE_BUILD_DIR}
                      PATH_SUFFIXES "Debug"
@@ -251,6 +294,14 @@ if(ARMCOMPUTENEON OR ARMCOMPUTECL)
         find_library(ARMCOMPUTE_LIBRARY_RELEASE NAMES arm_compute-static)
         find_library(ARMCOMPUTE_CORE_LIBRARY_DEBUG NAMES arm_compute_core-static)
         find_library(ARMCOMPUTE_CORE_LIBRARY_RELEASE NAMES arm_compute_core-static)
+
+        # In case it wasn't there, try the dynamic libraries
+        # This case will get used in a linux setup where the Compute Library
+        # has been installed in a standard system library path as a dynamic library
+        find_library(ARMCOMPUTE_LIBRARY_DEBUG NAMES arm_compute)
+        find_library(ARMCOMPUTE_LIBRARY_RELEASE NAMES arm_compute)
+        find_library(ARMCOMPUTE_CORE_LIBRARY_DEBUG NAMES arm_compute_core)
+        find_library(ARMCOMPUTE_CORE_LIBRARY_RELEASE NAMES arm_compute_core)
 
         set(ARMCOMPUTE_LIBRARIES
             debug ${ARMCOMPUTE_LIBRARY_DEBUG} ${ARMCOMPUTE_CORE_LIBRARY_DEBUG}
@@ -301,6 +352,10 @@ endif()
 if(ARMNNREF)
     add_definitions(-DARMNNREF_ENABLED)
 endif()
+
+# This is the root for the dynamic backend tests to search for dynamic
+# backends. By default it will be the project build directory.
+add_definitions(-DDYNAMIC_BACKEND_BUILD_DIR="${PROJECT_BINARY_DIR}")
 
 # ArmNN dynamic backend
 if(DYNAMIC_BACKEND_PATHS)
@@ -363,6 +418,31 @@ endif()
 
 if(NOT BUILD_ARMNN_QUANTIZER)
     message(STATUS "ArmNN Quantizer support is disabled")
+endif()
+
+if(NOT BUILD_PYTHON_WHL)
+    message(STATUS "PyArmNN wheel package is disabled")
+endif()
+
+if(NOT BUILD_PYTHON_SRC)
+    message(STATUS "PyArmNN source package is disabled")
+endif()
+
+if(BUILD_PYTHON_WHL OR BUILD_PYTHON_SRC)
+    find_package(PythonInterp 3 REQUIRED)
+    if(NOT ${PYTHONINTERP_FOUND})
+        message(FATAL_ERROR "Python 3.x required to build PyArmNN, but not found")
+    endif()
+
+    find_package(PythonLibs 3 REQUIRED)
+    if(NOT ${PYTHONLIBS_FOUND})
+        message(FATAL_ERROR "Python 3.x development package required to build PyArmNN, but not found")
+    endif()
+
+    find_package(SWIG 4 REQUIRED)
+    if(NOT ${SWIG_FOUND})
+        message(FATAL_ERROR "SWIG 4.x requried to build PyArmNN, but not found")
+    endif()
 endif()
 
 # ArmNN source files required for all build options

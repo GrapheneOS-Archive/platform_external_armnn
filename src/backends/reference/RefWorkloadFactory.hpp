@@ -1,15 +1,14 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include <armnn/Optional.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
-
 #include "RefMemoryManager.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/Optional.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 
 namespace armnn
@@ -42,19 +41,27 @@ public:
                                  Optional<DataType> dataType,
                                  std::string& outReasonIfUnsupported);
 
+    static bool IsLayerSupported(const IConnectableLayer& layer,
+                                 Optional<DataType> dataType,
+                                 std::string& outReasonIfUnsupported,
+                                 const ModelOptions& modelOptions);
+
     bool SupportsSubTensors() const override { return false; }
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateSubTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateSubTensorHandle(ITensorHandle& parent,
                                                          TensorShape const& subTensorShape,
                                                          unsigned int const* subTensorOrigin) const override
     {
-        boost::ignore_unused(parent, subTensorShape, subTensorOrigin);
+        IgnoreUnused(parent, subTensorShape, subTensorOrigin);
         return nullptr;
     }
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                       const bool IsMemoryManaged = true) const override;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                       DataLayout dataLayout,
                                                       const bool IsMemoryManaged = true) const override;
@@ -87,7 +94,13 @@ public:
     std::unique_ptr<IWorkload> CreateConstant(const ConstantQueueDescriptor& descriptor,
                                               const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateConvertBf16ToFp32(const ConvertBf16ToFp32QueueDescriptor& descriptor,
+                                                       const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateConvertFp16ToFp32(const ConvertFp16ToFp32QueueDescriptor& descriptor,
+                                                       const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateConvertFp32ToBf16(const ConvertFp32ToBf16QueueDescriptor& descriptor,
                                                        const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateConvertFp32ToFp16(const ConvertFp32ToFp16QueueDescriptor& descriptor,
@@ -124,6 +137,9 @@ public:
     std::unique_ptr<IWorkload> CreateFakeQuantization(const FakeQuantizationQueueDescriptor& descriptor,
                                                       const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateFill(const FillQueueDescriptor& descriptor,
+                                          const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateFloor(const FloorQueueDescriptor& descriptor,
                                            const WorkloadInfo& info) const override;
 
@@ -145,6 +161,12 @@ public:
 
     std::unique_ptr<IWorkload> CreateL2Normalization(const L2NormalizationQueueDescriptor& descriptor,
                                                      const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateLogicalBinary(const LogicalBinaryQueueDescriptor& descriptor,
+                                                   const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateLogicalUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
+                                                  const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
                                                 const WorkloadInfo& info) const override;
@@ -195,8 +217,14 @@ public:
     std::unique_ptr<IWorkload> CreatePrelu(const PreluQueueDescriptor& descriptor,
                                            const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateQLstm(const QLstmQueueDescriptor& descriptor,
+                                           const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateQuantize(const QuantizeQueueDescriptor& descriptor,
                                               const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateRank(const RankQueueDescriptor& descriptor,
+                                          const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateReshape(const ReshapeQueueDescriptor& descriptor,
                                              const WorkloadInfo& info) const override;
@@ -235,6 +263,9 @@ public:
 
     std::unique_ptr<IWorkload> CreateSubtraction(const SubtractionQueueDescriptor& descriptor,
                                                  const WorkloadInfo& info) const override;
+
+    std::unique_ptr<IWorkload> CreateTranspose(const TransposeQueueDescriptor& descriptor,
+                                               const WorkloadInfo& info) const override;
 
     std::unique_ptr<IWorkload> CreateTransposeConvolution2d(const TransposeConvolution2dQueueDescriptor& descriptor,
                                                             const WorkloadInfo& info) const override;

@@ -1,5 +1,5 @@
 #
-# Copyright © 2017 ARM Ltd. All rights reserved.
+# Copyright © 2017 ARM Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -15,6 +15,7 @@ ifeq ($(ARMNN_COMPUTE_NEON_ENABLED),1)
 
 BACKEND_SOURCES := \
         NeonBackend.cpp \
+        NeonBackendModelContext.cpp \
         NeonInterceptorScheduler.cpp \
         NeonLayerSupport.cpp \
         NeonRegistryInitializer.cpp \
@@ -27,8 +28,11 @@ BACKEND_SOURCES := \
         workloads/NeonArgMinMaxWorkload.cpp \
         workloads/NeonBatchNormalizationWorkload.cpp \
         workloads/NeonBatchToSpaceNdWorkload.cpp \
+        workloads/NeonComparisonWorkload.cpp \
         workloads/NeonConcatWorkload.cpp \
         workloads/NeonConstantWorkload.cpp \
+        workloads/NeonConvertBf16ToFp32Workload.cpp \
+        workloads/NeonConvertFp32ToBf16Workload.cpp \
         workloads/NeonConvertFp16ToFp32Workload.cpp \
         workloads/NeonConvertFp32ToFp16Workload.cpp \
         workloads/NeonConvolution2dWorkload.cpp \
@@ -36,38 +40,42 @@ BACKEND_SOURCES := \
         workloads/NeonDepthwiseConvolutionWorkload.cpp \
         workloads/NeonDequantizeWorkload.cpp \
         workloads/NeonDetectionPostProcessWorkload.cpp \
+        workloads/NeonExpWorkload.cpp \
+        workloads/NeonFillWorkload.cpp \
         workloads/NeonFloorFloatWorkload.cpp \
         workloads/NeonFullyConnectedWorkload.cpp \
-        workloads/NeonGreaterWorkload.cpp \
+        workloads/NeonGatherWorkload.cpp \
         workloads/NeonInstanceNormalizationWorkload.cpp \
         workloads/NeonL2NormalizationFloatWorkload.cpp \
+        workloads/NeonLogSoftmaxWorkload.cpp \
         workloads/NeonLstmFloatWorkload.cpp \
         workloads/NeonMaximumWorkload.cpp \
         workloads/NeonMeanWorkload.cpp \
         workloads/NeonMinimumWorkload.cpp \
         workloads/NeonMultiplicationWorkload.cpp \
         workloads/NeonDivisionWorkload.cpp \
+        workloads/NeonNegWorkload.cpp \
         workloads/NeonNormalizationFloatWorkload.cpp \
         workloads/NeonPadWorkload.cpp \
         workloads/NeonPermuteWorkload.cpp \
         workloads/NeonPooling2dWorkload.cpp \
         workloads/NeonPreluWorkload.cpp \
+        workloads/NeonQLstmWorkload.cpp \
         workloads/NeonQuantizedLstmWorkload.cpp \
         workloads/NeonQuantizeWorkload.cpp \
         workloads/NeonReshapeWorkload.cpp \
         workloads/NeonResizeWorkload.cpp \
         workloads/NeonRsqrtWorkload.cpp \
         workloads/NeonSliceWorkload.cpp \
-        workloads/NeonSoftmaxBaseWorkload.cpp \
-        workloads/NeonSoftmaxFloatWorkload.cpp \
-        workloads/NeonSoftmaxUint8Workload.cpp \
+        workloads/NeonSoftmaxWorkload.cpp \
         workloads/NeonSpaceToBatchNdWorkload.cpp \
         workloads/NeonSpaceToDepthWorkload.cpp \
         workloads/NeonSplitterWorkload.cpp \
         workloads/NeonStackWorkload.cpp \
         workloads/NeonStridedSliceWorkload.cpp \
         workloads/NeonSubtractionWorkload.cpp \
-        workloads/NeonTransposeConvolution2dWorkload.cpp
+        workloads/NeonTransposeConvolution2dWorkload.cpp \
+        workloads/NeonTransposeWorkload.cpp
 
 else
 

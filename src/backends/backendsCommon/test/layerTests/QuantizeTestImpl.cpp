@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -23,20 +23,21 @@ template<typename T, std::size_t Dim>
 LayerTestResult<T, Dim> QuantizeTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::TensorInfo& inputTensorInfo,
     const armnn::TensorInfo& outputTensorInfo,
     const std::vector<float>& inputData,
     const std::vector<T>& expectedOutputData,
     armnn::QuantizeQueueDescriptor descriptor)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     boost::multi_array<float, Dim> input = MakeTensor<float, Dim>(inputTensorInfo, inputData);
 
     LayerTestResult<T, Dim> ret(outputTensorInfo);
     ret.outputExpected = MakeTensor<T, Dim>(outputTensorInfo, expectedOutputData);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::WorkloadInfo info;
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
@@ -59,7 +60,8 @@ LayerTestResult<T, Dim> QuantizeTestImpl(
 template <armnn::DataType ArmnnOutputType, typename T = armnn::ResolveType<ArmnnOutputType>>
 LayerTestResult<T, 4> QuantizeSimpleTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::QuantizeQueueDescriptor desc;
 
@@ -84,6 +86,7 @@ LayerTestResult<T, 4> QuantizeSimpleTest(
 
     return QuantizeTestImpl<T, 4>(workloadFactory,
                                   memoryManager,
+                                  tensorHandleFactory,
                                   inputTensorInfo,
                                   outputTensorInfo,
                                   inputData,
@@ -94,7 +97,8 @@ LayerTestResult<T, 4> QuantizeSimpleTest(
 template <armnn::DataType ArmnnOutputType, typename T = armnn::ResolveType<ArmnnOutputType>>
 LayerTestResult<T, 4> QuantizeClampTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::QuantizeQueueDescriptor desc;
 
@@ -116,6 +120,7 @@ LayerTestResult<T, 4> QuantizeClampTest(
 
     return QuantizeTestImpl<T, 4>(workloadFactory,
                                   memoryManager,
+                                  tensorHandleFactory,
                                   inputTensorInfo,
                                   outputTensorInfo,
                                   inputData,
@@ -127,35 +132,40 @@ LayerTestResult<T, 4> QuantizeClampTest(
 
 LayerTestResult<uint8_t, 4> QuantizeSimpleUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return QuantizeSimpleTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
+    return QuantizeSimpleTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<uint8_t, 4> QuantizeClampUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return QuantizeClampTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
+    return QuantizeClampTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int8_t, 4> QuantizeClampAsymmInt8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return QuantizeClampTest<armnn::DataType::QAsymmS8>(workloadFactory, memoryManager);
+    return QuantizeClampTest<armnn::DataType::QAsymmS8>(workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int8_t, 4> QuantizeClampInt8Test(
-        armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return QuantizeClampTest<armnn::DataType::QSymmS8>(workloadFactory, memoryManager);
+    return QuantizeClampTest<armnn::DataType::QSymmS8>(workloadFactory, memoryManager, tensorHandleFactory);
 }
 
 LayerTestResult<int16_t, 4> QuantizeClampInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
-    return QuantizeClampTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager);
+    return QuantizeClampTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager, tensorHandleFactory);
 }

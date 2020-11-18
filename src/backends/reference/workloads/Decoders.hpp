@@ -10,7 +10,7 @@
 #include <armnnUtils/FloatingPointConverter.hpp>
 #include <armnnUtils/TensorUtils.hpp>
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 namespace armnn
 {
@@ -102,6 +102,10 @@ inline std::unique_ptr<Decoder<float>> MakeDecoder(const TensorInfo& info, const
                 info.GetQuantizationScale(),
                 info.GetQuantizationOffset());
         }
+        case DataType::BFloat16:
+        {
+            return std::make_unique<BFloat16Decoder>(static_cast<const BFloat16*>(data));
+        }
         case DataType::Float16:
         {
             return std::make_unique<Float16Decoder>(static_cast<const Half*>(data));
@@ -132,9 +136,49 @@ inline std::unique_ptr<Decoder<float>> MakeDecoder(const TensorInfo& info, const
                     info.GetQuantizationOffset());
             }
         }
+        case armnn::DataType::Boolean:
+        {
+            return std::make_unique<BooleanDecoder>(static_cast<const uint8_t*>(data));
+        }
         default:
         {
-            BOOST_ASSERT_MSG(false, "Unsupported Data Type!");
+            ARMNN_ASSERT_MSG(false, "Unsupported Data Type!");
+            break;
+        }
+    }
+    return nullptr;
+}
+
+template<>
+inline std::unique_ptr<Decoder<bool>> MakeDecoder(const TensorInfo& info, const void* data)
+{
+    switch(info.GetDataType())
+    {
+        case DataType::Boolean:
+        {
+            return std::make_unique<BooleanDecoderBool>(static_cast<const uint8_t*>(data));
+        }
+        default:
+        {
+            ARMNN_ASSERT_MSG(false, "Unsupported Data Type!");
+            break;
+        }
+    }
+    return nullptr;
+}
+
+template<>
+inline std::unique_ptr<Decoder<int32_t>> MakeDecoder(const TensorInfo& info, const void* data)
+{
+    switch(info.GetDataType())
+    {
+        case DataType::Signed32:
+        {
+            return std::make_unique<Int32ToInt32tDecoder>(static_cast<const int32_t*>(data));
+        }
+        default:
+        {
+            ARMNN_ASSERT_MSG(false, "Unsupported Data Type!");
             break;
         }
     }

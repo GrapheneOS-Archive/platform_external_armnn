@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -45,13 +45,14 @@ void VerifyInputTensorData(const TensorData<T>& data, const std::string& tensorN
 template<typename T, typename BT>
 void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
                                     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+                                    const armnn::ITensorHandleFactory& tensorHandleFactory,
                                     const armnn::TransposeConvolution2dDescriptor& descriptor,
                                     const TensorData<T>& input,
                                     TensorData<T>& output,
                                     const TensorData<T>& weights,
                                     const armnn::Optional<TensorData<BT>>& biases)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     using namespace armnn;
 
     VerifyInputTensorData(input, "input");
@@ -86,8 +87,8 @@ void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
     }
 
     // set up input and output handles
-    std::unique_ptr<ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(input.first);
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(output.first);
+    std::unique_ptr<ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(input.first);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(output.first);
 
     // set up workload
     armnn::WorkloadInfo workloadInfo;
@@ -105,7 +106,7 @@ void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
     ExecuteWorkload(*workload, memoryManager);
 
     // copy output
-    output.second = std::vector<T>(output.first.GetNumElements(), 0.0f);
+    output.second = std::vector<T>(output.first.GetNumElements(), T());
     CopyDataFromITensorHandle(output.second.data(), outputHandle.get());
 }
 
@@ -113,6 +114,7 @@ template<armnn::DataType ArmnnType, armnn::DataType ArmnnBType, typename T = arm
 LayerTestResult<T, 4> TransposeConvolution2dTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::TransposeConvolution2dDescriptor& descriptor,
     armnn::TensorInfo& inputInfo,
     const std::vector<float>& inputData,
@@ -181,7 +183,8 @@ LayerTestResult<T, 4> TransposeConvolution2dTest(
 
     // execute test
     TransposeConvolution2dTestImpl(workloadFactory,
-                                   memoryManager,
+                                                             memoryManager,
+                                                             tensorHandleFactory,
                                    descriptor,
                                    input,
                                    output,
@@ -218,6 +221,7 @@ template<armnn::DataType ArmnnType, armnn::DataType ArmnnBType, typename T>
 LayerTestResult<T, 4> SimpleTransposeConvolution2dTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout)
 {
@@ -290,6 +294,7 @@ LayerTestResult<T, 4> SimpleTransposeConvolution2dTest(
 
     return TransposeConvolution2dTest<ArmnnType, ArmnnBType>(workloadFactory,
                                                              memoryManager,
+                                                             tensorHandleFactory,
                                                              descriptor,
                                                              inputInfo,
                                                              inputData,
@@ -305,6 +310,7 @@ template<armnn::DataType ArmnnType, armnn::DataType ArmnnBType, typename T>
 LayerTestResult<T, 4> PaddedTransposeConvolution2dTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout)
 {
@@ -379,6 +385,7 @@ LayerTestResult<T, 4> PaddedTransposeConvolution2dTest(
 
     return TransposeConvolution2dTest<ArmnnType, ArmnnBType>(workloadFactory,
                                                              memoryManager,
+                                                             tensorHandleFactory,
                                                              descriptor,
                                                              inputInfo,
                                                              inputData,
@@ -394,6 +401,7 @@ template<armnn::DataType ArmnnType, armnn::DataType ArmnnBType, typename T>
 LayerTestResult<T, 4> StridedTransposeConvolution2dTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout)
 {
@@ -468,6 +476,7 @@ LayerTestResult<T, 4> StridedTransposeConvolution2dTest(
 
     return TransposeConvolution2dTest<ArmnnType, ArmnnBType>(workloadFactory,
                                                              memoryManager,
+                                                             tensorHandleFactory,
                                                              descriptor,
                                                              inputInfo,
                                                              inputData,
@@ -483,6 +492,7 @@ template<armnn::DataType ArmnnType, armnn::DataType ArmnnBType, typename T>
 LayerTestResult<T, 4> MultiChannelTransposeConvolution2dTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout layout)
 {
     using namespace armnn;
@@ -547,6 +557,7 @@ LayerTestResult<T, 4> MultiChannelTransposeConvolution2dTest(
 
     return TransposeConvolution2dTest<ArmnnType, ArmnnBType>(workloadFactory,
                                                              memoryManager,
+                                                             tensorHandleFactory,
                                                              descriptor,
                                                              inputInfo,
                                                              inputData,
@@ -561,6 +572,7 @@ LayerTestResult<T, 4> MultiChannelTransposeConvolution2dTest(
 LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout layout)
 {
    using namespace armnn;
@@ -627,8 +639,8 @@ LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
     descriptor.m_BiasEnabled = true;
     descriptor.m_DataLayout  = layout;
 
-    std::unique_ptr<ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputInfo);
-    std::unique_ptr<ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputInfo);
+    std::unique_ptr<ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
 
     WorkloadInfo workloadInfo;
     ScopedCpuTensorHandle weightTensor(kernelInfo);
@@ -668,6 +680,15 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 SimpleTransposeConvolution2dTest<armnn::DataType::Float32, armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    bool biasEnabled,
+    const armnn::DataLayout layout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+SimpleTransposeConvolution2dTest<armnn::DataType::QAsymmS8, armnn::DataType::Signed32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -675,6 +696,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 SimpleTransposeConvolution2dTest<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -682,6 +704,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 SimpleTransposeConvolution2dTest<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -689,6 +712,15 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 PaddedTransposeConvolution2dTest<armnn::DataType::Float32, armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    bool biasEnabled,
+    const armnn::DataLayout layout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+PaddedTransposeConvolution2dTest<armnn::DataType::QAsymmS8, armnn::DataType::Signed32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -696,6 +728,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 PaddedTransposeConvolution2dTest<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -703,6 +736,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 PaddedTransposeConvolution2dTest<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -710,6 +744,15 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 StridedTransposeConvolution2dTest<armnn::DataType::Float32, armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    bool biasEnabled,
+    const armnn::DataLayout layout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+StridedTransposeConvolution2dTest<armnn::DataType::QAsymmS8, armnn::DataType::Signed32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -717,6 +760,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 StridedTransposeConvolution2dTest<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -724,6 +768,7 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 StridedTransposeConvolution2dTest<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool biasEnabled,
     const armnn::DataLayout layout);
 
@@ -731,16 +776,26 @@ template LayerTestResult<armnn::ResolveType<armnn::DataType::Float32>, 4>
 MultiChannelTransposeConvolution2dTest<armnn::DataType::Float32, armnn::DataType::Float32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::DataLayout layout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+MultiChannelTransposeConvolution2dTest<armnn::DataType::QAsymmS8, armnn::DataType::Signed32>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout layout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 MultiChannelTransposeConvolution2dTest<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout layout);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 4>
 MultiChannelTransposeConvolution2dTest<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::DataLayout layout);

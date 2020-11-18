@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,8 +7,11 @@
 
 #include <armnn/BackendId.hpp>
 #include <armnn/Logging.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
-#include <boost/format.hpp>
+#include <common/include/SocketConnectionException.hpp>
+
+#include <fmt/format.h>
 
 namespace armnn
 {
@@ -16,11 +19,30 @@ namespace armnn
 namespace profiling
 {
 
+ProfilingGuidGenerator ProfilingService::m_GuidGenerator;
+
+ProfilingDynamicGuid ProfilingService::GetNextGuid()
+{
+    return m_GuidGenerator.NextGuid();
+}
+
+ProfilingStaticGuid ProfilingService::GetStaticId(const std::string& str)
+{
+    return m_GuidGenerator.GenerateStaticId(str);
+}
+
+void ProfilingService::ResetGuidGenerator()
+{
+    m_GuidGenerator.Reset();
+}
+
 void ProfilingService::ResetExternalProfilingOptions(const ExternalProfilingOptions& options,
                                                      bool resetProfilingService)
 {
     // Update the profiling options
     m_Options = options;
+    m_TimelineReporting = options.m_TimelineEnabled;
+    m_ConnectionAcknowledgedCommandHandler.setTimelineEnabled(options.m_TimelineEnabled);
 
     // Check if the profiling service needs to be reset
     if (resetProfilingService)
@@ -120,13 +142,18 @@ void ProfilingService::Update()
         try
         {
             // Setup the profiling connection
-            BOOST_ASSERT(m_ProfilingConnectionFactory);
+            ARMNN_ASSERT(m_ProfilingConnectionFactory);
             m_ProfilingConnection = m_ProfilingConnectionFactory->GetProfilingConnection(m_Options);
         }
         catch (const Exception& e)
         {
             ARMNN_LOG(warning) << "An error has occurred when creating the profiling connection: "
                                        << e.what();
+        }
+        catch (const arm::pipe::SocketConnectionException& e)
+        {
+            ARMNN_LOG(warning) << "An error has occurred when creating the profiling connection ["
+                                       << e.what() << "] on socket [" << e.GetSocketFd() << "].";
         }
 
         // Move to the next state
@@ -136,7 +163,7 @@ void ProfilingService::Update()
                                                                           // "NotConnected" state
         break;
     case ProfilingState::WaitingForAck:
-        BOOST_ASSERT(m_ProfilingConnection);
+        ARMNN_ASSERT(m_ProfilingConnection);
 
         // Start the command thread
         m_CommandHandler.Start(*m_ProfilingConnection);
@@ -156,8 +183,8 @@ void ProfilingService::Update()
 
         break;
     default:
-        throw RuntimeException(boost::str(boost::format("Unknown profiling service state: %1")
-                                          % static_cast<int>(currentState)));
+        throw RuntimeException(fmt::format("Unknown profiling service state: {}",
+                                           static_cast<int>(currentState)));
     }
 }
 
@@ -176,8 +203,8 @@ void ProfilingService::Disconnect()
 
         break;
     default:
-        throw RuntimeException(boost::str(boost::format("Unknown profiling service state: %1")
-                                          % static_cast<int>(currentState)));
+        throw RuntimeException(fmt::format("Unknown profiling service state: {}",
+                                           static_cast<int>(currentState)));
     }
 }
 
@@ -185,7 +212,7 @@ void ProfilingService::Disconnect()
 void ProfilingService::AddBackendProfilingContext(const BackendId backendId,
     std::shared_ptr<armnn::profiling::IBackendProfilingContext> profilingContext)
 {
-    BOOST_ASSERT(profilingContext != nullptr);
+    ARMNN_ASSERT(profilingContext != nullptr);
     // Register the backend counters
     m_MaxGlobalCounterId = profilingContext->RegisterCounters(m_MaxGlobalCounterId);
     m_BackendProfilingContexts.emplace(backendId, std::move(profilingContext));
@@ -212,15 +239,25 @@ uint16_t ProfilingService::GetCounterCount() const
 
 bool ProfilingService::IsCounterRegistered(uint16_t counterUid) const
 {
-    return counterUid < m_CounterIndex.size();
+    return m_CounterDirectory.IsCounterRegistered(counterUid);
 }
 
-uint32_t ProfilingService::GetCounterValue(uint16_t counterUid) const
+uint32_t ProfilingService::GetAbsoluteCounterValue(uint16_t counterUid) const
 {
     CheckCounterUid(counterUid);
     std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
-    BOOST_ASSERT(counterValuePtr);
+    ARMNN_ASSERT(counterValuePtr);
     return counterValuePtr->load(std::memory_order::memory_order_relaxed);
+}
+
+uint32_t ProfilingService::GetDeltaCounterValue(uint16_t counterUid)
+{
+    CheckCounterUid(counterUid);
+    std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
+    ARMNN_ASSERT(counterValuePtr);
+    const uint32_t counterValue = counterValuePtr->load(std::memory_order::memory_order_relaxed);
+    SubtractCounterValue(counterUid, counterValue);
+    return counterValue;
 }
 
 const ICounterMappings& ProfilingService::GetCounterMappings() const
@@ -249,7 +286,7 @@ void ProfilingService::SetCounterValue(uint16_t counterUid, uint32_t value)
 {
     CheckCounterUid(counterUid);
     std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
-    BOOST_ASSERT(counterValuePtr);
+    ARMNN_ASSERT(counterValuePtr);
     counterValuePtr->store(value, std::memory_order::memory_order_relaxed);
 }
 
@@ -257,7 +294,7 @@ uint32_t ProfilingService::AddCounterValue(uint16_t counterUid, uint32_t value)
 {
     CheckCounterUid(counterUid);
     std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
-    BOOST_ASSERT(counterValuePtr);
+    ARMNN_ASSERT(counterValuePtr);
     return counterValuePtr->fetch_add(value, std::memory_order::memory_order_relaxed);
 }
 
@@ -265,7 +302,7 @@ uint32_t ProfilingService::SubtractCounterValue(uint16_t counterUid, uint32_t va
 {
     CheckCounterUid(counterUid);
     std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
-    BOOST_ASSERT(counterValuePtr);
+    ARMNN_ASSERT(counterValuePtr);
     return counterValuePtr->fetch_sub(value, std::memory_order::memory_order_relaxed);
 }
 
@@ -273,18 +310,18 @@ uint32_t ProfilingService::IncrementCounterValue(uint16_t counterUid)
 {
     CheckCounterUid(counterUid);
     std::atomic<uint32_t>* counterValuePtr = m_CounterIndex.at(counterUid);
-    BOOST_ASSERT(counterValuePtr);
+    ARMNN_ASSERT(counterValuePtr);
     return counterValuePtr->operator++(std::memory_order::memory_order_relaxed);
 }
 
 ProfilingDynamicGuid ProfilingService::NextGuid()
 {
-    return m_GuidGenerator.NextGuid();
+    return ProfilingService::GetNextGuid();
 }
 
 ProfilingStaticGuid ProfilingService::GenerateStaticId(const std::string& str)
 {
-    return m_GuidGenerator.GenerateStaticId(str);
+    return ProfilingService::GetStaticId(str);
 }
 
 std::unique_ptr<ISendTimelinePacket> ProfilingService::GetSendTimelinePacket() const
@@ -313,7 +350,7 @@ void ProfilingService::Initialize()
                                                    "Network loads",
                                                    "The number of networks loaded at runtime",
                                                    std::string("networks"));
-        BOOST_ASSERT(loadedNetworksCounter);
+        ARMNN_ASSERT(loadedNetworksCounter);
         InitializeCounterValue(loadedNetworksCounter->m_Uid);
     }
     // Register a counter for the number of unloaded networks
@@ -329,7 +366,7 @@ void ProfilingService::Initialize()
                                                    "Network unloads",
                                                    "The number of networks unloaded at runtime",
                                                    std::string("networks"));
-        BOOST_ASSERT(unloadedNetworksCounter);
+        ARMNN_ASSERT(unloadedNetworksCounter);
         InitializeCounterValue(unloadedNetworksCounter->m_Uid);
     }
     // Register a counter for the number of registered backends
@@ -345,8 +382,12 @@ void ProfilingService::Initialize()
                                                    "Backends registered",
                                                    "The number of registered backends",
                                                    std::string("backends"));
-        BOOST_ASSERT(registeredBackendsCounter);
+        ARMNN_ASSERT(registeredBackendsCounter);
         InitializeCounterValue(registeredBackendsCounter->m_Uid);
+
+        // Due to backends being registered before the profiling service becomes active,
+        // we need to set the counter to the correct value here
+        SetCounterValue(armnn::profiling::REGISTERED_BACKENDS, static_cast<uint32_t>(BackendRegistryInstance().Size()));
     }
     // Register a counter for the number of registered backends
     if (!m_CounterDirectory.IsCounterRegistered("Backends unregistered"))
@@ -361,7 +402,7 @@ void ProfilingService::Initialize()
                                                    "Backends unregistered",
                                                    "The number of unregistered backends",
                                                    std::string("backends"));
-        BOOST_ASSERT(unregisteredBackendsCounter);
+        ARMNN_ASSERT(unregisteredBackendsCounter);
         InitializeCounterValue(unregisteredBackendsCounter->m_Uid);
     }
     // Register a counter for the number of inferences run
@@ -377,7 +418,7 @@ void ProfilingService::Initialize()
                                                    "Inferences run",
                                                    "The number of inferences run",
                                                    std::string("inferences"));
-        BOOST_ASSERT(inferencesRunCounter);
+        ARMNN_ASSERT(inferencesRunCounter);
         InitializeCounterValue(inferencesRunCounter->m_Uid);
     }
 }
@@ -387,7 +428,7 @@ void ProfilingService::InitializeCounterValue(uint16_t counterUid)
     // Increase the size of the counter index if necessary
     if (counterUid >= m_CounterIndex.size())
     {
-        m_CounterIndex.resize(boost::numeric_cast<size_t>(counterUid) + 1);
+        m_CounterIndex.resize(armnn::numeric_cast<size_t>(counterUid) + 1);
     }
 
     // Create a new atomic counter and add it to the list
@@ -413,11 +454,15 @@ void ProfilingService::Reset()
     // ...finally reset the profiling state machine
     m_StateMachine.Reset();
     m_BackendProfilingContexts.clear();
-    m_MaxGlobalCounterId = armnn::profiling::INFERENCES_RUN;
+    m_MaxGlobalCounterId = armnn::profiling::MAX_ARMNN_COUNTER;
 }
 
 void ProfilingService::Stop()
 {
+    {   // only lock when we are updating the inference completed variable
+        std::unique_lock<std::mutex> lck(m_ServiceActiveMutex);
+        m_ServiceActive = false;
+    }
     // The order in which we reset/stop the components is not trivial!
     // First stop the producing threads
     // Command Handler first as it is responsible for launching then Periodic Counter capture thread
@@ -441,15 +486,59 @@ inline void ProfilingService::CheckCounterUid(uint16_t counterUid) const
 {
     if (!IsCounterRegistered(counterUid))
     {
-        throw InvalidArgumentException(boost::str(boost::format("Counter UID %1% is not registered") % counterUid));
+        throw InvalidArgumentException(fmt::format("Counter UID {} is not registered", counterUid));
     }
+}
+
+void ProfilingService::NotifyBackendsForTimelineReporting()
+{
+    BackendProfilingContext::iterator it = m_BackendProfilingContexts.begin();
+    while (it != m_BackendProfilingContexts.end())
+    {
+        auto& backendProfilingContext = it->second;
+        backendProfilingContext->EnableTimelineReporting(m_TimelineReporting);
+        // Increment the Iterator to point to next entry
+        it++;
+    }
+}
+
+void ProfilingService::NotifyProfilingServiceActive()
+{
+    {   // only lock when we are updating the inference completed variable
+        std::unique_lock<std::mutex> lck(m_ServiceActiveMutex);
+        m_ServiceActive = true;
+    }
+    m_ServiceActiveConditionVariable.notify_one();
+}
+
+void ProfilingService::WaitForProfilingServiceActivation(unsigned int timeout)
+{
+    std::unique_lock<std::mutex> lck(m_ServiceActiveMutex);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    // Here we we will go back to sleep after a spurious wake up if
+    // m_InferenceCompleted is not yet true.
+    if (!m_ServiceActiveConditionVariable.wait_for(lck,
+                                                   std::chrono::milliseconds(timeout),
+                                                   [&]{return m_ServiceActive == true;}))
+    {
+        if (m_ServiceActive == true)
+        {
+            return;
+        }
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = finish - start;
+        std::stringstream ss;
+        ss << "Timed out waiting on profiling service activation for " << elapsed.count() << " ms";
+        ARMNN_LOG(warning) << ss.str();
+    }
+    return;
 }
 
 ProfilingService::~ProfilingService()
 {
     Stop();
 }
-
 } // namespace profiling
 
 } // namespace armnn

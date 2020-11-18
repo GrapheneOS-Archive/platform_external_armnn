@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,7 +19,10 @@ QuantizeLayer::QuantizeLayer(const char* name)
 std::unique_ptr<IWorkload> QuantizeLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     QuantizeQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     WorkloadInfo info = PrepInfoAndDesc(descriptor);
+
     return factory.CreateQuantize(descriptor, info);
 }
 
@@ -33,12 +36,13 @@ void QuantizeLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "QuantizeLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "QuantizeLayer");
 }
 
 void QuantizeLayer::Accept(ILayerVisitor& visitor) const

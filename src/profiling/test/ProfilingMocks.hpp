@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,8 @@
 
 #include <Holder.hpp>
 #include <IProfilingConnectionFactory.hpp>
-#include <IProfilingService.hpp>
+#include <IProfilingServiceStatus.hpp>
+#include <ProfilingService.hpp>
 #include <ProfilingGuidGenerator.hpp>
 #include <ProfilingUtils.hpp>
 #include <SendCounterPacket.hpp>
@@ -16,10 +17,9 @@
 #include <armnn/Exceptions.hpp>
 #include <armnn/Optional.hpp>
 #include <armnn/Conversion.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <atomic>
 #include <condition_variable>
@@ -51,6 +51,8 @@ public:
         PerJobCounterSelection,
         TimelineMessageDirectory,
         PeriodicCounterCapture,
+        ActivateTimelineReporting,
+        DeactivateTimelineReporting,
         Unknown
     };
 
@@ -85,7 +87,7 @@ public:
         switch (packetFamily)
         {
             case 0:
-                packetType = packetId < 6 ? PacketType(packetId) : PacketType::Unknown;
+                packetType = packetId < 8 ? PacketType(packetId) : PacketType::Unknown;
                 break;
             case 1:
                 packetType = packetId == 0 ? PacketType::TimelineMessageDirectory : PacketType::Unknown;
@@ -109,16 +111,16 @@ public:
 
         if(packetInfo.second != 0)
         {
-            return std::count(m_WrittenData.begin(), m_WrittenData.end(), packetInfo);
+            return static_cast<long>(std::count(m_WrittenData.begin(), m_WrittenData.end(), packetInfo));
         }
         else
         {
-            return std::count_if(m_WrittenData.begin(), m_WrittenData.end(),
-            [&packetInfo](const std::pair<PacketType, uint32_t> pair) { return packetInfo.first == pair.first; });
+            return static_cast<long>(std::count_if(m_WrittenData.begin(), m_WrittenData.end(),
+            [&packetInfo](const std::pair<PacketType, uint32_t> pair) { return packetInfo.first == pair.first; }));
         }
     }
 
-    bool WritePacket(Packet&& packet)
+    bool WritePacket(arm::pipe::Packet&& packet)
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
 
@@ -126,9 +128,9 @@ public:
         return true;
     }
 
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        boost::ignore_unused(timeout);
+        IgnoreUnused(timeout);
 
         // Simulate a delay in the reading process. The default timeout is way too long.
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -140,7 +142,7 @@ public:
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
 
-        return m_WrittenData.size();
+        return static_cast<unsigned long>(m_WrittenData.size());
     }
 
     void Clear()
@@ -153,7 +155,7 @@ public:
 private:
     bool m_IsOpen;
     std::vector<std::pair<PacketType, uint32_t>> m_WrittenData;
-    Packet m_Packet;
+    arm::pipe::Packet m_Packet;
     mutable std::mutex m_Mutex;
 };
 
@@ -162,7 +164,7 @@ class MockProfilingConnectionFactory : public IProfilingConnectionFactory
 public:
     IProfilingConnectionPtr GetProfilingConnection(const ExternalProfilingOptions& options) const override
     {
-        boost::ignore_unused(options);
+        IgnoreUnused(options);
         return std::make_unique<MockProfilingConnection>();
     }
 };
@@ -189,6 +191,8 @@ public:
     void Release() override { m_Size = 0; }
 
     unsigned char* GetWritableData() override { return m_Data.get(); }
+
+    void Destroy() override {m_Data.reset(nullptr); m_Size = 0; m_MaxSize =0;}
 
 private:
     unsigned int m_MaxSize;
@@ -399,7 +403,7 @@ public:
 
     void SendCounterDirectoryPacket(const ICounterDirectory& counterDirectory) override
     {
-        boost::ignore_unused(counterDirectory);
+        IgnoreUnused(counterDirectory);
 
         std::string message("SendCounterDirectoryPacket");
         unsigned int reserved = 0;
@@ -411,7 +415,7 @@ public:
     void SendPeriodicCounterCapturePacket(uint64_t timestamp,
                                           const std::vector<CounterValue>& values) override
     {
-        boost::ignore_unused(timestamp, values);
+        IgnoreUnused(timestamp, values);
 
         std::string message("SendPeriodicCounterCapturePacket");
         unsigned int reserved = 0;
@@ -423,7 +427,7 @@ public:
     void SendPeriodicCounterSelectionPacket(uint32_t capturePeriod,
                                             const std::vector<uint16_t>& selectedCounterIds) override
     {
-        boost::ignore_unused(capturePeriod, selectedCounterIds);
+        IgnoreUnused(capturePeriod, selectedCounterIds);
 
         std::string message("SendPeriodicCounterSelectionPacket");
         unsigned int reserved = 0;
@@ -443,23 +447,15 @@ public:
     ~MockCounterDirectory() = default;
 
     // Register profiling objects
-    const Category* RegisterCategory(const std::string& categoryName,
-                                     const armnn::Optional<uint16_t>& deviceUid = armnn::EmptyOptional(),
-                                     const armnn::Optional<uint16_t>& counterSetUid = armnn::EmptyOptional())
+    const Category* RegisterCategory(const std::string& categoryName)
     {
-        // Get the device UID
-        uint16_t deviceUidValue = deviceUid.has_value() ? deviceUid.value() : 0;
-
-        // Get the counter set UID
-        uint16_t counterSetUidValue = counterSetUid.has_value() ? counterSetUid.value() : 0;
-
         // Create the category
-        CategoryPtr category = std::make_unique<Category>(categoryName, deviceUidValue, counterSetUidValue);
-        BOOST_ASSERT(category);
+        CategoryPtr category = std::make_unique<Category>(categoryName);
+        ARMNN_ASSERT(category);
 
         // Get the raw category pointer
         const Category* categoryPtr = category.get();
-        BOOST_ASSERT(categoryPtr);
+        ARMNN_ASSERT(categoryPtr);
 
         // Register the category
         m_Categories.insert(std::move(category));
@@ -468,62 +464,42 @@ public:
     }
 
     const Device* RegisterDevice(const std::string& deviceName,
-                                 uint16_t cores = 0,
-                                 const armnn::Optional<std::string>& parentCategoryName = armnn::EmptyOptional())
+                                 uint16_t cores = 0)
     {
         // Get the device UID
         uint16_t deviceUid = GetNextUid();
 
         // Create the device
         DevicePtr device = std::make_unique<Device>(deviceUid, deviceName, cores);
-        BOOST_ASSERT(device);
+        ARMNN_ASSERT(device);
 
         // Get the raw device pointer
         const Device* devicePtr = device.get();
-        BOOST_ASSERT(devicePtr);
+        ARMNN_ASSERT(devicePtr);
 
         // Register the device
         m_Devices.insert(std::make_pair(deviceUid, std::move(device)));
-
-        // Connect the counter set to the parent category, if required
-        if (parentCategoryName.has_value())
-        {
-            // Set the counter set UID in the parent category
-            Category* parentCategory = const_cast<Category*>(GetCategory(parentCategoryName.value()));
-            BOOST_ASSERT(parentCategory);
-            parentCategory->m_DeviceUid = deviceUid;
-        }
 
         return devicePtr;
     }
 
     const CounterSet* RegisterCounterSet(
             const std::string& counterSetName,
-            uint16_t count = 0,
-            const armnn::Optional<std::string>& parentCategoryName = armnn::EmptyOptional())
+            uint16_t count = 0)
     {
         // Get the counter set UID
         uint16_t counterSetUid = GetNextUid();
 
         // Create the counter set
         CounterSetPtr counterSet = std::make_unique<CounterSet>(counterSetUid, counterSetName, count);
-        BOOST_ASSERT(counterSet);
+        ARMNN_ASSERT(counterSet);
 
         // Get the raw counter set pointer
         const CounterSet* counterSetPtr = counterSet.get();
-        BOOST_ASSERT(counterSetPtr);
+        ARMNN_ASSERT(counterSetPtr);
 
         // Register the counter set
         m_CounterSets.insert(std::make_pair(counterSetUid, std::move(counterSet)));
-
-        // Connect the counter set to the parent category, if required
-        if (parentCategoryName.has_value())
-        {
-            // Set the counter set UID in the parent category
-            Category* parentCategory = const_cast<Category*>(GetCategory(parentCategoryName.value()));
-            BOOST_ASSERT(parentCategory);
-            parentCategory->m_CounterSetUid = counterSetUid;
-        }
 
         return counterSetPtr;
     }
@@ -541,7 +517,7 @@ public:
                                    const armnn::Optional<uint16_t>& deviceUid = armnn::EmptyOptional(),
                                    const armnn::Optional<uint16_t>& counterSetUid = armnn::EmptyOptional())
     {
-        boost::ignore_unused(backendId);
+        IgnoreUnused(backendId);
 
         // Get the number of cores from the argument only
         uint16_t deviceCores = numberOfCores.has_value() ? numberOfCores.value() : 0;
@@ -554,7 +530,7 @@ public:
 
         // Get the counter UIDs and calculate the max counter UID
         std::vector<uint16_t> counterUids = GetNextCounterUids(uid, deviceCores);
-        BOOST_ASSERT(!counterUids.empty());
+        ARMNN_ASSERT(!counterUids.empty());
         uint16_t maxCounterUid = deviceCores <= 1 ? counterUids.front() : counterUids.back();
 
         // Get the counter units
@@ -572,18 +548,18 @@ public:
                                                        unitsValue,
                                                        deviceUidValue,
                                                        counterSetUidValue);
-        BOOST_ASSERT(counter);
+        ARMNN_ASSERT(counter);
 
         // Get the raw counter pointer
         const Counter* counterPtr = counter.get();
-        BOOST_ASSERT(counterPtr);
+        ARMNN_ASSERT(counterPtr);
 
         // Process multiple counters if necessary
         for (uint16_t counterUid : counterUids)
         {
             // Connect the counter to the parent category
             Category* parentCategory = const_cast<Category*>(GetCategory(parentCategoryName));
-            BOOST_ASSERT(parentCategory);
+            ARMNN_ASSERT(parentCategory);
             parentCategory->m_Counters.push_back(counterUid);
 
             // Register the counter
@@ -594,10 +570,10 @@ public:
     }
 
     // Getters for counts
-    uint16_t GetCategoryCount()   const override { return boost::numeric_cast<uint16_t>(m_Categories.size());  }
-    uint16_t GetDeviceCount()     const override { return boost::numeric_cast<uint16_t>(m_Devices.size());     }
-    uint16_t GetCounterSetCount() const override { return boost::numeric_cast<uint16_t>(m_CounterSets.size()); }
-    uint16_t GetCounterCount()    const override { return boost::numeric_cast<uint16_t>(m_Counters.size());    }
+    uint16_t GetCategoryCount()   const override { return armnn::numeric_cast<uint16_t>(m_Categories.size());  }
+    uint16_t GetDeviceCount()     const override { return armnn::numeric_cast<uint16_t>(m_Devices.size());     }
+    uint16_t GetCounterSetCount() const override { return armnn::numeric_cast<uint16_t>(m_CounterSets.size()); }
+    uint16_t GetCounterCount()    const override { return armnn::numeric_cast<uint16_t>(m_Counters.size());    }
 
     // Getters for collections
     const Categories&  GetCategories()  const override { return m_Categories;  }
@@ -610,7 +586,7 @@ public:
     {
         auto it = std::find_if(m_Categories.begin(), m_Categories.end(), [&name](const CategoryPtr& category)
         {
-            BOOST_ASSERT(category);
+            ARMNN_ASSERT(category);
 
             return category->m_Name == name;
         });
@@ -625,19 +601,19 @@ public:
 
     const Device* GetDevice(uint16_t uid) const override
     {
-        boost::ignore_unused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
     const CounterSet* GetCounterSet(uint16_t uid) const override
     {
-        boost::ignore_unused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
     const Counter* GetCounter(uint16_t uid) const override
     {
-        boost::ignore_unused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
@@ -648,7 +624,7 @@ private:
     Counters    m_Counters;
 };
 
-class MockProfilingService : public IProfilingService, public IRegisterCounterMapping
+class MockProfilingService : public ProfilingService
 {
 public:
     MockProfilingService(MockBufferManager& mockBufferManager,
@@ -656,7 +632,8 @@ public:
                          const CaptureData& captureData) :
         m_SendCounterPacket(mockBufferManager),
         m_IsProfilingEnabled(isProfilingEnabled),
-        m_CaptureData(captureData) {}
+        m_CaptureData(captureData)
+    {}
 
     /// Return the next random Guid in the sequence
     ProfilingDynamicGuid NextGuid() override
@@ -698,22 +675,29 @@ public:
 
     void RegisterMapping(uint16_t globalCounterId,
                          uint16_t backendCounterId,
-                         const armnn::BackendId& backendId) override
+                         const armnn::BackendId& backendId)
     {
         m_CounterMapping.RegisterMapping(globalCounterId, backendCounterId, backendId);
     }
 
-    void Reset() override
+    void Reset()
     {
         m_CounterMapping.Reset();
     }
 
 private:
     ProfilingGuidGenerator m_GuidGenerator;
-    CounterIdMap m_CounterMapping;
-    SendCounterPacket m_SendCounterPacket;
-    bool m_IsProfilingEnabled;
-    CaptureData m_CaptureData;
+    CounterIdMap           m_CounterMapping;
+    SendCounterPacket      m_SendCounterPacket;
+    bool                   m_IsProfilingEnabled;
+    CaptureData            m_CaptureData;
+};
+
+class MockProfilingServiceStatus : public IProfilingServiceStatus
+{
+public:
+    void NotifyProfilingServiceActive() override {}
+    void WaitForProfilingServiceActivation(unsigned int timeout) override { IgnoreUnused(timeout); }
 };
 
 } // namespace profiling

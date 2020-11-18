@@ -24,20 +24,26 @@ void BackendRegistry::Register(const BackendId& id, BackendRegistry::FactoryFunc
             std::string(id) + " already registered as IBackend factory",
             CHECK_LOCATION());
     }
-    if (profiling::ProfilingService::Instance().IsProfilingEnabled())
-    {
-        profiling::ProfilingService::Instance().IncrementCounterValue(armnn::profiling::REGISTERED_BACKENDS);
-    }
     m_Factories[id] = factory;
+
+    if (m_ProfilingService.has_value())
+    {
+        if (m_ProfilingService.has_value() && m_ProfilingService.value().IsProfilingEnabled())
+        {
+            m_ProfilingService.value().IncrementCounterValue(armnn::profiling::REGISTERED_BACKENDS);
+        }
+    }
+
 }
 
 void BackendRegistry::Deregister(const BackendId& id)
 {
-    if (profiling::ProfilingService::Instance().IsProfilingEnabled())
-    {
-        profiling::ProfilingService::Instance().IncrementCounterValue(armnn::profiling::UNREGISTERED_BACKENDS);
-    }
     m_Factories.erase(id);
+
+    if (m_ProfilingService.has_value() && m_ProfilingService.value().IsProfilingEnabled())
+    {
+        m_ProfilingService.value().IncrementCounterValue(armnn::profiling::UNREGISTERED_BACKENDS);
+    }
 }
 
 bool BackendRegistry::IsBackendRegistered(const BackendId& id) const
@@ -93,6 +99,11 @@ std::string BackendRegistry::GetBackendIdsAsString() const
 void BackendRegistry::Swap(BackendRegistry& instance, BackendRegistry::FactoryStorage& other)
 {
     std::swap(instance.m_Factories, other);
+}
+
+void BackendRegistry::SetProfilingService(armnn::Optional<profiling::ProfilingService&> profilingService)
+{
+    m_ProfilingService = profilingService;
 }
 
 

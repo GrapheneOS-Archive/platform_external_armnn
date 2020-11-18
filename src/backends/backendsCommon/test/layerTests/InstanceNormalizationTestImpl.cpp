@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -26,6 +26,7 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> InstanceNormTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::TensorInfo& inputTensorInfo,
     const armnn::TensorInfo& outputTensorInfo,
     const std::vector<float>& inputValues,
@@ -34,7 +35,7 @@ LayerTestResult<T, 4> InstanceNormTestImpl(
     float qScale = 0.0f,
     int32_t qOffset = 0)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     auto inputTensor = MakeTensor<T, 4>(inputTensorInfo,
                                         armnnUtils::QuantizedVector<T>(inputValues, qScale, qOffset));
 
@@ -42,8 +43,8 @@ LayerTestResult<T, 4> InstanceNormTestImpl(
     result.outputExpected = MakeTensor<T, 4>(outputTensorInfo,
                                              armnnUtils::QuantizedVector<T>(expectedOutputValues, qScale, qOffset));
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::WorkloadInfo info;
 
@@ -69,6 +70,7 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> InstanceNormTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
     // BatchSize: 2
@@ -141,6 +143,7 @@ LayerTestResult<T, 4> InstanceNormTest(
     return InstanceNormTestImpl<ArmnnType>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputTensorInfo,
         outputTensorInfo,
         inputValues,
@@ -152,6 +155,7 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> InstanceNormTest2(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
     // BatchSize: 2
@@ -225,6 +229,7 @@ LayerTestResult<T, 4> InstanceNormTest2(
     return InstanceNormTestImpl<ArmnnType>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputTensorInfo,
         outputTensorInfo,
         inputValues,
@@ -237,31 +242,35 @@ LayerTestResult<T, 4> InstanceNormTest2(
 LayerTestResult<float, 4> InstanceNormFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
-    return InstanceNormTest<armnn::DataType::Float32>(workloadFactory, memoryManager, dataLayout);
+    return InstanceNormTest<armnn::DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, dataLayout);
 }
 
 LayerTestResult<armnn::Half, 4> InstanceNormFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
-    return InstanceNormTest<armnn::DataType::Float16>(workloadFactory, memoryManager, dataLayout);
+    return InstanceNormTest<armnn::DataType::Float16>(workloadFactory, memoryManager, tensorHandleFactory, dataLayout);
 }
 
 LayerTestResult<float, 4> InstanceNormFloat32Test2(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
-    return InstanceNormTest2<armnn::DataType::Float32>(workloadFactory, memoryManager, dataLayout);
+    return InstanceNormTest2<armnn::DataType::Float32>(workloadFactory, memoryManager, tensorHandleFactory, dataLayout);
 }
 
 LayerTestResult<armnn::Half, 4> InstanceNormFloat16Test2(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     armnn::DataLayout dataLayout)
 {
-    return InstanceNormTest2<armnn::DataType::Float16>(workloadFactory, memoryManager, dataLayout);
+    return InstanceNormTest2<armnn::DataType::Float16>(workloadFactory, memoryManager, tensorHandleFactory, dataLayout);
 }

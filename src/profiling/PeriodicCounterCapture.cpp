@@ -59,7 +59,7 @@ void PeriodicCounterCapture::DispatchPeriodicCounterCapturePacket(
     const armnn::BackendId& backendId, const std::vector<Timestamp>& timestampValues)
 {
     // Report counter values
-    for (const auto timestampInfo : timestampValues)
+    for (const auto& timestampInfo : timestampValues)
     {
         std::vector<CounterValue> backendCounterValues = timestampInfo.counterValues;
         for_each(backendCounterValues.begin(), backendCounterValues.end(), [&](CounterValue& backendCounterValue)
@@ -73,7 +73,7 @@ void PeriodicCounterCapture::DispatchPeriodicCounterCapturePacket(
     }
 }
 
-void PeriodicCounterCapture::Capture(const IReadCounterValues& readCounterValues)
+void PeriodicCounterCapture::Capture(IReadCounterValues& readCounterValues)
 {
     do
     {
@@ -103,7 +103,7 @@ void PeriodicCounterCapture::Capture(const IReadCounterValues& readCounterValues
                 uint32_t counterValue = 0;
                 try
                 {
-                    counterValue = readCounterValues.GetCounterValue(requestedId);
+                    counterValue = readCounterValues.GetDeltaCounterValue(requestedId);
                 }
                 catch (const Exception& e)
                 {
@@ -125,7 +125,7 @@ void PeriodicCounterCapture::Capture(const IReadCounterValues& readCounterValues
         for_each(activeBackends.begin(), activeBackends.end(), [&](const armnn::BackendId& backendId)
         {
             DispatchPeriodicCounterCapturePacket(
-                backendId, m_BackendProfilingContext.at(backendId)->ReportCounterValues());
+                backendId, m_BackendProfilingContexts.at(backendId)->ReportCounterValues());
         });
 
         // Wait the indicated capture period (microseconds)

@@ -8,9 +8,8 @@
 #include "NeonWorkloadUtils.hpp"
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
-
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/polymorphic_pointer_cast.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -25,7 +24,7 @@ arm_compute::Status NeonDepthToSpaceWorkloadValidate(const TensorInfo& input,
     const arm_compute::TensorInfo aclInput = BuildArmComputeTensorInfo(input, dataLayout);
     const arm_compute::TensorInfo aclOutput = BuildArmComputeTensorInfo(output, dataLayout);
 
-    int32_t blockSize = boost::numeric_cast<int32_t>(descriptor.m_BlockSize);
+    int32_t blockSize = armnn::numeric_cast<int32_t>(descriptor.m_BlockSize);
 
     return arm_compute::NEDepthToSpaceLayer::validate(&aclInput, &aclOutput, blockSize);
 }
@@ -39,13 +38,13 @@ NeonDepthToSpaceWorkload::NeonDepthToSpaceWorkload(const DepthToSpaceQueueDescri
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
 
     arm_compute::ITensor& input =
-        boost::polymorphic_pointer_downcast<IAclTensorHandle>(m_Data.m_Inputs[0])->GetTensor();
+            PolymorphicPointerDowncast<IAclTensorHandle>(m_Data.m_Inputs[0])->GetTensor();
     input.info()->set_data_layout(aclDataLayout);
 
-    int32_t blockSize = boost::numeric_cast<int32_t>(desc.m_Parameters.m_BlockSize);
+    int32_t blockSize = armnn::numeric_cast<int32_t>(desc.m_Parameters.m_BlockSize);
 
     arm_compute::ITensor& output =
-        boost::polymorphic_pointer_downcast<IAclTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
+            PolymorphicPointerDowncast<IAclTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
     output.info()->set_data_layout(aclDataLayout);
 
     m_Layer.configure(&input, &output, blockSize);

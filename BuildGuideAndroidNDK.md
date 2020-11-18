@@ -24,28 +24,16 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
      mkdir -p ~/armnn-devenv/toolchains
      cd ~/armnn-devenv/toolchains
      # For Mac OS, change the NDK download link accordingly.
-     wget https://dl.google.com/android/repository/android-ndk-r17b-linux-x86_64.zip
-     unzip android-ndk-r17b-linux-x86_64.zip
-     export NDK=~/armnn-devenv/toolchains/android-ndk-r17b
+     wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
+     unzip android-ndk-r20b-linux-x86_64.zip
+     export NDK=~/armnn-devenv/android-ndk-r20b
+     export NDK_TOOLCHAIN_ROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+     export PATH=$NDK_TOOLCHAIN_ROOT/bin/:$PATH
      ```
 
-	 You may want to append `export NDK=~/armnn-devenv/toolchains/android-ndk-r17b` to your `~/.bashrc` (or `~/.bash_profile` in Mac OS).
+	 You may want to append the above export variables commands to your `~/.bashrc` (or `~/.bash_profile` in Mac OS).
 
-* Make a standalone toolchain:
-
-	 (Requires python if not previously installed: `sudo apt install python`)
-
-   ```bash
-   # Create an arm64 API 26 libc++ toolchain.
-   $NDK/build/tools/make_standalone_toolchain.py \
-       --arch arm64 \
-       --api 26 \
-       --stl=libc++ \
-       --install-dir=$HOME/armnn-devenv/toolchains/aarch64-android-r17b
-   export PATH=$HOME/armnn-devenv/toolchains/aarch64-android-r17b/bin:$PATH
-   ```
-
-	 You may want to append `export PATH=$HOME/armnn-devenv/toolchains/aarch64-android-r17b/bin:$PATH` to your `~/.bashrc` (or `~/.bash_profile` in Mac OS).
+* With the android ndk-20b, you don't need to use the make_standalone_toolchain script to create a toolchain for a specific version of android. Android's current preference is for you to just specify the architecture and operating system while setting the compiler and just use the ndk directory.
 
 #### <a name="buildBoost">Build the Boost C++ libraries</a>
 
@@ -60,15 +48,16 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 
 * Build:
 
-	(Requires gcc if not previously installed: `sudo apt install gcc`)
+	(Requires clang if not previously installed: `sudo apt-get install clang`)
 	```bash
-	echo "using gcc : arm : aarch64-linux-android-clang++ ;" > $HOME/armnn-devenv/boost/user-config.jam
+	echo "using clang : arm : aarch64-linux-android<Android_API>-clang++ ;" > $HOME/armnn-devenv/boost/user-config.jam
 	cd ~/armnn-devenv/boost/boost_1_64_0
 	./bootstrap.sh --prefix=$HOME/armnn-devenv/boost/install
 	./b2 install --user-config=$HOME/armnn-devenv/boost/user-config.jam \
-     toolset=gcc-arm link=static cxxflags=-fPIC --with-filesystem \
+     toolset=clang-arm link=static cxxflags=-fPIC \
 	 --with-test --with-log --with-program_options -j16
     ```
+ Note: You can specify the 'Android_API' version you want. For example, if your ANDROID_API is 27 then the compiler will be aarch64-linux-android27-clang++.
 
 #### <a name="buildCL">Build the Compute Library</a>
 * Clone the Compute Library:
@@ -80,11 +69,22 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	git clone https://github.com/ARM-software/ComputeLibrary.git
 	```
 
+* Checkout ComputeLibrary branch:
+        ```bash
+        cd ComputeLibrary
+        git checkout <branch_name>
+        git pull
+        ```
+        For example, if you want to checkout release branch of 20.02:
+        ```bash
+        git checkout branches/arm_compute_20_02
+        git pull
+        ```
+
 * Build:
 
 	(Requires SCons if not previously installed: `sudo apt install scons`)
 	```bash
-	cd ComputeLibrary
 	scons arch=arm64-v8a neon=1 opencl=1 embed_kernels=1 extra_cxx_flags="-fPIC" \
 	 benchmark_tests=0 validation_tests=0 os=android -j16
 	```
@@ -97,7 +97,7 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	cd ~/armnn-devenv/google
 	git clone https://github.com/google/protobuf.git
 	cd protobuf
-	git checkout -b v3.5.2 v3.5.2
+	git checkout -b v3.12.0 v3.12.0
 	```
 
 * Build a native (x86) version of the protobuf libraries and compiler (protoc):
@@ -118,11 +118,13 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
    ```bash
  	mkdir arm64_build
  	cd arm64_build
- 	CC=aarch64-linux-android-clang \
- 	  CXX=aarch64-linux-android-clang++ \
-	  CFLAGS="-fPIE -fPIC" LDFLAGS="-pie -llog" \
+ 	CC=aarch64-linux-android<Android_API>-clang \
+ 	CXX=aarch64-linux-android<Android_API>-clang++ \
+	CFLAGS="-fPIE -fPIC" \
+        LDFLAGS="-llog -lz -lc++_static" \
        ../configure --host=aarch64-linux-android \
        --prefix=$HOME/armnn-devenv/google/arm64_pb_install \
+       --enable-cross-compile \
        --with-protoc=$HOME/armnn-devenv/google/x86_pb_install/bin/protoc
  	make install -j16
 	cd ..
@@ -135,10 +137,8 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	cd ~/armnn-devenv/google/
 	git clone https://github.com/tensorflow/tensorflow.git
         cd tensorflow/
-        git checkout 590d6eef7e91a6a7392c8ffffb7b58f2e0c8bc6b
+        git checkout fcc4b966f1265f466e82617020af93670141b009
 	```
-
-	You need tensorflow/contrib/makefile/tf_proto_files.txt from TensorFlow to generate TensorFlow protobuf definitions. This file is not available in TensorFlow master branch.
 
 #### <a name="buildArmNN">Build ArmNN</a>
 
@@ -148,6 +148,20 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	cd ~/armnn-devenv/
 	git clone https://github.com/ARM-software/armnn.git
 	```
+
+* Checkout ArmNN branch:
+
+        ```bash
+        cd armnn
+        git checkout <branch_name>
+        git pull
+        ```
+
+        For example, if you want to checkout release branch of 20.02:
+        ```bash
+        git checkout branches/armnn_20_02
+        git pull
+        ```
 
 * Generate TensorFlow protobuf definitions:
 
@@ -164,20 +178,21 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	```bash
 	mkdir ~/armnn-devenv/armnn/build
 	cd ~/armnn-devenv/armnn/build
-	CXX=aarch64-linux-android-clang++ \
-	 CC=aarch64-linux-android-clang \
-	 CXX_FLAGS="-fPIE -fPIC" \
-	 cmake .. \
-      -DCMAKE_SYSTEM_NAME=Android \
-      -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-      -DCMAKE_ANDROID_STANDALONE_TOOLCHAIN=$HOME/armnn-devenv/toolchains/aarch64-android-r17b/ \
-      -DCMAKE_EXE_LINKER_FLAGS="-pie -llog" \
-      -DARMCOMPUTE_ROOT=$HOME/armnn-devenv/ComputeLibrary/ \
-      -DARMCOMPUTE_BUILD_DIR=$HOME/armnn-devenv/ComputeLibrary/build \
-      -DBOOST_ROOT=$HOME/armnn-devenv/boost/install/ \
-      -DARMCOMPUTENEON=1 -DARMCOMPUTECL=1 -DARMNNREF=1 \
-      -DTF_GENERATED_SOURCES=$HOME/armnn-devenv/google/tf_pb/ -DBUILD_TF_PARSER=1 \
-      -DPROTOBUF_ROOT=$HOME/armnn-devenv/google/arm64_pb_install/
+	CXX=aarch64-linux-android<Android_API>-clang++ \
+	CC=aarch64-linux-android<Android_API>-clang \
+	CXX_FLAGS="-fPIE -fPIC" \
+	cmake .. \
+        -DCMAKE_ANDROID_NDK=$NDK \
+        -DCMAKE_SYSTEM_NAME=Android \
+        -DCMAKE_SYSTEM_VERSION=<Android_API> \
+        -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+        -DCMAKE_EXE_LINKER_FLAGS="-pie -llog -lz" \
+        -DARMCOMPUTE_ROOT=$HOME/armnn-devenv/ComputeLibrary/ \
+        -DARMCOMPUTE_BUILD_DIR=$HOME/armnn-devenv/ComputeLibrary/build \
+        -DBOOST_ROOT=$HOME/armnn-devenv/boost/install/ \
+        -DARMCOMPUTENEON=1 -DARMCOMPUTECL=1 -DARMNNREF=1 \
+        -DTF_GENERATED_SOURCES=$HOME/armnn-devenv/google/tf_pb/ -DBUILD_TF_PARSER=1 \
+        -DPROTOBUF_ROOT=$HOME/armnn-devenv/google/arm64_pb_install/
 	```
 
 	To include standalone sample dynamic backend tests, add the argument to enable the tests and the dynamic backend path to the CMake command:
@@ -203,8 +218,8 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 * Use CMake to configure the build environment, update the following script and run it from the armnn/src/dynamic/sample/build directory to set up the armNN build:
     ```bash
     #!/bin/bash
-    CXX=aarch64-linux-android-clang++ \
-    CC=aarch64-linux-android-clang \
+    CXX=aarch64-linux-android<Android_API>-clang++ \
+    CC=aarch64-linux-android<Android_API>-clang \
     CXX_FLAGS="-fPIE -fPIC" \
     cmake \
     -DCMAKE_SYSTEM_NAME=Android \
@@ -213,7 +228,6 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
     -DCMAKE_MODULE_LINKER_FLAGS="-llog" \
     -DBOOST_ROOT=$HOME/armnn-devenv/boost/install \
     -DBoost_SYSTEM_LIBRARY=$HOME/armnn-devenv/boost/install/lib/libboost_system.a \
-    -DBoost_FILESYSTEM_LIBRARY=$HOME/armnn-devenv/boost/install/lib/libboost_filesystem.a \
     -DARMNN_PATH=$HOME/armnn-devenv/armnn/build/libarmnn.so ..
     ```
 
@@ -231,11 +245,12 @@ All downloaded or generated files will be saved inside the `~/armnn-devenv` dire
 	```bash
 	adb push libarmnnTfParser.so /data/local/tmp/
 	adb push libarmnn.so /data/local/tmp/
+        adb push libtimelineDecoder.so /data/local/tmp/
 	adb push UnitTests /data/local/tmp/
 	adb push $NDK/sources/cxx-stl/llvm-libc++/libs/arm64-v8a/libc++_shared.so /data/local/tmp/
-	adb push $HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so /data/local/tmp/libprotobuf.so.15.0.1
-	adb shell 'ln -s libprotobuf.so.15.0.1 /data/local/tmp/libprotobuf.so.15'
-	adb shell 'ln -s libprotobuf.so.15.0.1 /data/local/tmp/libprotobuf.so'
+	adb push $HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so /data/local/tmp/libprotobuf.so.23.0.0
+	adb shell 'ln -s libprotobuf.so.23.0.0 /data/local/tmp/libprotobuf.so.23'
+	adb shell 'ln -s libprotobuf.so.23.0.0 /data/local/tmp/libprotobuf.so'
 	```
 
 * Push the files needed for the unit tests (they are a mix of files, directories and symbolic links):

@@ -218,6 +218,10 @@ public:
                                                    const WorkloadInfo& /*info*/) const override
     { return nullptr; }
 
+    std::unique_ptr<IWorkload> CreateRank(const RankQueueDescriptor& /*descriptor*/,
+                                          const WorkloadInfo& /*info*/) const override
+    { return nullptr; }
+
     std::unique_ptr<IWorkload> CreateReshape(const ReshapeQueueDescriptor& /*descriptor*/,
                                              const WorkloadInfo& /*info*/) const override
     { return nullptr; }
@@ -264,6 +268,10 @@ public:
 
     std::unique_ptr<IWorkload> CreateSwitch(const SwitchQueueDescriptor& /*descriptor*/,
                                             const WorkloadInfo& /*info*/) const override
+    { return nullptr; }
+
+    std::unique_ptr<IWorkload> CreateTranspose(const TransposeQueueDescriptor& /*descriptor*/,
+                                               const WorkloadInfo& /*info*/) const override
     { return nullptr; }
 
     std::unique_ptr<IWorkload> CreateTransposeConvolution2d(const TransposeConvolution2dQueueDescriptor& /*descriptor*/,

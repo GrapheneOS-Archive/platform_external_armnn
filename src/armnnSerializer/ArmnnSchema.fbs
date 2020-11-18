@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,7 +19,9 @@ enum ActivationFunction : byte {
     LeakyReLu = 6,
     Abs = 7,
     Sqrt = 8,
-    Square = 9
+    Square = 9,
+    Elu = 10,
+    HardSwish = 11
 }
 
 enum ArgMinMaxFunction : byte {
@@ -35,7 +37,9 @@ enum DataType : byte {
     Boolean = 4,
     QuantisedSymm16 = 5, // deprecated
     QAsymmU8 = 6,
-    QSymmS16 = 7
+    QSymmS16 = 7,
+    QAsymmS8 = 8,
+    QSymmS8 = 9
 }
 
 enum DataLayout : byte {
@@ -51,8 +55,11 @@ enum ResizeMethod: byte {
 table TensorInfo {
     dimensions:[uint];
     dataType:DataType;
-    quantizationScale:float = 1.0;
+    quantizationScale:float = 1.0; // @deprecated Use quantizationScales instead
     quantizationOffset:int = 0;
+    quantizationScales:[float];
+    quantizationDim:uint;
+    dimensionality:uint = 1;
 }
 
 struct Connection {
@@ -148,7 +155,12 @@ enum LayerType : uint {
     LogSoftmax = 51,
     Comparison = 52,
     StandIn = 53,
-    ElementwiseUnary = 54
+    ElementwiseUnary = 54,
+    Transpose = 55,
+    QLstm = 56,
+    Fill = 57,
+    Rank = 58,
+    LogicalBinary = 59
 }
 
 // Base layer table to be used as part of other layers
@@ -259,7 +271,8 @@ enum UnaryOperation : byte {
     Rsqrt = 1,
     Sqrt = 2,
     Exp = 3,
-    Neg = 4
+    Neg = 4,
+    LogicalNot = 5
 }
 
 table ElementwiseUnaryDescriptor {
@@ -274,6 +287,15 @@ table ElementwiseUnaryLayer {
 /// @deprecated Use ComparisonLayer instead
 table EqualLayer {
     base:LayerBase;
+}
+
+table FillLayer {
+    base:LayerBase;
+    descriptor:FillDescriptor;
+}
+
+table FillDescriptor {
+    value:float;
 }
 
 table FloorLayer{
@@ -294,6 +316,11 @@ table FullyConnectedDescriptor {
 
 table GatherLayer {
     base:LayerBase;
+    descriptor:GatherDescriptor;
+}
+
+table GatherDescriptor {
+    axis:int = 0;
 }
 
 /// @deprecated Use ComparisonLayer instead
@@ -335,6 +362,20 @@ table L2NormalizationLayer {
 table L2NormalizationDescriptor {
     dataLayout:DataLayout = NCHW;
     eps:float = 1e-12;
+}
+
+enum LogicalBinaryOperation : byte {
+    LogicalAnd = 0,
+    LogicalOr = 1
+}
+
+table LogicalBinaryDescriptor {
+    operation:LogicalBinaryOperation;
+}
+
+table LogicalBinaryLayer {
+    base:LayerBase;
+    descriptor:LogicalBinaryDescriptor;
 }
 
 table MinimumLayer {
@@ -550,6 +591,8 @@ table ResizeBilinearDescriptor {
     targetWidth:uint;
     targetHeight:uint;
     dataLayout:DataLayout;
+    alignCorners:bool;
+    halfPixelCenters:bool;
 }
 
 table SliceLayer {
@@ -659,6 +702,81 @@ table LstmInputParams {
     outputLayerNormWeights:ConstTensor;
 }
 
+table LstmDescriptor {
+    activationFunc:uint;
+    clippingThresCell:float;
+    clippingThresProj:float;
+    cifgEnabled:bool = true;
+    peepholeEnabled:bool = false;
+    projectionEnabled:bool = false;
+    layerNormEnabled:bool = false;
+}
+
+table LstmLayer {
+    base:LayerBase;
+    descriptor:LstmDescriptor;
+    inputParams:LstmInputParams;
+}
+
+table QLstmInputParams {
+    // Mandatory
+    inputToForgetWeights:ConstTensor;
+    inputToCellWeights:ConstTensor;
+    inputToOutputWeights:ConstTensor;
+
+    recurrentToForgetWeights:ConstTensor;
+    recurrentToCellWeights:ConstTensor;
+    recurrentToOutputWeights:ConstTensor;
+
+    forgetGateBias:ConstTensor;
+    cellBias:ConstTensor;
+    outputGateBias:ConstTensor;
+
+    // CIFG
+    inputToInputWeights:ConstTensor;
+    recurrentToInputWeights:ConstTensor;
+    inputGateBias:ConstTensor;
+
+    // Projection
+    projectionWeights:ConstTensor;
+    projectionBias:ConstTensor;
+
+    // Peephole
+    cellToInputWeights:ConstTensor;
+    cellToForgetWeights:ConstTensor;
+    cellToOutputWeights:ConstTensor;
+
+    // Layer norm
+    inputLayerNormWeights:ConstTensor;
+    forgetLayerNormWeights:ConstTensor;
+    cellLayerNormWeights:ConstTensor;
+    outputLayerNormWeights:ConstTensor;
+}
+
+table QLstmDescriptor {
+    cifgEnabled:bool       = true;
+    peepholeEnabled:bool   = false;
+    projectionEnabled:bool = false;
+    layerNormEnabled:bool  = false;
+
+    cellClip:float;
+    projectionClip:float;
+
+    inputIntermediateScale:float;
+    forgetIntermediateScale:float;
+    cellIntermediateScale:float;
+    outputIntermediateScale:float;
+
+    hiddenStateZeroPoint:int;
+    hiddenStateScale:float;
+}
+
+table QLstmLayer {
+    base:LayerBase;
+    descriptor:QLstmDescriptor;
+    inputParams:QLstmInputParams;
+}
+
 table QuantizedLstmInputParams {
     inputToInputWeights:ConstTensor;
     inputToForgetWeights:ConstTensor;
@@ -674,22 +792,6 @@ table QuantizedLstmInputParams {
     forgetGateBias:ConstTensor;
     cellBias:ConstTensor;
     outputGateBias:ConstTensor;
-}
-
-table LstmDescriptor {
-    activationFunc:uint;
-    clippingThresCell:float;
-    clippingThresProj:float;
-    cifgEnabled:bool = true;
-    peepholeEnabled:bool = false;
-    projectionEnabled:bool = false;
-    layerNormEnabled:bool = false;
-}
-
-table LstmLayer {
-    base:LayerBase;
-    descriptor:LstmDescriptor;
-    inputParams:LstmInputParams;
 }
 
 table QuantizedLstmLayer {
@@ -731,6 +833,15 @@ table TransposeConvolution2dDescriptor {
     dataLayout:DataLayout = NCHW;
 }
 
+table TransposeLayer {
+    base:LayerBase;
+    descriptor:TransposeDescriptor;
+}
+
+table TransposeDescriptor {
+    dimMappings:[uint];
+}
+
 table ResizeLayer {
     base:LayerBase;
     descriptor:ResizeDescriptor;
@@ -741,6 +852,8 @@ table ResizeDescriptor {
     targetWidth:uint;
     method:ResizeMethod = NearestNeighbor;
     dataLayout:DataLayout;
+    alignCorners:bool;
+    halfPixelCenters:bool;
 }
 
 table StackLayer {
@@ -762,6 +875,10 @@ table StandInDescriptor {
 table StandInLayer {
     base:LayerBase;
     descriptor:StandInDescriptor;
+}
+
+table RankLayer {
+    base:LayerBase;
 }
 
 union Layer {
@@ -819,7 +936,12 @@ union Layer {
     LogSoftmaxLayer,
     ComparisonLayer,
     StandInLayer,
-    ElementwiseUnaryLayer
+    ElementwiseUnaryLayer,
+    TransposeLayer,
+    QLstmLayer,
+    FillLayer,
+    RankLayer,
+    LogicalBinaryLayer
 }
 
 table AnyLayer {

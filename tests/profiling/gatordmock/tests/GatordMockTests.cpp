@@ -1,33 +1,37 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <CommandHandlerRegistry.hpp>
+#include <common/include/CommandHandlerRegistry.hpp>
+#include <server/include/basePipeServer/ConnectionHandler.hpp>
 #include <DirectoryCaptureCommandHandler.hpp>
-#include <ProfilingService.hpp>
 #include <GatordMockService.hpp>
-#include <PeriodicCounterCaptureCommandHandler.hpp>
-#include <StreamMetadataCommandHandler.hpp>
-#include <TimelineDirectoryCaptureCommandHandler.hpp>
+#include <LabelsAndEventClasses.hpp>
+#include <ProfilingService.hpp>
+#include <TimelinePacketWriterFactory.hpp>
 
-#include <test/ProfilingMocks.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
-#include <boost/cast.hpp>
+#include <server/include/timelineDecoder/TimelineDirectoryCaptureCommandHandler.hpp>
+#include <server/include/timelineDecoder/TimelineDecoder.hpp>
+
+#include <Runtime.hpp>
+
+#include <MockBackend.hpp>
+
 #include <boost/test/test_tools.hpp>
 #include <boost/test/unit_test_suite.hpp>
 
 BOOST_AUTO_TEST_SUITE(GatordMockTests)
 
 using namespace armnn;
-using namespace std::this_thread;    // sleep_for, sleep_until
+using namespace std::this_thread;
 using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_CASE(CounterCaptureHandlingTest)
 {
-    using boost::numeric_cast;
-
-    profiling::PacketVersionResolver packetVersionResolver;
+    arm::pipe::PacketVersionResolver packetVersionResolver;
 
     // Data with timestamp, counter idx & counter values
     std::vector<std::pair<uint16_t, uint32_t>> indexValuePairs;
@@ -55,9 +59,9 @@ BOOST_AUTO_TEST_CASE(CounterCaptureHandlingTest)
     std::unique_ptr<unsigned char[]> uniqueData2 = std::make_unique<unsigned char[]>(dataLength);
     unsigned char* data2                         = reinterpret_cast<unsigned char*>(uniqueData2.get());
 
-    uint32_t sizeOfUint64 = numeric_cast<uint32_t>(sizeof(uint64_t));
-    uint32_t sizeOfUint32 = numeric_cast<uint32_t>(sizeof(uint32_t));
-    uint32_t sizeOfUint16 = numeric_cast<uint32_t>(sizeof(uint16_t));
+    uint32_t sizeOfUint64 = armnn::numeric_cast<uint32_t>(sizeof(uint64_t));
+    uint32_t sizeOfUint32 = armnn::numeric_cast<uint32_t>(sizeof(uint32_t));
+    uint32_t sizeOfUint16 = armnn::numeric_cast<uint32_t>(sizeof(uint16_t));
     // Offset index to point to mem address
     uint32_t offset = 0;
 
@@ -85,8 +89,8 @@ BOOST_AUTO_TEST_CASE(CounterCaptureHandlingTest)
 
     uint32_t headerWord1 = packetVersionResolver.ResolvePacketVersion(0, 4).GetEncodedValue();
     // Create packet to send through to the command functor
-    profiling::Packet packet1(headerWord1, dataLength, uniqueData1);
-    profiling::Packet packet2(headerWord1, dataLength, uniqueData2);
+    arm::pipe::Packet packet1(headerWord1, dataLength, uniqueData1);
+    arm::pipe::Packet packet2(headerWord1, dataLength, uniqueData2);
 
     gatordmock::PeriodicCounterCaptureCommandHandler commandHandler(0, 4, headerWord1, true);
 
@@ -94,12 +98,142 @@ BOOST_AUTO_TEST_CASE(CounterCaptureHandlingTest)
     commandHandler(packet1);
     commandHandler(packet2);
 
-    BOOST_ASSERT(commandHandler.m_CurrentPeriodValue == 5000);
+    ARMNN_ASSERT(commandHandler.m_CurrentPeriodValue == 5000);
 
     for (size_t i = 0; i < commandHandler.m_CounterCaptureValues.m_Uids.size(); ++i)
     {
-        BOOST_ASSERT(commandHandler.m_CounterCaptureValues.m_Uids[i] == i);
+        ARMNN_ASSERT(commandHandler.m_CounterCaptureValues.m_Uids[i] == i);
     }
+}
+
+void WaitFor(std::function<bool()> predicate, std::string errorMsg, uint32_t timeout = 2000, uint32_t sleepTime = 50)
+{
+    uint32_t timeSlept = 0;
+    while (!predicate())
+    {
+        if (timeSlept >= timeout)
+        {
+            BOOST_FAIL("Timeout: " + errorMsg);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+        timeSlept += sleepTime;
+    }
+}
+
+void CheckTimelineDirectory(arm::pipe::TimelineDirectoryCaptureCommandHandler& commandHandler)
+{
+    uint32_t uint8_t_size  = sizeof(uint8_t);
+    uint32_t uint32_t_size = sizeof(uint32_t);
+    uint32_t uint64_t_size = sizeof(uint64_t);
+    uint32_t threadId_size = sizeof(int);
+
+    profiling::BufferManager bufferManager(5);
+    profiling::TimelinePacketWriterFactory timelinePacketWriterFactory(bufferManager);
+
+    std::unique_ptr<profiling::ISendTimelinePacket> sendTimelinePacket =
+            timelinePacketWriterFactory.GetSendTimelinePacket();
+
+    sendTimelinePacket->SendTimelineMessageDirectoryPackage();
+    sendTimelinePacket->Commit();
+
+    std::vector<arm::pipe::SwTraceMessage> swTraceBufferMessages;
+
+    unsigned int offset = uint32_t_size * 2;
+
+    std::unique_ptr<profiling::IPacketBuffer> packetBuffer = bufferManager.GetReadableBuffer();
+
+    uint8_t readStreamVersion = ReadUint8(packetBuffer, offset);
+    BOOST_CHECK(readStreamVersion == 4);
+    offset += uint8_t_size;
+    uint8_t readPointerBytes = ReadUint8(packetBuffer, offset);
+    BOOST_CHECK(readPointerBytes == uint64_t_size);
+    offset += uint8_t_size;
+    uint8_t readThreadIdBytes = ReadUint8(packetBuffer, offset);
+    BOOST_CHECK(readThreadIdBytes == threadId_size);
+    offset += uint8_t_size;
+
+    uint32_t declarationSize = profiling::ReadUint32(packetBuffer, offset);
+    offset += uint32_t_size;
+    for(uint32_t i = 0; i < declarationSize; ++i)
+    {
+        swTraceBufferMessages.push_back(arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
+                                                                      offset,
+                                                                      packetBuffer->GetSize()));
+    }
+
+    for(uint32_t index = 0; index < declarationSize; ++index)
+    {
+        arm::pipe::SwTraceMessage& bufferMessage = swTraceBufferMessages[index];
+        arm::pipe::SwTraceMessage& handlerMessage = commandHandler.m_SwTraceMessages[index];
+
+        BOOST_CHECK(bufferMessage.m_Name == handlerMessage.m_Name);
+        BOOST_CHECK(bufferMessage.m_UiName == handlerMessage.m_UiName);
+        BOOST_CHECK(bufferMessage.m_Id == handlerMessage.m_Id);
+
+        BOOST_CHECK(bufferMessage.m_ArgTypes.size() == handlerMessage.m_ArgTypes.size());
+        for(uint32_t i = 0; i < bufferMessage.m_ArgTypes.size(); ++i)
+        {
+            BOOST_CHECK(bufferMessage.m_ArgTypes[i] == handlerMessage.m_ArgTypes[i]);
+        }
+
+        BOOST_CHECK(bufferMessage.m_ArgNames.size() == handlerMessage.m_ArgNames.size());
+        for(uint32_t i = 0; i < bufferMessage.m_ArgNames.size(); ++i)
+        {
+            BOOST_CHECK(bufferMessage.m_ArgNames[i] == handlerMessage.m_ArgNames[i]);
+        }
+    }
+}
+
+void CheckTimelinePackets(arm::pipe::TimelineDecoder& timelineDecoder)
+{
+    unsigned int i = 0; // Use a postfix increment to avoid changing indexes each time the packet gets updated.
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::NAME_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::NAME_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::TYPE_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::TYPE_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::INDEX_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::INDEX_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::BACKENDID_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::BACKENDID_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::CHILD_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::CHILD_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::EXECUTION_OF_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name ==
+                profiling::LabelsAndEventClasses::EXECUTION_OF_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::PROCESS_ID_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name ==
+                profiling::LabelsAndEventClasses::PROCESS_ID_LABEL);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::LAYER_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::LAYER);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::WORKLOAD_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::WORKLOAD);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::NETWORK_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::NETWORK);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::CONNECTION_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::CONNECTION);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid == profiling::LabelsAndEventClasses::INFERENCE_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name == profiling::LabelsAndEventClasses::INFERENCE);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i].m_Guid ==
+                profiling::LabelsAndEventClasses::WORKLOAD_EXECUTION_GUID);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels[i++].m_Name ==
+                profiling::LabelsAndEventClasses::WORKLOAD_EXECUTION);
+
+    BOOST_CHECK(timelineDecoder.GetModel().m_EventClasses[0].m_Guid ==
+                profiling::LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS);
+    BOOST_CHECK(timelineDecoder.GetModel().m_EventClasses[1].m_Guid ==
+                profiling::LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS);
 }
 
 BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
@@ -107,43 +241,19 @@ BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
     // The purpose of this test is to setup both sides of the profiling service and get to the point of receiving
     // performance data.
 
-    //These variables are used to wait for the profiling service
-    uint32_t timeout   = 2000;
-    uint32_t sleepTime = 50;
-    uint32_t timeSlept = 0;
-
-    profiling::PacketVersionResolver packetVersionResolver;
-
-    // Create the Command Handler Registry
-    profiling::CommandHandlerRegistry registry;
-
-    // Update with derived functors
-    gatordmock::StreamMetadataCommandHandler streamMetadataCommandHandler(
-        0, 0, packetVersionResolver.ResolvePacketVersion(0, 0).GetEncodedValue(), true);
-
-    gatordmock::PeriodicCounterCaptureCommandHandler counterCaptureCommandHandler(
-        0, 4, packetVersionResolver.ResolvePacketVersion(0, 4).GetEncodedValue(), true);
-
-    profiling::DirectoryCaptureCommandHandler directoryCaptureCommandHandler(
-        0, 2, packetVersionResolver.ResolvePacketVersion(0, 2).GetEncodedValue(), true);
-
-    gatordmock::TimelineDirectoryCaptureCommandHandler timelineDirectoryCaptureCommandHandler(
-        1, 0, packetVersionResolver.ResolvePacketVersion(1, 0).GetEncodedValue(), true);
-
-    // Register different derived functors
-    registry.RegisterFunctor(&streamMetadataCommandHandler);
-    registry.RegisterFunctor(&counterCaptureCommandHandler);
-    registry.RegisterFunctor(&directoryCaptureCommandHandler);
-    registry.RegisterFunctor(&timelineDirectoryCaptureCommandHandler);
     // Setup the mock service to bind to the UDS.
     std::string udsNamespace = "gatord_namespace";
-    gatordmock::GatordMockService mockService(registry, false);
-    mockService.OpenListeningSocket(udsNamespace);
+
+    BOOST_CHECK_NO_THROW(arm::pipe::ConnectionHandler connectionHandler(udsNamespace, false));
+
+    arm::pipe::ConnectionHandler connectionHandler(udsNamespace, false);
 
     // Enable the profiling service.
     armnn::IRuntime::CreationOptions::ExternalProfilingOptions options;
-    options.m_EnableProfiling                     = true;
-    profiling::ProfilingService& profilingService = profiling::ProfilingService::Instance();
+    options.m_EnableProfiling = true;
+    options.m_TimelineEnabled = true;
+
+    armnn::profiling::ProfilingService profilingService;
     profilingService.ResetExternalProfilingOptions(options, true);
 
     // Bring the profiling service to the "WaitingForAck" state
@@ -152,23 +262,19 @@ BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
     BOOST_CHECK(profilingService.GetCurrentState() == profiling::ProfilingState::NotConnected);
     profilingService.Update();
 
+    // Connect the profiling service
+    auto basePipeServer = connectionHandler.GetNewBasePipeServer(false);
+
     // Connect the profiling service to the mock Gatord.
-    int clientFd = mockService.BlockForOneClient();
-    if (-1 == clientFd)
-    {
-        BOOST_FAIL("Failed to connect client");
-    }
+    gatordmock::GatordMockService mockService(std::move(basePipeServer), false);
+
+    arm::pipe::TimelineDecoder& timelineDecoder = mockService.GetTimelineDecoder();
+    profiling::DirectoryCaptureCommandHandler& directoryCaptureCommandHandler =
+         mockService.GetDirectoryCaptureCommandHandler();
 
     // Give the profiling service sending thread time start executing and send the stream metadata.
-    while (profilingService.GetCurrentState() != profiling::ProfilingState::WaitingForAck)
-    {
-        if (timeSlept >= timeout)
-        {
-            BOOST_FAIL("Timeout: Profiling service did not switch to WaitingForAck state");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
-        timeSlept += sleepTime;
-    }
+    WaitFor([&](){return profilingService.GetCurrentState() == profiling::ProfilingState::WaitingForAck;},
+            "Profiling service did not switch to WaitingForAck state");
 
     profilingService.Update();
     // Read the stream metadata on the mock side.
@@ -178,39 +284,32 @@ BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
     }
     // Send Ack from GatorD
     mockService.SendConnectionAck();
-
-    timeSlept = 0;
-    while (profilingService.GetCurrentState() != profiling::ProfilingState::Active)
-    {
-        if (timeSlept >= timeout)
-        {
-            BOOST_FAIL("Timeout: Profiling service did not switch to Active state");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
-        timeSlept += sleepTime;
-    }
-
+    // And start to listen for packets
     mockService.LaunchReceivingThread();
+
+    WaitFor([&](){return profilingService.GetCurrentState() == profiling::ProfilingState::Active;},
+            "Profiling service did not switch to Active state");
+
     // As part of the default startup of the profiling service a counter directory packet will be sent.
-    timeSlept = 0;
-    while (!directoryCaptureCommandHandler.ParsedCounterDirectory())
-    {
-        if (timeSlept >= timeout)
-        {
-            BOOST_FAIL("Timeout: MockGatord did not receive counter directory packet");
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
-        timeSlept += sleepTime;
-    }
+    WaitFor([&](){return directoryCaptureCommandHandler.ParsedCounterDirectory();},
+            "MockGatord did not receive counter directory packet");
+
+    // Following that we will receive a collection of well known timeline labels and event classes
+    WaitFor([&](){return timelineDecoder.GetModel().m_EventClasses.size() >= 2;},
+            "MockGatord did not receive well known timeline labels and event classes");
+
+    CheckTimelineDirectory(mockService.GetTimelineDirectoryCaptureCommandHandler());
+    // Verify the commonly used timeline packets sent when the profiling service enters the active state
+    CheckTimelinePackets(timelineDecoder);
 
     const profiling::ICounterDirectory& serviceCounterDirectory  = profilingService.GetCounterDirectory();
     const profiling::ICounterDirectory& receivedCounterDirectory = directoryCaptureCommandHandler.GetCounterDirectory();
 
-    // Compare thre basics of the counter directory from the service and the one we received over the wire.
-    BOOST_ASSERT(serviceCounterDirectory.GetDeviceCount() == receivedCounterDirectory.GetDeviceCount());
-    BOOST_ASSERT(serviceCounterDirectory.GetCounterSetCount() == receivedCounterDirectory.GetCounterSetCount());
-    BOOST_ASSERT(serviceCounterDirectory.GetCategoryCount() == receivedCounterDirectory.GetCategoryCount());
-    BOOST_ASSERT(serviceCounterDirectory.GetCounterCount() == receivedCounterDirectory.GetCounterCount());
+    // Compare the basics of the counter directory from the service and the one we received over the wire.
+    BOOST_CHECK(serviceCounterDirectory.GetDeviceCount() == receivedCounterDirectory.GetDeviceCount());
+    BOOST_CHECK(serviceCounterDirectory.GetCounterSetCount() == receivedCounterDirectory.GetCounterSetCount());
+    BOOST_CHECK(serviceCounterDirectory.GetCategoryCount() == receivedCounterDirectory.GetCategoryCount());
+    BOOST_CHECK(serviceCounterDirectory.GetCounterCount() == receivedCounterDirectory.GetCounterCount());
 
     receivedCounterDirectory.GetDeviceCount();
     serviceCounterDirectory.GetDeviceCount();
@@ -243,8 +342,6 @@ BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
             if (receivedCategory->m_Name.compare(category->m_Name) == 0)
             {
                 // We've found the matching category.
-                BOOST_CHECK(category->m_DeviceUid == receivedCategory->m_DeviceUid);
-                BOOST_CHECK(category->m_CounterSetUid == receivedCategory->m_CounterSetUid);
                 // Now look at the interiors of the counters. Start by sorting them.
                 std::sort(category->m_Counters.begin(), category->m_Counters.end());
                 std::sort(receivedCategory->m_Counters.begin(), receivedCategory->m_Counters.end());
@@ -287,9 +384,115 @@ BOOST_AUTO_TEST_CASE(GatorDMockEndToEnd)
     mockService.WaitForReceivingThread();
     options.m_EnableProfiling = false;
     profilingService.ResetExternalProfilingOptions(options, true);
-
     // Future tests here will add counters to the ProfilingService, increment values and examine
     // PeriodicCounterCapture data received. These are yet to be integrated.
+}
+
+BOOST_AUTO_TEST_CASE(GatorDMockTimeLineActivation)
+{
+    // This test requires the CpuRef backend to be enabled
+    if(!BackendRegistryInstance().IsBackendRegistered("CpuRef"))
+    {
+        return;
+    }
+    armnn::MockBackendInitialiser initialiser;
+    // Setup the mock service to bind to the UDS.
+    std::string udsNamespace = "gatord_namespace";
+
+    arm::pipe::ConnectionHandler connectionHandler(udsNamespace, false);
+
+    armnn::IRuntime::CreationOptions options;
+    options.m_ProfilingOptions.m_EnableProfiling = true;
+    options.m_ProfilingOptions.m_TimelineEnabled = true;
+    armnn::Runtime runtime(options);
+
+    auto basePipeServer = connectionHandler.GetNewBasePipeServer(false);
+    gatordmock::GatordMockService mockService(std::move(basePipeServer), false);
+
+    // Read the stream metadata on the mock side.
+    if (!mockService.WaitForStreamMetaData())
+    {
+        BOOST_FAIL("Failed to receive StreamMetaData");
+    }
+
+    armnn::MockBackendProfilingService mockProfilingService = armnn::MockBackendProfilingService::Instance();
+    armnn::MockBackendProfilingContext *mockBackEndProfilingContext = mockProfilingService.GetContext();
+
+    // Send Ack from GatorD
+    mockService.SendConnectionAck();
+    // And start to listen for packets
+    mockService.LaunchReceivingThread();
+
+    // Build and optimize a simple network while we wait
+    INetworkPtr net(INetwork::Create());
+
+    IConnectableLayer* input = net->AddInputLayer(0, "input");
+
+    NormalizationDescriptor descriptor;
+    IConnectableLayer* normalize = net->AddNormalizationLayer(descriptor, "normalization");
+
+    IConnectableLayer* output = net->AddOutputLayer(0, "output");
+
+    input->GetOutputSlot(0).Connect(normalize->GetInputSlot(0));
+    normalize->GetOutputSlot(0).Connect(output->GetInputSlot(0));
+
+    input->GetOutputSlot(0).SetTensorInfo(TensorInfo({ 1, 1, 4, 4 }, DataType::Float32));
+    normalize->GetOutputSlot(0).SetTensorInfo(TensorInfo({ 1, 1, 4, 4 }, DataType::Float32));
+
+    std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
+    IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime.GetDeviceSpec());
+
+    WaitFor([&](){return mockService.GetDirectoryCaptureCommandHandler().ParsedCounterDirectory();},
+            "MockGatord did not receive counter directory packet");
+
+    arm::pipe::TimelineDecoder& timelineDecoder = mockService.GetTimelineDecoder();
+
+    WaitFor([&](){return timelineDecoder.GetModel().m_EventClasses.size() >= 2;},
+            "MockGatord did not receive well known timeline labels");
+
+    WaitFor([&](){return timelineDecoder.GetModel().m_Entities.size() >= 1;},
+            "MockGatord did not receive mock backend test entity");
+
+    // Packets we expect from SendWellKnownLabelsAndEventClassesTest
+    BOOST_CHECK(timelineDecoder.GetModel().m_Entities.size() == 1);
+    BOOST_CHECK(timelineDecoder.GetModel().m_EventClasses.size()  == 2);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels.size()  == 15);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Relationships.size()  == 0);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Events.size()  == 0);
+
+    mockService.SendDeactivateTimelinePacket();
+
+    WaitFor([&](){return !mockBackEndProfilingContext->TimelineReportingEnabled();},
+            "Timeline packets were not deactivated");
+
+    // Load the network into runtime now that timeline reporting is disabled
+    armnn::NetworkId netId;
+    runtime.LoadNetwork(netId, std::move(optNet));
+
+    // Now activate timeline packets
+    mockService.SendActivateTimelinePacket();
+
+    WaitFor([&](){return mockBackEndProfilingContext->TimelineReportingEnabled();},
+            "Timeline packets were not activated");
+
+    // Once TimelineReporting is Enabled additional activateTimelinePackets should be ignored
+    mockService.SendActivateTimelinePacket();
+    mockService.SendActivateTimelinePacket();
+
+    // Once timeline packets have been reactivated the ActivateTimelineReportingCommandHandler will resend the
+    // SendWellKnownLabelsAndEventClasses and then send the structure of any loaded networks
+    WaitFor([&](){return timelineDecoder.GetModel().m_Labels.size() >= 24;},
+            "MockGatord did not receive well known timeline labels");
+
+    // Packets we expect from SendWellKnownLabelsAndEventClassesTest * 2 + network above (input, norm, backend, output)
+    BOOST_CHECK(timelineDecoder.GetModel().m_Entities.size() == 6);
+    BOOST_CHECK(timelineDecoder.GetModel().m_EventClasses.size()  == 4);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Labels.size()  == 34);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Relationships.size()  == 15);
+    BOOST_CHECK(timelineDecoder.GetModel().m_Events.size()  == 0);
+
+    mockService.WaitForReceivingThread();
+    GetProfilingService(&runtime).Disconnect();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

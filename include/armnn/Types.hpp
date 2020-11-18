@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -17,7 +17,7 @@ namespace armnn
 
 constexpr unsigned int MaxNumOfTensorDimensions = 5U;
 
-// The lowest performance data capture interval we support is 10 miliseconds.
+/// The lowest performance data capture interval we support is 10 miliseconds.
 constexpr unsigned int LOWEST_CAPTURE_PERIOD = 10000u;
 
 /// @enum Status enumeration
@@ -40,6 +40,8 @@ enum class DataType
     QuantizedSymm8PerAxis ARMNN_DEPRECATED_ENUM_MSG("Per Axis property inferred by number of scales in TensorInfo") = 6,
     QSymmS8 = 7,
     QAsymmS8 = 8,
+    BFloat16 = 9,
+    Signed64 = 10,
 
     QuantisedAsymm8 ARMNN_DEPRECATED_ENUM_MSG("Use DataType::QAsymmU8 instead.") = QAsymmU8,
     QuantisedSymm16 ARMNN_DEPRECATED_ENUM_MSG("Use DataType::QSymmS16 instead.") = QSymmS16
@@ -57,12 +59,14 @@ enum class ActivationFunction
     TanH        = 1,
     Linear      = 2,
     ReLu        = 3,
-    BoundedReLu = 4, ///< min(a, max(b, input))
+    BoundedReLu = 4, ///< min(a, max(b, input)) ReLu1 & ReLu6.
     SoftReLu    = 5,
     LeakyReLu   = 6,
     Abs         = 7,
     Sqrt        = 8,
-    Square      = 9
+    Square      = 9,
+    Elu         = 10,
+    HardSwish   = 11
 };
 
 enum class ArgMinMaxFunction
@@ -81,13 +85,20 @@ enum class ComparisonOperation
     NotEqual       = 5
 };
 
+enum class LogicalBinaryOperation
+{
+    LogicalAnd = 0,
+    LogicalOr  = 1
+};
+
 enum class UnaryOperation
 {
-    Abs   = 0,
-    Exp   = 1,
-    Sqrt  = 2,
-    Rsqrt = 3,
-    Neg   = 4
+    Abs        = 0,
+    Exp        = 1,
+    Sqrt       = 2,
+    Rsqrt      = 3,
+    Neg        = 4,
+    LogicalNot = 5
 };
 
 enum class PoolingAlgorithm
@@ -101,6 +112,13 @@ enum class ResizeMethod
 {
     Bilinear        = 0,
     NearestNeighbor = 1
+};
+
+enum class Dimensionality
+{
+    NotSpecified = 0,
+    Specified    = 1,
+    Scalar       = 2
 };
 
 ///
@@ -138,6 +156,22 @@ enum class OutputShapeRounding
 {
     Floor       = 0,
     Ceiling     = 1
+};
+
+///
+/// The ShapeInferenceMethod modify how the output shapes are treated.
+/// When ValidateOnly is selected, the output shapes are inferred from the input parameters of the layer
+/// and any mismatch is reported.
+/// When InferAndValidate is selected 2 actions must be performed: (1)infer output shape from inputs and (2)validate the
+/// shapes as in ValidateOnly. This option has been added to work with tensors which rank or dimension sizes are not
+/// specified explicitly, however this information can be calculated from the inputs.
+///
+enum class ShapeInferenceMethod
+{
+    /// Validate all output shapes
+    ValidateOnly     = 0,
+    /// Infer missing output shapes and validate all output shapes
+    InferAndValidate = 1
 };
 
 /// Each backend should implement an IBackend.
@@ -249,6 +283,8 @@ static constexpr uint64_t MIN_STATIC_GUID = 1llu << 63;
 class ProfilingGuid
 {
 public:
+    ProfilingGuid() : m_Guid(0) {}
+
     ProfilingGuid(uint64_t guid) : m_Guid(guid) {}
 
     operator uint64_t() const { return m_Guid; }
@@ -305,7 +341,7 @@ struct ProfilingStaticGuid : public ProfilingGuid
 
 namespace std
 {
-// make ProfilingGuid hashable
+/// make ProfilingGuid hashable
 template<>
 struct hash<armnn::profiling::ProfilingGuid>
 {
@@ -315,7 +351,7 @@ struct hash<armnn::profiling::ProfilingGuid>
     }
 };
 
-// make ProfilingDynamicGuid hashable
+/// make ProfilingDynamicGuid hashable
 template<>
 struct hash<armnn::profiling::ProfilingDynamicGuid>
 {
@@ -325,7 +361,7 @@ struct hash<armnn::profiling::ProfilingDynamicGuid>
     }
 };
 
-// make ProfilingStaticGuid hashable
+/// make ProfilingStaticGuid hashable
 template<>
 struct hash<armnn::profiling::ProfilingStaticGuid>
 {

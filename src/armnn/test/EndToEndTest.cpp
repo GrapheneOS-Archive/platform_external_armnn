@@ -6,8 +6,8 @@
 #include <armnn/Descriptors.hpp>
 #include <armnn/IRuntime.hpp>
 #include <armnn/INetwork.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
-#include <boost/core/ignore_unused.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <set>
@@ -42,8 +42,18 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
 
     // optimize the network
     std::vector<BackendId> backends = {Compute::CpuAcc};
-    IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec());
-    BOOST_CHECK(!optNet);
+    std::vector<std::string> errMessages;
+
+    try
+    {
+        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptions(), errMessages);
+        BOOST_FAIL("Should have thrown an exception.");
+    }
+    catch (const InvalidArgumentException& e)
+    {
+        // Different exceptions are thrown on different backends
+    }
+    BOOST_CHECK(errMessages.size() > 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

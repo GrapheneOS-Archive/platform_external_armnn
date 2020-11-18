@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,12 +8,13 @@
 #include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
-
+#include <armnn/utility/IgnoreUnused.hpp>
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
+#include <reference/test/RefWorkloadFactoryHelper.hpp>
 
 #include <backendsCommon/test/TensorCopyUtils.hpp>
 #include <backendsCommon/test/WorkloadTestUtils.hpp>
@@ -29,6 +30,7 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchNormTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const armnn::TensorShape& inputOutputTensorShape,
     const std::vector<float>& inputValues,
     const std::vector<float>& expectedOutputValues,
@@ -36,7 +38,7 @@ LayerTestResult<T, 4> BatchNormTestImpl(
     int32_t qOffset,
     armnn::DataLayout dataLayout)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     armnn::TensorInfo inputTensorInfo(inputOutputTensorShape, ArmnnType);
     armnn::TensorInfo outputTensorInfo(inputOutputTensorShape, ArmnnType);
 
@@ -69,8 +71,8 @@ LayerTestResult<T, 4> BatchNormTestImpl(
     result.outputExpected = MakeTensor<T, 4>(inputTensorInfo,
                                              QuantizedVector<T>(expectedOutputValues, qScale, qOffset));
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::ScopedCpuTensorHandle meanTensor(tensorInfo);
     armnn::ScopedCpuTensorHandle varianceTensor(tensorInfo);
@@ -112,10 +114,11 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T,4> BatchNormTestNhwcImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float qScale,
     int32_t qOffset)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     const unsigned int width    = 2;
     const unsigned int height   = 3;
@@ -152,8 +155,8 @@ LayerTestResult<T,4> BatchNormTestNhwcImpl(
     auto gamma    = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 2,  1 }, qScale, qOffset));
     LayerTestResult<T,4> ret(outputTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::BatchNormalizationQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -206,7 +209,8 @@ LayerTestResult<T,4> BatchNormTestNhwcImpl(
 
 LayerTestResult<float, 4> BatchNormFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Channels: 2
@@ -242,6 +246,7 @@ LayerTestResult<float, 4> BatchNormFloat32Test(
     return BatchNormTestImpl<armnn::DataType::Float32>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -252,7 +257,8 @@ LayerTestResult<float, 4> BatchNormFloat32Test(
 
 LayerTestResult<float, 4> BatchNormFloat32NhwcTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Height: 3
@@ -292,6 +298,7 @@ LayerTestResult<float, 4> BatchNormFloat32NhwcTest(
     return BatchNormTestImpl<armnn::DataType::Float32>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -302,7 +309,8 @@ LayerTestResult<float, 4> BatchNormFloat32NhwcTest(
 
 LayerTestResult<armnn::Half, 4> BatchNormFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Channels: 2
@@ -338,6 +346,7 @@ LayerTestResult<armnn::Half, 4> BatchNormFloat16Test(
     return BatchNormTestImpl<armnn::DataType::Float16>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -348,7 +357,8 @@ LayerTestResult<armnn::Half, 4> BatchNormFloat16Test(
 
 LayerTestResult<armnn::Half, 4> BatchNormFloat16NhwcTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Height: 3
@@ -388,6 +398,7 @@ LayerTestResult<armnn::Half, 4> BatchNormFloat16NhwcTest(
     return BatchNormTestImpl<armnn::DataType::Float16>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -398,7 +409,8 @@ LayerTestResult<armnn::Half, 4> BatchNormFloat16NhwcTest(
 
 LayerTestResult<uint8_t, 4> BatchNormUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Channels: 2
@@ -434,6 +446,7 @@ LayerTestResult<uint8_t, 4> BatchNormUint8Test(
     return BatchNormTestImpl<armnn::DataType::QAsymmU8>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -444,7 +457,8 @@ LayerTestResult<uint8_t, 4> BatchNormUint8Test(
 
 LayerTestResult<uint8_t, 4> BatchNormUint8NhwcTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Height: 3
@@ -484,13 +498,15 @@ LayerTestResult<uint8_t, 4> BatchNormUint8NhwcTest(
     return BatchNormTestImpl<armnn::DataType::QAsymmU8>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape, inputValues, expectedOutputValues,
          1.f/20.f, 50, armnn::DataLayout::NHWC);
 }
 
 LayerTestResult<int16_t, 4> BatchNormInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Channels: 2
@@ -526,6 +542,7 @@ LayerTestResult<int16_t, 4> BatchNormInt16Test(
     return BatchNormTestImpl<armnn::DataType::QSymmS16>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -536,7 +553,8 @@ LayerTestResult<int16_t, 4> BatchNormInt16Test(
 
 LayerTestResult<int16_t, 4> BatchNormInt16NhwcTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     // BatchSize: 1
     // Height: 3
@@ -576,6 +594,7 @@ LayerTestResult<int16_t, 4> BatchNormInt16NhwcTest(
     return BatchNormTestImpl<armnn::DataType::QSymmS16>(
         workloadFactory,
         memoryManager,
+        tensorHandleFactory,
         inputOutputShape,
         inputValues,
         expectedOutputValues,
@@ -587,9 +606,11 @@ LayerTestResult<int16_t, 4> BatchNormInt16NhwcTest(
 LayerTestResult<float,4> CompareBatchNormTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    armnn::IWorkloadFactory& refWorkloadFactory)
+    armnn::IWorkloadFactory& refWorkloadFactory,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
+    const armnn::ITensorHandleFactory& refTensorHandleFactory)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     const unsigned int width     = 2;
     const unsigned int height    = 3;
     const unsigned int channels  = 5;
@@ -615,11 +636,11 @@ LayerTestResult<float,4> CompareBatchNormTest(
 
     LayerTestResult<float,4> ret(outputTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandleRef  = refWorkloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandleRef = refWorkloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandleRef  = refTensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandleRef = refTensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::BatchNormalizationQueueDescriptor data;
     armnn::WorkloadInfo info;

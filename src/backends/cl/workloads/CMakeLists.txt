@@ -1,5 +1,5 @@
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2017 Arm Ltd anc Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -16,6 +16,8 @@ list(APPEND armnnClBackendWorkloads_sources
     ClBatchNormalizationFloatWorkload.hpp
     ClBatchToSpaceNdWorkload.cpp
     ClBatchToSpaceNdWorkload.hpp
+    ClComparisonWorkload.cpp
+    ClComparisonWorkload.hpp
     ClConcatWorkload.cpp
     ClConcatWorkload.hpp
     ClConstantWorkload.cpp
@@ -34,16 +36,22 @@ list(APPEND armnnClBackendWorkloads_sources
     ClDequantizeWorkload.hpp
     ClDivisionFloatWorkload.cpp
     ClDivisionFloatWorkload.hpp
+    ClExpWorkload.cpp
+    ClExpWorkload.hpp
+    ClFillWorkload.cpp
+    ClFillWorkload.hpp
     ClFloorFloatWorkload.cpp
     ClFloorFloatWorkload.hpp
     ClFullyConnectedWorkload.cpp
     ClFullyConnectedWorkload.hpp
-    ClGreaterWorkload.cpp
-    ClGreaterWorkload.hpp
+    ClGatherWorkload.cpp
+    ClGatherWorkload.hpp
     ClInstanceNormalizationWorkload.cpp
     ClInstanceNormalizationWorkload.hpp
     ClL2NormalizationFloatWorkload.cpp
     ClL2NormalizationFloatWorkload.hpp
+    ClLogSoftmaxWorkload.cpp
+    ClLogSoftmaxWorkload.hpp
     ClLstmFloatWorkload.cpp
     ClLstmFloatWorkload.hpp
     ClMaximumWorkload.cpp
@@ -54,6 +62,8 @@ list(APPEND armnnClBackendWorkloads_sources
     ClMinimumWorkload.hpp
     ClMultiplicationWorkload.cpp
     ClMultiplicationWorkload.hpp
+    ClNegWorkload.cpp
+    ClNegWorkload.hpp
     ClNormalizationFloatWorkload.cpp
     ClNormalizationFloatWorkload.hpp
     ClPadWorkload.cpp
@@ -64,6 +74,8 @@ list(APPEND armnnClBackendWorkloads_sources
     ClPooling2dWorkload.hpp
     ClPreluWorkload.cpp
     ClPreluWorkload.hpp
+    ClQLstmWorkload.cpp
+    ClQLstmWorkload.hpp
     ClQuantizedLstmWorkload.cpp
     ClQuantizedLstmWorkload.hpp
     ClQuantizeWorkload.cpp
@@ -76,12 +88,8 @@ list(APPEND armnnClBackendWorkloads_sources
     ClRsqrtWorkload.hpp
     ClSliceWorkload.cpp
     ClSliceWorkload.hpp
-    ClSoftmaxBaseWorkload.cpp
-    ClSoftmaxBaseWorkload.hpp
-    ClSoftmaxFloatWorkload.cpp
-    ClSoftmaxFloatWorkload.hpp
-    ClSoftmaxUint8Workload.cpp
-    ClSoftmaxUint8Workload.hpp
+    ClSoftmaxWorkload.cpp
+    ClSoftmaxWorkload.hpp
     ClSpaceToBatchNdWorkload.hpp
     ClSpaceToBatchNdWorkload.cpp
     ClSpaceToDepthWorkload.cpp
@@ -96,6 +104,8 @@ list(APPEND armnnClBackendWorkloads_sources
     ClSubtractionWorkload.hpp
     ClTransposeConvolution2dWorkload.cpp
     ClTransposeConvolution2dWorkload.hpp
+    ClTransposeWorkload.cpp
+    ClTransposeWorkload.hpp
     ClWorkloads.hpp
     ClWorkloadUtils.hpp
 )
@@ -105,3 +115,4 @@ target_include_directories(armnnClBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}
 target_include_directories(armnnClBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/armnnUtils)
 target_include_directories(armnnClBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnClBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
+target_include_directories(armnnClBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)

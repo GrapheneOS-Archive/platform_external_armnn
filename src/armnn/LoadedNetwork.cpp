@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,12 +7,13 @@
 #include "Layer.hpp"
 #include "Graph.hpp"
 #include "Network.hpp"
-#include "Runtime.hpp"
+#include <Processes.hpp>
 #include "Profiling.hpp"
 #include "HeapProfiling.hpp"
 
 #include <armnn/BackendRegistry.hpp>
 #include <armnn/Logging.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <armnn/backends/IMemoryManager.hpp>
@@ -20,11 +21,8 @@
 #include <backendsCommon/MemSyncWorkload.hpp>
 
 #include <LabelsAndEventClasses.hpp>
-#include <ProfilingService.hpp>
 
-#include <boost/polymorphic_cast.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 namespace armnn
 {
@@ -56,7 +54,7 @@ void AddLayerStructure(std::unique_ptr<TimelineUtilityMethods>& timelineUtils,
     for (auto&& input : layer.GetInputSlots())
     {
         const IOutputSlot* source = input.GetConnectedOutputSlot();
-        BOOST_ASSERT(source != NULL);
+        ARMNN_ASSERT(source != NULL);
         timelineUtils->CreateConnectionRelationship(ProfilingRelationshipType::RetentionLink,
                                                     source->GetOwningLayerGuid(),
                                                     layer.GetGuid());
@@ -76,15 +74,16 @@ void AddWorkloadStructure(std::unique_ptr<TimelineUtilityMethods>& timelineUtils
     // Link the workload to the layer
     timelineUtils->CreateRelationship(ProfilingRelationshipType::RetentionLink,
                                       layer.GetGuid(),
-                                      workload->GetGuid());
-
+                                      workload->GetGuid(),
+                                      LabelsAndEventClasses::CHILD_GUID);
 }
 
 } // anonymous
 
 std::unique_ptr<LoadedNetwork> LoadedNetwork::MakeLoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
                                                                 std::string& errorMessage,
-                                                                const INetworkProperties& networkProperties)
+                                                                const INetworkProperties& networkProperties,
+                                                                profiling::ProfilingService&  profilingService)
 {
     std::unique_ptr<LoadedNetwork> loadedNetwork;
 
@@ -98,7 +97,7 @@ std::unique_ptr<LoadedNetwork> LoadedNetwork::MakeLoadedNetwork(std::unique_ptr<
 
     try
     {
-        loadedNetwork.reset(new LoadedNetwork(std::move(net), networkProperties));
+        loadedNetwork.reset(new LoadedNetwork(std::move(net), networkProperties, profilingService));
     }
     catch (const armnn::RuntimeException& error)
     {
@@ -117,10 +116,13 @@ std::unique_ptr<LoadedNetwork> LoadedNetwork::MakeLoadedNetwork(std::unique_ptr<
 }
 
 LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
-                             const INetworkProperties& networkProperties) :
+                             const INetworkProperties& networkProperties,
+                             profiling::ProfilingService&  profilingService) :
                              m_OptimizedNetwork(std::move(net)),
                              m_IsImportEnabled(networkProperties.m_ImportEnabled),
-                             m_IsExportEnabled(networkProperties.m_ExportEnabled)
+                             m_IsExportEnabled(networkProperties.m_ExportEnabled),
+                             m_TensorHandleFactoryRegistry(),
+                             m_ProfilingService(profilingService)
 {
     // Create a profiler and register it for the current thread.
     m_Profiler = std::make_shared<Profiler>();
@@ -143,16 +145,16 @@ LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
 
             if (backend->SupportsTensorAllocatorAPI())
             {
-                backend->RegisterTensorHandleFactories(m_TensorHandleFactoryRegistry);
-
-                auto workloadFactory = backend->CreateWorkloadFactory(m_TensorHandleFactoryRegistry);
+                auto workloadFactory = backend->CreateWorkloadFactory(
+                    m_TensorHandleFactoryRegistry, m_OptimizedNetwork->GetModelOptions());
                 m_WorkloadFactories.emplace(
                     std::make_pair(backendId, std::make_pair(std::move(workloadFactory), nullptr)));
             }
             else
             {
                 IBackendInternal::IMemoryManagerSharedPtr memoryManager = backend->CreateMemoryManager();
-                auto workloadFactory = backend->CreateWorkloadFactory(memoryManager);
+                auto workloadFactory = backend->CreateWorkloadFactory(
+                    memoryManager, m_OptimizedNetwork->GetModelOptions());
 
                 m_WorkloadFactories.emplace(
                     std::make_pair(backendId, std::make_pair(std::move(workloadFactory), memoryManager)));
@@ -167,6 +169,7 @@ LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
         switch (layer->GetType())
         {
         case LayerType::Input:
+        case LayerType::MemImport:
             {
                 // If IsImportEnabled is true then we need to set IsMemoryManaged to false when creating TensorHandles
                 layer->CreateTensorHandles(m_TensorHandleFactoryRegistry, workloadFactory, !m_IsImportEnabled);
@@ -191,10 +194,18 @@ LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
     }
 
     ProfilingGuid networkGuid = m_OptimizedNetwork->GetGuid();
-    std::unique_ptr<TimelineUtilityMethods> timelineUtils = TimelineUtilityMethods::GetTimelineUtils();
+    std::unique_ptr<TimelineUtilityMethods> timelineUtils =
+                        TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
     if (timelineUtils)
     {
         timelineUtils->CreateTypedEntity(networkGuid, LabelsAndEventClasses::NETWORK_GUID);
+        // Mark the network with a start of life event
+        timelineUtils->RecordEvent(networkGuid, LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS);
+        // and with the process ID
+        int processID = armnnUtils::Processes::GetCurrentId();
+        std::stringstream ss;
+        ss << processID;
+        timelineUtils->MarkEntityWithLabel(networkGuid, ss.str(), LabelsAndEventClasses::PROCESS_ID_GUID);
     }
 
     //Then create workloads.
@@ -224,9 +235,9 @@ LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
                 {
                     const char* const layerName =
                         layer->GetNameStr().length() != 0 ? layer->GetName() : "<Unnamed>";
-                    throw InvalidArgumentException(boost::str(
-                        boost::format("No workload created for layer (name: '%1%' type: '%2%') (compute '%3%')")
-                        % layerName % static_cast<int>(layer->GetType()) % layer->GetBackendId().Get()
+                    throw InvalidArgumentException(
+                        fmt::format("No workload created for layer (name: '{0}' type: '{1}') (compute '{2}')",
+                                    layerName, static_cast<int>(layer->GetType()), layer->GetBackendId().Get()
                     ));
                 }
 
@@ -260,33 +271,75 @@ LoadedNetwork::LoadedNetwork(std::unique_ptr<OptimizedNetwork> net,
     }
 }
 
+void LoadedNetwork::SendNetworkStructure()
+{
+    Graph& order = m_OptimizedNetwork->GetGraph().TopologicalSort();
+    ProfilingGuid networkGuid = m_OptimizedNetwork->GetGuid();
+
+    std::unique_ptr<TimelineUtilityMethods> timelineUtils =
+                        TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
+
+    timelineUtils->CreateTypedEntity(networkGuid, LabelsAndEventClasses::NETWORK_GUID);
+
+    for (auto&& layer : order)
+    {
+        // Add layer to the post-optimisation network structure
+        AddLayerStructure(timelineUtils, *layer, networkGuid);
+        switch (layer->GetType())
+        {
+        case LayerType::Input:
+        case LayerType::Output:
+        {
+            // Inputs and outputs are treated in a special way - see EnqueueInput() and EnqueueOutput().
+            break;
+        }
+        default:
+            {
+            for (auto& workload : m_WorkloadQueue)
+            {
+                // Add workload to the post-optimisation network structure
+                AddWorkloadStructure(timelineUtils, workload, *layer);
+            }
+            break;
+            }
+        }
+    }
+    // Commit to send the post-optimisation network structure
+    timelineUtils->Commit();
+}
+
+profiling::ProfilingGuid LoadedNetwork::GetNetworkGuid()
+{
+    return m_OptimizedNetwork->GetGuid();
+}
+
 TensorInfo LoadedNetwork::GetInputTensorInfo(LayerBindingId layerId) const
 {
     for (auto&& inputLayer : m_OptimizedNetwork->GetGraph().GetInputLayers())
     {
-        BOOST_ASSERT_MSG(inputLayer->GetNumOutputSlots() == 1, "Input layer should have exactly 1 output slot");
+        ARMNN_ASSERT_MSG(inputLayer->GetNumOutputSlots() == 1, "Input layer should have exactly 1 output slot");
         if (inputLayer->GetBindingId() == layerId)
         {
             return inputLayer->GetOutputSlot(0).GetTensorInfo();
         }
     }
 
-    throw InvalidArgumentException(boost::str(boost::format("No input layer is associated with id %1%") % layerId));
+    throw InvalidArgumentException(fmt::format("No input layer is associated with id {}", layerId));
 }
 
 TensorInfo LoadedNetwork::GetOutputTensorInfo(LayerBindingId layerId) const
 {
     for (auto&& outputLayer : m_OptimizedNetwork->GetGraph().GetOutputLayers())
     {
-        BOOST_ASSERT_MSG(outputLayer->GetNumInputSlots() == 1, "Output layer should have exactly 1 input slot");
-        BOOST_ASSERT_MSG(outputLayer->GetInputSlot(0).GetConnection(), "Input slot on Output layer must be connected");
+        ARMNN_ASSERT_MSG(outputLayer->GetNumInputSlots() == 1, "Output layer should have exactly 1 input slot");
+        ARMNN_ASSERT_MSG(outputLayer->GetInputSlot(0).GetConnection(), "Input slot on Output layer must be connected");
         if (outputLayer->GetBindingId() == layerId)
         {
             return outputLayer->GetInputSlot(0).GetConnection()->GetTensorInfo();
         }
     }
 
-    throw InvalidArgumentException(boost::str(boost::format("No output layer is associated with id %1%") % layerId));
+    throw InvalidArgumentException(fmt::format("No output layer is associated with id {}", layerId));
 }
 
 const IWorkloadFactory& LoadedNetwork::GetWorkloadFactory(const Layer& layer) const
@@ -296,22 +349,23 @@ const IWorkloadFactory& LoadedNetwork::GetWorkloadFactory(const Layer& layer) co
     auto it = m_WorkloadFactories.find(layer.GetBackendId());
     if (it ==  m_WorkloadFactories.end())
     {
-        throw RuntimeException(
-            boost::str(
-                boost::format("No workload factory for %1% to be used for layer: %2%")
-                % layer.GetBackendId().Get()
-                % layer.GetNameStr()),
-            CHECK_LOCATION());
+        throw RuntimeException(fmt::format("No workload factory for {0} to be used for layer: {1}",
+                                           layer.GetBackendId().Get(),
+                                           layer.GetNameStr()),
+                                           CHECK_LOCATION());
     }
 
     workloadFactory = it->second.first.get();
 
-    BOOST_ASSERT_MSG(workloadFactory, "No workload factory");
+    ARMNN_ASSERT_MSG(workloadFactory, "No workload factory");
 
     std::string reasonIfUnsupported;
-    BOOST_ASSERT_MSG(IWorkloadFactory::IsLayerSupported(layer, {}, reasonIfUnsupported),
+    ARMNN_ASSERT_MSG(IWorkloadFactory::IsLayerSupported(layer,
+                                                        {},
+                                                        reasonIfUnsupported,
+                                                        m_OptimizedNetwork->GetModelOptions()),
         "Factory does not support layer");
-    boost::ignore_unused(reasonIfUnsupported);
+    IgnoreUnused(reasonIfUnsupported);
     return *workloadFactory;
 }
 
@@ -354,8 +408,7 @@ static const TensorPin& GetTensorPin(LayerBindingId id,
     }
     else
     {
-        throw InvalidArgumentException(boost::str(
-            boost::format("No tensor supplied for %1% %2%") % bindingPointDesc % id));
+        throw InvalidArgumentException(fmt::format("No tensor supplied for {0} {1}", bindingPointDesc, id));
     }
 }
 
@@ -412,8 +465,6 @@ private:
 Status LoadedNetwork::EnqueueWorkload(const InputTensors& inputTensors,
                                       const OutputTensors& outputTensors)
 {
-    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "EnqueueWorkload");
-
     const Graph& graph = m_OptimizedNetwork->GetGraph();
 
     // Walk graph to determine the order of execution.
@@ -432,40 +483,50 @@ Status LoadedNetwork::EnqueueWorkload(const InputTensors& inputTensors,
     }
 
     // For each input to the network, call EnqueueInput with the data passed by the user.
-    m_InputQueue.clear();
-    m_InputQueue.reserve(graph.GetNumInputs());
-    for (const BindableLayer* inputLayer : graph.GetInputLayers())
     {
-        const TensorPin& pin = workloadData.GetInputTensorPin(inputLayer->GetBindingId());
-        EnqueueInput(*inputLayer, pin.GetTensorHandle(), pin.GetTensorInfo());
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "PrepareInputs");
+        m_InputQueue.clear();
+        m_InputQueue.reserve(graph.GetNumInputs());
+        for (const BindableLayer* inputLayer : graph.GetInputLayers())
+        {
+            const TensorPin& pin = workloadData.GetInputTensorPin(inputLayer->GetBindingId());
+            EnqueueInput(*inputLayer, pin.GetTensorHandle(), pin.GetTensorInfo());
+        }
     }
 
     // For each output to the network, call EnqueueOutput with the data passed by the user.
-    m_OutputQueue.clear();
-    m_OutputQueue.reserve(graph.GetNumOutputs());
-    for (const BindableLayer* outputLayer : graph.GetOutputLayers())
     {
-        const TensorPin& pin = workloadData.GetOutputTensorPin(outputLayer->GetBindingId());
-        EnqueueOutput(*outputLayer, pin.GetTensorHandle(), pin.GetTensorInfo());
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "PrepareOutputs");
+        m_OutputQueue.clear();
+        m_OutputQueue.reserve(graph.GetNumOutputs());
+        for (const BindableLayer* outputLayer : graph.GetOutputLayers())
+        {
+            const TensorPin& pin = workloadData.GetOutputTensorPin(outputLayer->GetBindingId());
+            EnqueueOutput(*outputLayer, pin.GetTensorHandle(), pin.GetTensorInfo());
+        }
     }
 
-    std::unique_ptr<TimelineUtilityMethods> timelineUtils = TimelineUtilityMethods::GetTimelineUtils();
-    ProfilingGuid inferenceGuid = ProfilingService::Instance().NextGuid();
+    std::unique_ptr<TimelineUtilityMethods> timelineUtils =
+                        TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
+    ProfilingGuid inferenceGuid = m_ProfilingService.GetNextGuid();
     if (timelineUtils)
     {
         // Add inference timeline trace if profiling is enabled.
         ProfilingGuid networkGuid = m_OptimizedNetwork->GetGuid();
         timelineUtils->CreateTypedEntity(inferenceGuid, LabelsAndEventClasses::INFERENCE_GUID);
-        timelineUtils->CreateRelationship(ProfilingRelationshipType::RetentionLink, networkGuid, inferenceGuid);
+        timelineUtils->CreateRelationship(ProfilingRelationshipType::RetentionLink,
+                                          networkGuid,
+                                          inferenceGuid,
+                                          LabelsAndEventClasses::EXECUTION_OF_GUID);
         timelineUtils->RecordEvent(inferenceGuid, LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS);
     }
 
     bool executionSucceeded = true;
 
     {
-        if (profiling::ProfilingService::Instance().IsProfilingEnabled())
+        if (m_ProfilingService.IsProfilingEnabled())
         {
-            profiling::ProfilingService::Instance().IncrementCounterValue(armnn::profiling::INFERENCES_RUN);
+            m_ProfilingService.IncrementCounterValue(armnn::profiling::INFERENCES_RUN);
         }
         ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "Execute");
         ARMNN_SCOPED_HEAP_PROFILING("Executing");
@@ -499,20 +560,22 @@ void LoadedNetwork::EnqueueInput(const BindableLayer& layer, ITensorHandle* tens
     inputQueueDescriptor.m_Inputs.push_back(tensorHandle);
     info.m_InputTensorInfos.push_back(tensorInfo);
 
-    BOOST_ASSERT_MSG(layer.GetNumOutputSlots() == 1, "Can only handle Input Layer with one output");
+    ARMNN_ASSERT_MSG(layer.GetNumOutputSlots() == 1, "Can only handle Input Layer with one output");
     const OutputHandler& handler = layer.GetOutputHandler();
     const TensorInfo& outputTensorInfo = handler.GetTensorInfo();
     ITensorHandle* outputTensorHandle = handler.GetData();
-    BOOST_ASSERT_MSG(outputTensorHandle != nullptr,
+    ARMNN_ASSERT_MSG(outputTensorHandle != nullptr,
                      "Data should have been allocated.");
     inputQueueDescriptor.m_Outputs.push_back(outputTensorHandle);
     info.m_OutputTensorInfos.push_back(outputTensorInfo);
 
     MemorySourceFlags importFlags = outputTensorHandle->GetImportFlags();
+    bool needMemCopy = true;
     if (m_IsImportEnabled)  // Try import the input tensor
     {
         if(CheckFlag(importFlags, MemorySource::Malloc) )
         {
+            needMemCopy = false;
             // This assumes a CPU Tensor handle
             void* mem = tensorHandle->Map(false);
             if (outputTensorHandle->Import(mem, MemorySource::Malloc))
@@ -523,19 +586,16 @@ void LoadedNetwork::EnqueueInput(const BindableLayer& layer, ITensorHandle* tens
             tensorHandle->Unmap();
             throw MemoryImportException("EnqueueInput: Memory Import failed");
         }
-        else
-        {
-            throw MemoryImportException("EnqueueInput: Memory Import failed, backend does not support Import");
-        }
     }
-    else
+    if (needMemCopy)
     {
         // Create a mem copy workload for input since we did not import
         std::unique_ptr<IWorkload> inputWorkload = std::make_unique<CopyMemGenericWorkload>(inputQueueDescriptor, info);
 
-        BOOST_ASSERT_MSG(inputWorkload, "No input workload created");
+        ARMNN_ASSERT_MSG(inputWorkload, "No input workload created");
 
-        std::unique_ptr<TimelineUtilityMethods> timelineUtils = TimelineUtilityMethods::GetTimelineUtils();
+        std::unique_ptr<TimelineUtilityMethods> timelineUtils =
+                            TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
         if (timelineUtils)
         {
             // Add Input Workload to the post-optimisation network structure
@@ -565,14 +625,14 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
     outputQueueDescriptor.m_Outputs.push_back(tensorHandle);
     info.m_OutputTensorInfos.push_back(tensorInfo);
 
-    BOOST_ASSERT_MSG(layer.GetNumInputSlots() == 1, "Output Layer should have exactly one input.");
+    ARMNN_ASSERT_MSG(layer.GetNumInputSlots() == 1, "Output Layer should have exactly one input.");
 
     // Gets the output handler from the previous node.
     const OutputHandler& outputHandler = layer.GetInputSlots()[0].GetConnectedOutputSlot()->GetOutputHandler();
 
     const TensorInfo& inputTensorInfo = outputHandler.GetTensorInfo();
     ITensorHandle* inputTensorHandle = outputHandler.GetData();
-    BOOST_ASSERT_MSG(inputTensorHandle != nullptr, "Data should have been allocated.");
+    ARMNN_ASSERT_MSG(inputTensorHandle != nullptr, "Data should have been allocated.");
 
     // Try import the output tensor.
     // Note: We can only import the output pointer if all of the following  hold true:
@@ -581,6 +641,7 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
     // c) There is only one connection to the OutputSlot and it is to an OutputLayer.
     // d) The output pointer is allocated via malloc. (Other types will be supported in a later release)
     // e) m_IsExportEnabled must be set to true
+    bool needMemCopy = true;
     if (m_IsExportEnabled && (layer.GetInputSlots()[0].GetConnectedOutputSlot()->GetNumConnections() == 1))
     {
         if(layer.GetInputSlots()[0].GetConnectedOutputSlot()->GetOwningLayer().GetType() != LayerType::Input)
@@ -588,6 +649,7 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
             MemorySourceFlags importFlags = inputTensorHandle->GetImportFlags();
             if (CheckFlag(importFlags, MemorySource::Malloc))
             {
+                needMemCopy = false;
                 void *mem = tensorHandle->Map(false);
                 bool importOk = inputTensorHandle->Import(mem, MemorySource::Malloc);
                 tensorHandle->Unmap();
@@ -599,7 +661,7 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
                     syncDesc.m_Inputs.push_back(inputTensorHandle);
                     info.m_InputTensorInfos.push_back(inputTensorInfo);
                     auto syncWorkload = std::make_unique<SyncMemGenericWorkload>(syncDesc, info);
-                    BOOST_ASSERT_MSG(syncWorkload, "No sync workload created");
+                    ARMNN_ASSERT_MSG(syncWorkload, "No sync workload created");
                     m_OutputQueue.push_back(move(syncWorkload));
                 }
                 else
@@ -607,17 +669,9 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
                     throw MemoryExportException("EnqueueOutput: Memory Export failed");
                 }
             }
-            else
-            {
-                throw MemoryExportException("EnqueueOutput: Memory Export failed, backend does not support Export");
-            }
-        }
-        else
-        {
-            throw MemoryExportException("EnqueueOutput: Memory Export failed, attempting to export Input Layer");
         }
     }
-    else
+    if (needMemCopy)
     {
         // If we got here then we didn't export the memory, so add an output workload which performs a memcopy.
         outputQueueDescriptor.m_Inputs.push_back(inputTensorHandle);
@@ -625,9 +679,10 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
 
         std::unique_ptr<IWorkload> outputWorkload =
             std::make_unique<CopyMemGenericWorkload>(outputQueueDescriptor, info);
-        BOOST_ASSERT_MSG(outputWorkload, "No output workload created");
+        ARMNN_ASSERT_MSG(outputWorkload, "No output workload created");
 
-        std::unique_ptr<TimelineUtilityMethods> timelineUtils = TimelineUtilityMethods::GetTimelineUtils();
+        std::unique_ptr<TimelineUtilityMethods> timelineUtils =
+            TimelineUtilityMethods::GetTimelineUtils(m_ProfilingService);
         if (timelineUtils)
         {
             // Add Output Workload to the post-optimisation network structure
@@ -639,8 +694,13 @@ void LoadedNetwork::EnqueueOutput(const BindableLayer& layer, ITensorHandle* ten
     }
 }
 
-void LoadedNetwork::AllocateWorkingMemory()
+void LoadedNetwork::AllocateWorkingMemory(std::lock_guard<std::mutex>& lock)
 {
+    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "Working Memory Allocation");
+
+    // this unused parameter makes sure we can only call this function with a valid lock
+    IgnoreUnused(lock);
+
     if (m_IsWorkingMemAllocated)
     {
         return;
@@ -691,49 +751,29 @@ bool LoadedNetwork::Execute(std::unique_ptr<TimelineUtilityMethods>& timelineUti
     try
     {
         std::lock_guard<std::mutex> lockGuard(m_WorkingMemMutex);
-        AllocateWorkingMemory();
+        AllocateWorkingMemory(lockGuard);
 
         ProfilingDynamicGuid workloadInferenceID(0);
-        for (auto& input : m_InputQueue)
+        auto ExecuteQueue = [&timelineUtils, &workloadInferenceID, &inferenceGuid](WorkloadQueue& queue)
         {
-            if(timelineUtils)
+            for (auto& workload : queue)
             {
-                workloadInferenceID = timelineUtils->RecordWorkloadInferenceAndStartOfLifeEvent(input->GetGuid(),
-                                                                                                inferenceGuid);
+                if(timelineUtils)
+                {
+                    workloadInferenceID = timelineUtils->RecordWorkloadInferenceAndStartOfLifeEvent(workload->GetGuid(),
+                                                                                                    inferenceGuid);
+                }
+                workload->Execute();
+                if(timelineUtils)
+                {
+                    timelineUtils->RecordEndOfLifeEvent(workloadInferenceID);
+                }
             }
-            input->Execute();
-            if(timelineUtils)
-            {
-                timelineUtils->RecordEndOfLifeEvent(workloadInferenceID);
-            }
-        }
+        };
 
-        for (auto& workload : m_WorkloadQueue)
-        {
-            if(timelineUtils)
-            {
-                workloadInferenceID = timelineUtils->RecordWorkloadInferenceAndStartOfLifeEvent(workload->GetGuid(),
-                                                                                                inferenceGuid);
-            }
-            workload->Execute();
-            if(timelineUtils)
-            {
-                timelineUtils->RecordEndOfLifeEvent(workloadInferenceID);
-            }
-        }
-        for (auto& output: m_OutputQueue)
-        {
-            if(timelineUtils)
-            {
-                workloadInferenceID = timelineUtils->RecordWorkloadInferenceAndStartOfLifeEvent(output->GetGuid(),
-                                                                                                inferenceGuid);
-            }
-            output->Execute();
-            if(timelineUtils)
-            {
-                timelineUtils->RecordEndOfLifeEvent(workloadInferenceID);
-            }
-        }
+        ExecuteQueue(m_InputQueue);
+        ExecuteQueue(m_WorkloadQueue);
+        ExecuteQueue(m_OutputQueue);
     }
     catch (const RuntimeException& error)
     {

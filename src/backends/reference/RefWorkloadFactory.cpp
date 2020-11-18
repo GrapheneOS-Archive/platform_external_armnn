@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -7,6 +7,7 @@
 #include <backendsCommon/MemCopyWorkload.hpp>
 #include <backendsCommon/MemImportWorkload.hpp>
 #include <backendsCommon/MakeWorkloadHelper.hpp>
+#include <reference/workloads/RefFillWorkload.hpp>
 #include "RefWorkloadFactory.hpp"
 #include "RefBackendId.hpp"
 #include "workloads/RefWorkloads.hpp"
@@ -48,6 +49,11 @@ bool IsDataType(const WorkloadInfo& info)
 bool IsSigned32(const WorkloadInfo& info)
 {
     return IsDataType<DataType::Signed32>(info);
+}
+
+bool IsBFloat16(const WorkloadInfo& info)
+{
+    return IsDataType<DataType::BFloat16>(info);
 }
 
 bool IsFloat16(const WorkloadInfo& info)
@@ -97,12 +103,20 @@ bool RefWorkloadFactory::IsLayerSupported(const Layer& layer,
     return IWorkloadFactory::IsLayerSupported(s_Id, layer, dataType, outReasonIfUnsupported);
 }
 
+bool RefWorkloadFactory::IsLayerSupported(const IConnectableLayer& layer,
+                                          Optional<DataType> dataType,
+                                          std::string& outReasonIfUnsupported,
+                                          const ModelOptions& modelOptions)
+{
+    return IWorkloadFactory::IsLayerSupported(s_Id, layer, dataType, outReasonIfUnsupported, modelOptions);
+}
+
 std::unique_ptr<ITensorHandle> RefWorkloadFactory::CreateTensorHandle(const TensorInfo& tensorInfo,
                                                                       const bool isMemoryManaged) const
 {
     // For Ref it is okay to make the TensorHandle memory managed as it can also store a pointer
     // to unmanaged memory. This also ensures memory alignment.
-    boost::ignore_unused(isMemoryManaged);
+    IgnoreUnused(isMemoryManaged);
     return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
 }
 
@@ -112,14 +126,14 @@ std::unique_ptr<ITensorHandle> RefWorkloadFactory::CreateTensorHandle(const Tens
 {
     // For Ref it is okay to make the TensorHandle memory managed as it can also store a pointer
     // to unmanaged memory. This also ensures memory alignment.
-    boost::ignore_unused(isMemoryManaged, dataLayout);
+    IgnoreUnused(isMemoryManaged, dataLayout);
     return std::make_unique<RefTensorHandle>(tensorInfo, m_MemoryManager);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateAbs(const AbsQueueDescriptor& descriptor,
                                                          const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     ElementwiseUnaryQueueDescriptor elementwiseUnaryDescriptor;
     elementwiseUnaryDescriptor.m_Parameters.m_Operation = UnaryOperation::Abs;
 
@@ -135,7 +149,14 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateActivation(const Activation
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateAddition(const AdditionQueueDescriptor& descriptor,
                                                               const WorkloadInfo& info) const
 {
-    return std::make_unique<RefAdditionWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefAdditionWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefAdditionWorkload<float>>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateArgMinMax(const ArgMinMaxQueueDescriptor& descriptor,
@@ -175,11 +196,25 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConstant(const ConstantQueu
     return std::make_unique<RefConstantWorkload>(descriptor, info);
 }
 
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConvertBf16ToFp32(
+    const ConvertBf16ToFp32QueueDescriptor& descriptor,
+    const WorkloadInfo& info) const
+{
+    return std::make_unique<RefConvertBf16ToFp32Workload>(descriptor, info);
+}
+
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConvertFp16ToFp32(
     const ConvertFp16ToFp32QueueDescriptor& descriptor,
     const WorkloadInfo& info) const
 {
     return std::make_unique<RefConvertFp16ToFp32Workload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConvertFp32ToBf16(
+    const ConvertFp32ToBf16QueueDescriptor& descriptor,
+    const WorkloadInfo& info) const
+{
+    return std::make_unique<RefConvertFp32ToBf16Workload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConvertFp32ToFp16(
@@ -198,6 +233,10 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateConvolution2d(const Convolu
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateDebug(const DebugQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const
 {
+    if (IsBFloat16(info))
+    {
+        return std::make_unique<RefDebugBFloat16Workload>(descriptor, info);
+    }
     if (IsFloat16(info))
     {
         return std::make_unique<RefDebugFloat16Workload>(descriptor, info);
@@ -255,7 +294,14 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateDetectionPostProcess(
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateDivision(const DivisionQueueDescriptor& descriptor,
                                                               const WorkloadInfo& info) const
 {
-    return std::make_unique<RefDivisionWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefDivisionWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefDivisionWorkload<float>>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateElementwiseUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
@@ -267,24 +313,36 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateElementwiseUnary(const Elem
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateEqual(const EqualQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     ComparisonQueueDescriptor comparisonDescriptor;
     comparisonDescriptor.m_Parameters.m_Operation = ComparisonOperation::Equal;
 
     return CreateComparison(comparisonDescriptor, info);
 }
 
-std::unique_ptr<IWorkload> RefWorkloadFactory::CreateFakeQuantization(
-    const FakeQuantizationQueueDescriptor& descriptor,
-    const WorkloadInfo& info) const
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateFakeQuantization(const FakeQuantizationQueueDescriptor& descriptor,
+                                                                      const WorkloadInfo& info) const
 {
     return MakeWorkload<RefFakeQuantizationFloat32Workload, NullWorkload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateFill(const FillQueueDescriptor& descriptor,
+                                                          const WorkloadInfo& info) const
+{
+    return std::make_unique<RefFillWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateFloor(const FloorQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const
 {
-    return std::make_unique<RefFloorWorkload>(descriptor, info);
+    if(IsQuantizedType(info.m_InputTensorInfos[0].GetDataType()))
+    {
+        return nullptr;
+    }
+    else
+    {
+        return std::make_unique<RefFloorWorkload>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateFullyConnected(
@@ -303,7 +361,7 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateGather(const GatherQueueDes
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateGreater(const GreaterQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     ComparisonQueueDescriptor comparisonDescriptor;
     comparisonDescriptor.m_Parameters.m_Operation = ComparisonOperation::Greater;
 
@@ -343,6 +401,19 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateL2Normalization(const L2Nor
     return std::make_unique<RefL2NormalizationWorkload>(descriptor, info);
 }
 
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateLogicalBinary(const LogicalBinaryQueueDescriptor& descriptor,
+                                                                   const WorkloadInfo& info) const
+{
+    return std::make_unique<RefLogicalBinaryWorkload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateLogicalUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
+                                                                  const WorkloadInfo& info) const
+{
+    return std::make_unique<RefLogicalUnaryWorkload>(descriptor, info);
+}
+
+
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
                                                                 const WorkloadInfo& info) const
 {
@@ -358,7 +429,14 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateLstm(const LstmQueueDescrip
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateMaximum(const MaximumQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info) const
 {
-    return std::make_unique<RefMaximumWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefMaximumWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefMaximumWorkload<float>>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateMean(const MeanQueueDescriptor& descriptor,
@@ -396,13 +474,27 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateMerger(const MergerQueueDes
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateMinimum(const MinimumQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info) const
 {
-    return std::make_unique<RefMinimumWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefMinimumWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefMinimumWorkload<float>>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateMultiplication(const MultiplicationQueueDescriptor& descriptor,
                                                                     const WorkloadInfo& info) const
 {
-    return std::make_unique<RefMultiplicationWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefMultiplicationWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefMultiplicationWorkload<float>>(descriptor, info);
+    }
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateNormalization(const NormalizationQueueDescriptor& descriptor,
@@ -433,15 +525,7 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateOutput(const OutputQueueDes
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreatePad(const PadQueueDescriptor& descriptor,
                                                          const WorkloadInfo& info) const
 {
-    if (IsQSymmS16(info))
-    {
-        return std::make_unique<RefPadQSymm16Workload>(descriptor, info);
-    }
-    else if (IsFloat16(info))
-    {
-        return std::make_unique<RefPadFloat16Workload>(descriptor, info);
-    }
-    return MakeWorkload<RefPadFloat32Workload, RefPadQAsymm8Workload>(descriptor, info);
+    return std::make_unique<RefPadWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreatePermute(const PermuteQueueDescriptor& descriptor,
@@ -450,6 +534,14 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreatePermute(const PermuteQueueD
     if (IsQSymmS16(info))
     {
         return std::make_unique<RefPermuteQSymm16Workload>(descriptor, info);
+    }
+    else if (IsBFloat16(info))
+    {
+        return std::make_unique<RefPermuteBFloat16Workload>(descriptor, info);
+    }
+    else if (IsQAsymmS8(info))
+    {
+        return std::make_unique<RefPermuteQAsymmS8Workload>(descriptor, info);
     }
     return MakeWorkloadHelper<RefPermuteFloat16Workload, RefPermuteFloat32Workload, RefPermuteQAsymm8Workload,
         NullWorkload, NullWorkload, NullWorkload>(descriptor, info);
@@ -473,10 +565,22 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreatePrelu(const PreluQueueDescr
     return std::make_unique<RefPreluWorkload>(descriptor, info);
 }
 
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateQLstm(const QLstmQueueDescriptor& descriptor,
+                                                           const WorkloadInfo& info) const
+{
+    return std::make_unique<RefQLstmWorkload>(descriptor, info);
+}
+
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateQuantize(const QuantizeQueueDescriptor& descriptor,
                                                               const WorkloadInfo& info) const
 {
     return std::make_unique<RefQuantizeWorkload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateRank(const RankQueueDescriptor& descriptor,
+                                                          const WorkloadInfo& info) const
+{
+    return std::make_unique<RefRankWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateReshape(const ReshapeQueueDescriptor& descriptor,
@@ -506,7 +610,7 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateResizeBilinear(const Resize
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateRsqrt(const RsqrtQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     ElementwiseUnaryQueueDescriptor elementwiseUnaryDescriptor;
     elementwiseUnaryDescriptor.m_Parameters.m_Operation = UnaryOperation::Rsqrt;
 
@@ -558,7 +662,33 @@ std::unique_ptr<IWorkload> RefWorkloadFactory::CreateStridedSlice(const StridedS
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateSubtraction(const SubtractionQueueDescriptor& descriptor,
                                                                  const WorkloadInfo& info) const
 {
-    return std::make_unique<RefSubtractionWorkload>(descriptor, info);
+    if (info.m_InputTensorInfos[0].GetDataType() == armnn::DataType::Signed32)
+    {
+        return std::make_unique<RefSubtractionWorkload<int32_t>>(descriptor, info);
+    }
+    else
+    {
+        return std::make_unique<RefSubtractionWorkload<float>>(descriptor, info);
+    }
+}
+
+std::unique_ptr<IWorkload> RefWorkloadFactory::CreateTranspose(const TransposeQueueDescriptor& descriptor,
+                                                               const WorkloadInfo& info) const
+{
+    if (IsQSymmS16(info))
+    {
+        return std::make_unique<RefTransposeQSymm16Workload>(descriptor, info);
+    }
+    else if (IsBFloat16(info))
+    {
+        return std::make_unique<RefTransposeBFloat16Workload>(descriptor, info);
+    }
+    else if (IsQAsymmS8(info))
+    {
+        return std::make_unique<RefTransposeQAsymmS8Workload>(descriptor, info);
+    }
+    return MakeWorkloadHelper<RefTransposeFloat16Workload, RefTransposeFloat32Workload, RefTransposeQAsymm8Workload,
+            NullWorkload, NullWorkload, NullWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> RefWorkloadFactory::CreateTransposeConvolution2d(

@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -9,11 +9,12 @@
 
 #include <armnn/Tensor.hpp>
 #include <armnn/Types.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <reference/RefTensorHandle.hpp>
 
+#include <BFloat16.hpp>
 #include <Half.hpp>
-#include <boost/polymorphic_cast.hpp>
 
 namespace armnn
 {
@@ -26,7 +27,7 @@ inline const TensorInfo& GetTensorInfo(const ITensorHandle* tensorHandle)
 {
     // We know that reference workloads use RefTensorHandles for inputs and outputs
     const RefTensorHandle* refTensorHandle =
-        boost::polymorphic_downcast<const RefTensorHandle*>(tensorHandle);
+        PolymorphicDowncast<const RefTensorHandle*>(tensorHandle);
     return refTensorHandle->GetTensorInfo();
 }
 
@@ -66,6 +67,18 @@ template <typename PayloadType>
 Half* GetOutputTensorDataHalf(unsigned int idx, const PayloadType& data)
 {
     return GetOutputTensorData<Half>(idx, data);
+}
+
+template <typename PayloadType>
+const BFloat16* GetInputTensorDataBFloat16(unsigned int idx, const PayloadType& data)
+{
+    return GetInputTensorData<BFloat16>(idx, data);
+}
+
+template <typename PayloadType>
+BFloat16* GetOutputTensorDataBFloat16(unsigned int idx, const PayloadType& data)
+{
+    return GetOutputTensorData<BFloat16>(idx, data);
 }
 
 ////////////////////////////////////////////

@@ -1,14 +1,18 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ClWorkloadFactory.hpp"
 #include "ClBackendId.hpp"
+#include "ClBackendModelContext.hpp"
 
 #include <Layer.hpp>
 
 #include <armnn/Exceptions.hpp>
 #include <armnn/Utils.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <backendsCommon/MakeWorkloadHelper.hpp>
@@ -23,10 +27,6 @@
 #include <arm_compute/runtime/CL/CLBufferAllocator.h>
 #include <arm_compute/runtime/CL/CLScheduler.h>
 
-#include <boost/core/ignore_unused.hpp>
-#include <boost/polymorphic_cast.hpp>
-#include <boost/format.hpp>
-
 namespace armnn
 {
 
@@ -40,6 +40,14 @@ bool ClWorkloadFactory::IsLayerSupported(const Layer& layer,
                                          std::string& outReasonIfUnsupported)
 {
     return IWorkloadFactory::IsLayerSupported(s_Id, layer, dataType, outReasonIfUnsupported);
+}
+
+bool ClWorkloadFactory::IsLayerSupported(const IConnectableLayer& layer,
+                                         Optional<DataType> dataType,
+                                         std::string& outReasonIfUnsupported,
+                                         const ModelOptions& modelOptions)
+{
+    return IWorkloadFactory::IsLayerSupported(s_Id, layer, dataType, outReasonIfUnsupported, modelOptions);
 }
 
 const BackendId& ClWorkloadFactory::GetBackendId() const
@@ -78,14 +86,20 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::MakeWorkload(const QueueDescriptor
 }
 
 ClWorkloadFactory::ClWorkloadFactory(const std::shared_ptr<ClMemoryManager>& memoryManager)
-    : m_MemoryManager(memoryManager)
+    : m_MemoryManager(memoryManager), m_ModelContextPtr(IBackendInternal::IBackendSpecificModelContextPtr{})
+{
+}
+
+ClWorkloadFactory::ClWorkloadFactory(const std::shared_ptr<ClMemoryManager>& memoryManager,
+                                     const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr)
+    : m_MemoryManager(memoryManager), m_ModelContextPtr(modelContextPtr)
 {
 }
 
 std::unique_ptr<ITensorHandle> ClWorkloadFactory::CreateTensorHandle(const TensorInfo& tensorInfo,
                                                                      const bool IsMemoryManaged) const
 {
-    boost::ignore_unused(IsMemoryManaged);
+    IgnoreUnused(IsMemoryManaged);
     std::unique_ptr<ClTensorHandle> tensorHandle = std::make_unique<ClTensorHandle>(tensorInfo);
     tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
 
@@ -96,7 +110,7 @@ std::unique_ptr<ITensorHandle> ClWorkloadFactory::CreateTensorHandle(const Tenso
                                                                      DataLayout dataLayout,
                                                                      const bool IsMemoryManaged) const
 {
-    boost::ignore_unused(IsMemoryManaged);
+    IgnoreUnused(IsMemoryManaged);
     std::unique_ptr<ClTensorHandle> tensorHandle = std::make_unique<ClTensorHandle>(tensorInfo, dataLayout);
     tensorHandle->SetMemoryGroup(m_MemoryManager->GetInterLayerMemoryGroup());
 
@@ -115,7 +129,7 @@ std::unique_ptr<ITensorHandle> ClWorkloadFactory::CreateSubTensorHandle(ITensorH
     {
         // Arm compute indexes tensor coords in reverse order.
         unsigned int revertedIndex = subTensorShape.GetNumDimensions() - i - 1;
-        coords.set(i, boost::numeric_cast<int>(subTensorOrigin[revertedIndex]));
+        coords.set(i, armnn::numeric_cast<int>(subTensorOrigin[revertedIndex]));
     }
 
     const arm_compute::TensorShape parentShape = armcomputetensorutils::BuildArmComputeTensorShape(parent.GetShape());
@@ -125,13 +139,13 @@ std::unique_ptr<ITensorHandle> ClWorkloadFactory::CreateSubTensorHandle(ITensorH
     }
 
     return std::make_unique<ClSubTensorHandle>(
-        boost::polymorphic_downcast<IClTensorHandle*>(&parent), shape, coords);
+        PolymorphicDowncast<IClTensorHandle*>(&parent), shape, coords);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateAbs(const AbsQueueDescriptor& descriptor,
                                                         const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
 
     ElementwiseUnaryQueueDescriptor elementwiseUnaryDescriptor;
     elementwiseUnaryDescriptor.m_Parameters = ElementwiseUnaryDescriptor(UnaryOperation::Abs);
@@ -173,15 +187,7 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateBatchToSpaceNd(const BatchTo
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateComparison(const ComparisonQueueDescriptor& descriptor,
                                                                const WorkloadInfo& info) const
 {
-    if (descriptor.m_Parameters.m_Operation == ComparisonOperation::Greater)
-    {
-        GreaterQueueDescriptor greaterQueueDescriptor;
-        greaterQueueDescriptor.m_Inputs  = descriptor.m_Inputs;
-        greaterQueueDescriptor.m_Outputs = descriptor.m_Outputs;
-
-        return MakeWorkload<ClGreaterFloat32Workload, ClGreaterUint8Workload>(greaterQueueDescriptor, info);
-    }
-    return MakeWorkload<NullWorkload, NullWorkload>(descriptor, info);
+    return MakeWorkload<ClComparisonWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateConcat(const ConcatQueueDescriptor& descriptor,
@@ -213,7 +219,22 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateConvertFp32ToFp16(
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateConvolution2d(const Convolution2dQueueDescriptor& descriptor,
                                                                   const WorkloadInfo& info) const
 {
-    return MakeWorkload<ClConvolution2dWorkload>(descriptor, info, m_MemoryManager->GetIntraLayerManager());
+    bool isFastMathEnabled = false;
+    if (m_ModelContextPtr)
+    {
+        if (m_ModelContextPtr.get() != nullptr)
+        {
+            auto modelOptions = dynamic_cast<ClBackendModelContext*>(m_ModelContextPtr.get());
+            if (modelOptions)
+            {
+                isFastMathEnabled = modelOptions->IsFastMathEnabled();
+            }
+        }
+    }
+    return MakeWorkload<ClConvolution2dWorkload>(descriptor,
+                                                 info,
+                                                 m_MemoryManager->GetIntraLayerManager(),
+                                                 isFastMathEnabled);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateDebug(const DebugQueueDescriptor& descriptor,
@@ -257,34 +278,48 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateDivision(const DivisionQueue
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateElementwiseUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
                                                                      const WorkloadInfo& info) const
 {
-    if (descriptor.m_Parameters.m_Operation == UnaryOperation::Abs)
+    switch(descriptor.m_Parameters.m_Operation)
     {
-        AbsQueueDescriptor absQueueDescriptor;
-        absQueueDescriptor.m_Inputs  = descriptor.m_Inputs;
-        absQueueDescriptor.m_Outputs = descriptor.m_Outputs;
+        case UnaryOperation::Abs:
+             {
+                 AbsQueueDescriptor absQueueDescriptor;
+                 absQueueDescriptor.m_Inputs  = descriptor.m_Inputs;
+                 absQueueDescriptor.m_Outputs = descriptor.m_Outputs;
 
-        return MakeWorkload<ClAbsWorkload>(absQueueDescriptor, info);
-    }
-    else if (descriptor.m_Parameters.m_Operation == UnaryOperation::Rsqrt)
-    {
-        RsqrtQueueDescriptor rsqrtQueueDescriptor;
-        rsqrtQueueDescriptor.m_Inputs  = descriptor.m_Inputs;
-        rsqrtQueueDescriptor.m_Outputs = descriptor.m_Outputs;
+                 return  std::make_unique<ClAbsWorkload>(absQueueDescriptor, info);
+             }
+        case UnaryOperation::Exp:
+            return std::make_unique<ClExpWorkload>(descriptor, info);
+        case UnaryOperation::Neg:
+            return std::make_unique<ClNegWorkload>(descriptor, info);
+        case UnaryOperation::Rsqrt:
+             {
+                 RsqrtQueueDescriptor rsqrtQueueDescriptor;
+                 rsqrtQueueDescriptor.m_Inputs  = descriptor.m_Inputs;
+                 rsqrtQueueDescriptor.m_Outputs = descriptor.m_Outputs;
 
-        return MakeWorkload<ClRsqrtWorkload>(rsqrtQueueDescriptor, info);
+                 return std::make_unique<ClRsqrtWorkload>(rsqrtQueueDescriptor, info);
+             }
+        default:
+            return nullptr;
     }
-    return MakeWorkload<NullWorkload, NullWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateEqual(const EqualQueueDescriptor& descriptor,
                                                           const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
 
     ComparisonQueueDescriptor comparisonDescriptor;
     comparisonDescriptor.m_Parameters = ComparisonDescriptor(ComparisonOperation::Equal);
 
     return CreateComparison(comparisonDescriptor, info);
+}
+
+std::unique_ptr<IWorkload> ClWorkloadFactory::CreateFill(const FillQueueDescriptor& descriptor,
+                                                         const WorkloadInfo& info) const
+{
+    return std::make_unique<ClFillWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateFloor(const FloorQueueDescriptor& descriptor,
@@ -302,13 +337,13 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateFullyConnected(const FullyCo
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateGather(const GatherQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const
 {
-    return MakeWorkload<NullWorkload, NullWorkload>(descriptor, info);
+    return MakeWorkload<ClGatherWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateGreater(const GreaterQueueDescriptor& descriptor,
                                                             const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
 
     ComparisonQueueDescriptor comparisonDescriptor;
     comparisonDescriptor.m_Parameters = ComparisonDescriptor(ComparisonOperation::Greater);
@@ -333,6 +368,12 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateL2Normalization(const L2Norm
                                                                     const WorkloadInfo& info) const
 {
     return MakeWorkload<ClL2NormalizationFloatWorkload, NullWorkload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> ClWorkloadFactory::CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
+                                                               const WorkloadInfo& info) const
+{
+    return MakeWorkload<ClLogSoftmaxWorkload>(descriptor, info, m_MemoryManager->GetIntraLayerManager());
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateLstm(const LstmQueueDescriptor& descriptor,
@@ -435,6 +476,12 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreatePrelu(const PreluQueueDescri
     return MakeWorkload<ClPreluWorkload>(descriptor, info);
 }
 
+std::unique_ptr<IWorkload> ClWorkloadFactory::CreateQLstm(const QLstmQueueDescriptor& descriptor,
+                                                          const WorkloadInfo& info) const
+{
+    return std::make_unique<ClQLstmWorkload>(descriptor, info);
+}
+
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateQuantize(const QuantizeQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info) const
 {
@@ -477,7 +524,7 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateResizeBilinear(const ResizeB
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateRsqrt(const RsqrtQueueDescriptor& descriptor,
                                                           const WorkloadInfo& info) const
 {
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
 
     ElementwiseUnaryQueueDescriptor elementwiseUnaryDescriptor;
     elementwiseUnaryDescriptor.m_Parameters = ElementwiseUnaryDescriptor(UnaryOperation::Rsqrt);
@@ -494,8 +541,7 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateSlice(const SliceQueueDescri
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateSoftmax(const SoftmaxQueueDescriptor& descriptor,
                                                             const WorkloadInfo& info) const
 {
-    return MakeWorkload<ClSoftmaxFloatWorkload, ClSoftmaxUint8Workload>(descriptor, info,
-                                                                        m_MemoryManager->GetIntraLayerManager());
+    return std::make_unique<ClSoftmaxWorkload>(descriptor, info, m_MemoryManager->GetIntraLayerManager());
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateSpaceToBatchNd(const SpaceToBatchNdQueueDescriptor& descriptor,
@@ -532,6 +578,12 @@ std::unique_ptr<IWorkload> ClWorkloadFactory::CreateSubtraction(const Subtractio
                                                                 const WorkloadInfo& info) const
 {
     return MakeWorkload<ClSubtractionWorkload>(descriptor, info);
+}
+
+std::unique_ptr<IWorkload> ClWorkloadFactory::CreateTranspose(const TransposeQueueDescriptor& descriptor,
+                                                              const WorkloadInfo& info) const
+{
+    return MakeWorkload<ClTransposeWorkload>(descriptor, info);
 }
 
 std::unique_ptr<IWorkload> ClWorkloadFactory::CreateTransposeConvolution2d(

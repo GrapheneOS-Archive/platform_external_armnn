@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,6 +24,7 @@ public:
     using NormalizationDescriptorPtr = const armnnSerializer::NormalizationDescriptor *;
     using LstmDescriptorPtr = const armnnSerializer::LstmDescriptor *;
     using LstmInputParamsPtr = const armnnSerializer::LstmInputParams *;
+    using QLstmDescriptorPtr = const armnnSerializer::QLstmDescriptor *;
     using QunatizedLstmInputParamsPtr = const armnnSerializer::QuantizedLstmInputParams *;
     using TensorRawPtrVector = std::vector<TensorRawPtr>;
     using LayerRawPtr = const armnnSerializer::LayerBase *;
@@ -62,6 +63,7 @@ public:
     static armnn::LstmDescriptor GetLstmDescriptor(LstmDescriptorPtr lstmDescriptor);
     static armnn::LstmInputParams GetLstmInputParams(LstmDescriptorPtr lstmDescriptor,
                                                      LstmInputParamsPtr lstmInputParams);
+    static armnn::QLstmDescriptor GetQLstmDescriptor(QLstmDescriptorPtr qLstmDescriptorPtr);
     static armnn::TensorInfo OutputShapeOfReshape(const armnn::TensorInfo & inputTensorInfo,
                                                   const std::vector<uint32_t> & targetDimsIn);
 
@@ -94,12 +96,14 @@ private:
     void ParseDivision(GraphPtr graph, unsigned int layerIndex);
     void ParseElementwiseUnary(GraphPtr graph, unsigned int layerIndex);
     void ParseEqual(GraphPtr graph, unsigned int layerIndex);
+    void ParseFill(GraphPtr graph, unsigned int layerIndex);
     void ParseFloor(GraphPtr graph, unsigned int layerIndex);
     void ParseFullyConnected(GraphPtr graph, unsigned int layerIndex);
     void ParseGather(GraphPtr graph, unsigned int layerIndex);
     void ParseGreater(GraphPtr graph, unsigned int layerIndex);
     void ParseInstanceNormalization(GraphPtr graph, unsigned int layerIndex);
     void ParseL2Normalization(GraphPtr graph, unsigned int layerIndex);
+    void ParseLogicalBinary(GraphPtr graph, unsigned int layerIndex);
     void ParseLogSoftmax(GraphPtr graph, unsigned int layerIndex);
     void ParseMaximum(GraphPtr graph, unsigned int layerIndex);
     void ParseMean(GraphPtr graph, unsigned int layerIndex);
@@ -113,7 +117,9 @@ private:
     void ParsePermute(GraphPtr graph, unsigned int layerIndex);
     void ParsePooling2d(GraphPtr graph, unsigned int layerIndex);
     void ParsePrelu(GraphPtr graph, unsigned int layerIndex);
+    void ParseQLstm(GraphPtr graph, unsigned int layerIndex);
     void ParseQuantize(GraphPtr graph, unsigned int layerIndex);
+    void ParseRank(GraphPtr graph, unsigned int layerIndex);
     void ParseReshape(GraphPtr graph, unsigned int layerIndex);
     void ParseResize(GraphPtr graph, unsigned int layerIndex);
     void ParseResizeBilinear(GraphPtr graph, unsigned int layerIndex);
@@ -128,6 +134,7 @@ private:
     void ParseStridedSlice(GraphPtr graph, unsigned int layerIndex);
     void ParseSubtraction(GraphPtr graph, unsigned int layerIndex);
     void ParseSwitch(GraphPtr graph, unsigned int layerIndex);
+    void ParseTranspose(GraphPtr graph, unsigned int layerIndex);
     void ParseTransposeConvolution2d(GraphPtr graph, unsigned int layerIndex);
 
     void RegisterInputSlots(GraphPtr graph, uint32_t layerIndex,

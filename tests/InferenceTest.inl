@@ -4,13 +4,12 @@
 //
 #include "InferenceTest.hpp"
 
-#include <boost/algorithm/string.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-#include <boost/program_options.hpp>
-#include <boost/filesystem/operations.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include "CxxoptsUtils.hpp"
+
+#include <cxxopts/cxxopts.hpp>
+#include <fmt/format.h>
 
 #include <fstream>
 #include <iostream>
@@ -27,7 +26,7 @@ namespace armnn
 namespace test
 {
 
-using TContainer = boost::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
+using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
 template <typename TTestCaseDatabase, typename TModel>
 ClassifierTestCase<TTestCaseDatabase, TModel>::ClassifierTestCase(
@@ -50,7 +49,7 @@ ClassifierTestCase<TTestCaseDatabase, TModel>::ClassifierTestCase(
 {
 }
 
-struct ClassifierResultProcessor : public boost::static_visitor<>
+struct ClassifierResultProcessor
 {
     using ResultMap = std::map<float,int>;
 
@@ -79,8 +78,8 @@ struct ClassifierResultProcessor : public boost::static_visitor<>
 
     void operator()(const std::vector<int>& values)
     {
-        boost::ignore_unused(values);
-        BOOST_ASSERT_MSG(false, "Non-float predictions output not supported.");
+        IgnoreUnused(values);
+        ARMNN_ASSERT_MSG(false, "Non-float predictions output not supported.");
     }
 
     ResultMap& GetResultMap() { return m_ResultMap; }
@@ -119,7 +118,7 @@ TestCaseResult ClassifierTestCase<TTestCaseDatabase, TModel>::ProcessResult(cons
     const auto testCaseId = this->GetTestCaseId();
 
     ClassifierResultProcessor resultProcessor(m_QuantizationParams.first, m_QuantizationParams.second);
-    boost::apply_visitor(resultProcessor, output);
+    mapbox::util::apply_visitor(resultProcessor, output);
 
     ARMNN_LOG(info) << "= Prediction values for test #" << testCaseId;
     auto it = resultProcessor.GetResultMap().rbegin();
@@ -131,9 +130,9 @@ TestCaseResult ClassifierTestCase<TTestCaseDatabase, TModel>::ProcessResult(cons
     }
 
     unsigned int prediction = 0;
-    boost::apply_visitor([&](auto&& value)
+    mapbox::util::apply_visitor([&](auto&& value)
                          {
-                             prediction = boost::numeric_cast<unsigned int>(
+                             prediction = armnn::numeric_cast<unsigned int>(
                                      std::distance(value.begin(), std::max_element(value.begin(), value.end())));
                          },
                          output);
@@ -183,19 +182,21 @@ ClassifierTestCaseProvider<TDatabase, InferenceModel>::ClassifierTestCaseProvide
 
 template <typename TDatabase, typename InferenceModel>
 void ClassifierTestCaseProvider<TDatabase, InferenceModel>::AddCommandLineOptions(
-    boost::program_options::options_description& options)
+    cxxopts::Options& options, std::vector<std::string>& required)
 {
-    namespace po = boost::program_options;
+    options
+        .allow_unrecognised_options()
+        .add_options()
+            ("validation-file-in",
+             "Reads expected predictions from the given file and confirms they match the actual predictions.",
+             cxxopts::value<std::string>(m_ValidationFileIn)->default_value(""))
+            ("validation-file-out", "Predictions are saved to the given file for later use via --validation-file-in.",
+             cxxopts::value<std::string>(m_ValidationFileOut)->default_value(""))
+            ("d,data-dir", "Path to directory containing test data", cxxopts::value<std::string>(m_DataDir));
 
-    options.add_options()
-        ("validation-file-in", po::value<std::string>(&m_ValidationFileIn)->default_value(""),
-            "Reads expected predictions from the given file and confirms they match the actual predictions.")
-        ("validation-file-out", po::value<std::string>(&m_ValidationFileOut)->default_value(""),
-            "Predictions are saved to the given file for later use via --validation-file-in.")
-        ("data-dir,d", po::value<std::string>(&m_DataDir)->required(),
-            "Path to directory containing test data");
+    required.emplace_back("data-dir"); //add to required arguments to check
 
-    InferenceModel::AddCommandLineOptions(options, m_ModelCommandLineOptions);
+    InferenceModel::AddCommandLineOptions(options, m_ModelCommandLineOptions, required);
 }
 
 template <typename TDatabase, typename InferenceModel>
@@ -248,8 +249,8 @@ ClassifierTestCaseProvider<TDatabase, InferenceModel>::GetTestCase(unsigned int 
 template <typename TDatabase, typename InferenceModel>
 bool ClassifierTestCaseProvider<TDatabase, InferenceModel>::OnInferenceTestFinished()
 {
-    const double accuracy = boost::numeric_cast<double>(m_NumCorrectInferences) /
-        boost::numeric_cast<double>(m_NumInferences);
+    const double accuracy = armnn::numeric_cast<double>(m_NumCorrectInferences) /
+        armnn::numeric_cast<double>(m_NumInferences);
     ARMNN_LOG(info) << std::fixed << std::setprecision(3) << "Overall accuracy: " << accuracy;
 
     // If a validation file was requested as output, the predictions are saved to it.
@@ -291,8 +292,8 @@ void ClassifierTestCaseProvider<TDatabase, InferenceModel>::ReadPredictions()
         }
         else
         {
-            throw armnn::Exception(boost::str(boost::format("Failed to open input validation file: %1%")
-                % m_ValidationFileIn));
+            throw armnn::Exception(fmt::format("Failed to open input validation file: {}"
+                , m_ValidationFileIn));
         }
     }
 }
@@ -360,9 +361,9 @@ int ClassifierInferenceTestMain(int argc,
                                 const armnn::TensorShape* inputTensorShape)
 
 {
-    BOOST_ASSERT(modelFilename);
-    BOOST_ASSERT(inputBindingName);
-    BOOST_ASSERT(outputBindingName);
+    ARMNN_ASSERT(modelFilename);
+    ARMNN_ASSERT(inputBindingName);
+    ARMNN_ASSERT(outputBindingName);
 
     return InferenceTestMain(argc, argv, defaultTestCaseIds,
         [=]

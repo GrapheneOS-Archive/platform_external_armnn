@@ -4,12 +4,9 @@
 //
 
 #include "CommandLineProcessor.hpp"
+#include <Filesystem.hpp>
 
-#define BOOST_FILESYSTEM_NO_DEPRECATED
-
-#include <boost/program_options.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/path.hpp>
+#include <cxxopts/cxxopts.hpp>
 
 namespace armnnQuantizer
 {
@@ -27,13 +24,13 @@ bool ValidateOutputDirectory(std::string& dir)
         dir += "/";
     }
 
-    if (!boost::filesystem::exists(dir))
+    if (!fs::exists(dir))
     {
         std::cerr << "Output directory [" << dir << "] does not exist" << std::endl;
         return false;
     }
 
-    if (!boost::filesystem::is_directory(dir))
+    if (!fs::is_directory(dir))
     {
         std::cerr << "Given output directory [" << dir << "] is not a directory" << std::endl;
         return false;
@@ -44,13 +41,13 @@ bool ValidateOutputDirectory(std::string& dir)
 
 bool ValidateProvidedFile(const std::string& inputFileName)
 {
-    if (!boost::filesystem::exists(inputFileName))
+    if (!fs::exists(inputFileName))
     {
         std::cerr << "Provided file [" << inputFileName << "] does not exist" << std::endl;
         return false;
     }
 
-    if (boost::filesystem::is_directory(inputFileName))
+    if (fs::is_directory(inputFileName))
     {
         std::cerr << "Given file [" << inputFileName << "] is a directory" << std::endl;
         return false;
@@ -67,8 +64,10 @@ bool ValidateQuantizationScheme(const std::string& scheme)
         return false;
     }
 
-    std::vector<std::string> supportedSchemes = {
-        "QAsymm8",
+    std::vector<std::string> supportedSchemes =
+    {
+        "QAsymmS8",
+        "QAsymmU8",
         "QSymm16"
     };
 
@@ -84,51 +83,60 @@ bool ValidateQuantizationScheme(const std::string& scheme)
 
 bool CommandLineProcessor::ProcessCommandLine(int argc, char* argv[])
 {
-    namespace po = boost::program_options;
-
-    po::options_description desc("Options");
     try
     {
-        desc.add_options()
-                ("help,h", "Display help messages")
-                ("infile,f", po::value<std::string>(&m_InputFileName)->required(),
-                             "Input file containing float 32 ArmNN Input Graph")
-                ("scheme,s", po::value<std::string>(&m_QuantizationScheme)->default_value("QAsymm8"),
-                              "Quantization scheme, \"QAsymm8\" or \"QSymm16\", default value QAsymm8")
-                ("csvfile,c", po::value<std::string>(&m_CsvFileName)->default_value(""),
-                             "CSV file containing paths for RAW input tensors")
-                ("preserve-data-type,p", po::bool_switch(&m_PreserveDataType)->default_value(false),
-                              "Preserve the input and output data types")
-                ("outdir,d", po::value<std::string>(&m_OutputDirectory)->required(),
-                             "Directory that output file will be written to")
-                ("outfile,o", po::value<std::string>(&m_OutputFileName)->required(), "ArmNN output file name");
+        cxxopts::Options options("ArmnnQuantizer","Convert a Fp32 ArmNN model to a quantized ArmNN model.");
+
+        options.add_options()
+            ("h,help", "Display help messages")
+            ("f,infile",
+                "Input file containing float 32 ArmNN Input Graph",
+                cxxopts::value<std::string>(m_InputFileName))
+            ("s,scheme",
+                "Quantization scheme,"
+                " \"QAsymmU8\" or \"QAsymmS8\" or \"QSymm16\","
+                " default value QAsymmU8",
+                cxxopts::value<std::string>(m_QuantizationScheme)->default_value("QAsymmU8"))
+            ("c,csvfile",
+                "CSV file containing paths for RAW input tensors",
+                cxxopts::value<std::string>(m_CsvFileName)->default_value(""))
+            ("p,preserve-data-type",
+                "Preserve the input and output data types",
+                cxxopts::value<bool>(m_PreserveDataType)->default_value("false"))
+            ("d,outdir",
+                "Directory that output file will be written to",
+                cxxopts::value<std::string>(m_OutputDirectory))
+            ("o,outfile",
+                "ArmNN output file name",
+                cxxopts::value<std::string>(m_OutputFileName));
+
+        auto result = options.parse(argc, argv);
+
+        if (result.count("help") > 0 || argc <= 1)
+        {
+            std::cout << options.help() << std::endl;
+            return false;
+        }
+
+        // Check for mandatory single options.
+        std::string mandatorySingleParameters[] = { "infile", "outdir", "outfile" };
+        for (auto param : mandatorySingleParameters)
+        {
+            if (result.count(param) != 1)
+            {
+                std::cerr << "Parameter \'--" << param << "\' is required but missing." << std::endl;
+                return false;
+            }
+        }
+    }
+    catch (const cxxopts::OptionException& e)
+    {
+        std::cerr << e.what() << std::endl << std::endl;
+        return false;
     }
     catch (const std::exception& e)
     {
         std::cerr << "Fatal internal error: [" << e.what() << "]" << std::endl;
-        return false;
-    }
-
-    po::variables_map vm;
-
-    try
-    {
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-
-        if (vm.count("help") || argc <= 1)
-        {
-            std::cout << "Convert a Fp32 ArmNN model to a quantized ArmNN model."  << std::endl;
-            std::cout << std::endl;
-            std::cout << desc << std::endl;
-            return false;
-        }
-
-        po::notify(vm);
-    }
-    catch (const po::error& e)
-    {
-        std::cerr << e.what() << std::endl << std::endl;
-        std::cerr << desc << std::endl;
         return false;
     }
 
@@ -150,7 +158,7 @@ bool CommandLineProcessor::ProcessCommandLine(int argc, char* argv[])
         }
         else
         {
-            boost::filesystem::path csvFilePath(m_CsvFileName);
+            fs::path csvFilePath(m_CsvFileName);
             m_CsvFileDirectory = csvFilePath.parent_path().c_str();
         }
 
@@ -166,7 +174,7 @@ bool CommandLineProcessor::ProcessCommandLine(int argc, char* argv[])
     std::string output(m_OutputDirectory);
     output.append(m_OutputFileName);
 
-    if (boost::filesystem::exists(output))
+    if (fs::exists(output))
     {
         std::cerr << "Output file [" << output << "] already exists" << std::endl;
         return false;

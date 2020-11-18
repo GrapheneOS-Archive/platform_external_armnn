@@ -1,10 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClLayerSupport.hpp"
 #include "ClBackendId.hpp"
+#include "ClBackendModelContext.hpp"
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/BackendRegistry.hpp>
@@ -12,7 +13,8 @@
 #include <InternalTypes.hpp>
 #include <LayerSupportCommon.hpp>
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #if defined(ARMCOMPUTECL_ENABLED)
 #include <aclCommon/ArmComputeUtils.hpp>
@@ -23,6 +25,8 @@
 #include "workloads/ClArgMinMaxWorkload.hpp"
 #include "workloads/ClBatchNormalizationFloatWorkload.hpp"
 #include "workloads/ClBatchToSpaceNdWorkload.hpp"
+#include "workloads/ClComparisonWorkload.hpp"
+#include "workloads/ClConstantWorkload.hpp"
 #include "workloads/ClConvertFp16ToFp32Workload.hpp"
 #include "workloads/ClConvertFp32ToFp16Workload.hpp"
 #include "workloads/ClConvolution2dWorkload.hpp"
@@ -30,29 +34,34 @@
 #include "workloads/ClDepthwiseConvolutionWorkload.hpp"
 #include "workloads/ClDequantizeWorkload.hpp"
 #include "workloads/ClDivisionFloatWorkload.hpp"
+#include "workloads/ClExpWorkload.hpp"
+#include "workloads/ClFillWorkload.hpp"
 #include "workloads/ClFloorFloatWorkload.hpp"
 #include "workloads/ClFullyConnectedWorkload.hpp"
-#include "workloads/ClGreaterWorkload.hpp"
+#include "workloads/ClGatherWorkload.hpp"
 #include "workloads/ClInstanceNormalizationWorkload.hpp"
 #include "workloads/ClL2NormalizationFloatWorkload.hpp"
+#include "workloads/ClLogSoftmaxWorkload.hpp"
 #include "workloads/ClLstmFloatWorkload.hpp"
 #include "workloads/ClMaximumWorkload.hpp"
 #include "workloads/ClMeanWorkload.hpp"
 #include "workloads/ClConcatWorkload.hpp"
 #include "workloads/ClMinimumWorkload.hpp"
 #include "workloads/ClMultiplicationWorkload.hpp"
+#include "workloads/ClNegWorkload.hpp"
 #include "workloads/ClNormalizationFloatWorkload.hpp"
 #include "workloads/ClPadWorkload.hpp"
 #include "workloads/ClPermuteWorkload.hpp"
 #include "workloads/ClPooling2dWorkload.hpp"
 #include "workloads/ClPreluWorkload.hpp"
+#include "workloads/ClQLstmWorkload.hpp"
+#include "workloads/ClQuantizedLstmWorkload.hpp"
+#include "workloads/ClQuantizeWorkload.hpp"
 #include "workloads/ClReshapeWorkload.hpp"
 #include "workloads/ClResizeWorkload.hpp"
 #include "workloads/ClRsqrtWorkload.hpp"
-#include "workloads/ClQuantizedLstmWorkload.hpp"
-#include "workloads/ClQuantizeWorkload.hpp"
 #include "workloads/ClSliceWorkload.hpp"
-#include "workloads/ClSoftmaxBaseWorkload.hpp"
+#include "workloads/ClSoftmaxWorkload.hpp"
 #include "workloads/ClSpaceToBatchNdWorkload.hpp"
 #include "workloads/ClSpaceToDepthWorkload.hpp"
 #include "workloads/ClSplitterWorkload.hpp"
@@ -60,9 +69,9 @@
 #include "workloads/ClStridedSliceWorkload.hpp"
 #include "workloads/ClSubtractionWorkload.hpp"
 #include "workloads/ClTransposeConvolution2dWorkload.hpp"
+#include "workloads/ClTransposeWorkload.hpp"
 #endif
 
-using namespace boost;
 
 namespace armnn
 {
@@ -92,7 +101,7 @@ bool IsMatchingStride(uint32_t actualStride)
 template<typename ... Args>
 bool IsClBackendSupported(Optional<std::string&> reasonIfUnsupported, Args... args)
 {
-    boost::ignore_unused(reasonIfUnsupported, (args)...);
+    IgnoreUnused(reasonIfUnsupported, (args)...);
 #if defined(ARMCOMPUTECL_ENABLED)
     return true;
 #else
@@ -149,6 +158,16 @@ bool IsSupportedForDataTypeCl(Optional<std::string&> reasonIfUnsupported,
 }
 } // anonymous namespace
 
+ClLayerSupport::ClLayerSupport(const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr)
+    : m_ModelContextPtr(modelContextPtr)
+{
+}
+
+ClLayerSupport::ClLayerSupport()
+    : m_ModelContextPtr(nullptr)
+{
+}
+
 bool ClLayerSupport::IsAbsSupported(const TensorInfo& input,
                                     const TensorInfo& output,
                                     Optional<std::string&> reasonIfUnsupported) const
@@ -178,7 +197,8 @@ bool ClLayerSupport::IsAdditionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsArgMinMaxSupported(const TensorInfo& input,
@@ -211,7 +231,8 @@ bool ClLayerSupport::IsBatchNormalizationSupported(const TensorInfo& input,
                                    var,
                                    beta,
                                    gamma,
-                                   descriptor);
+                                   descriptor,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsBatchToSpaceNdSupported(const TensorInfo& input,
@@ -232,16 +253,12 @@ bool ClLayerSupport::IsComparisonSupported(const TensorInfo& input0,
                                            const ComparisonDescriptor& descriptor,
                                            Optional<std::string&> reasonIfUnsupported) const
 {
-    if (descriptor.m_Operation == ComparisonOperation::Greater)
-    {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(ClGreaterWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input0,
-                                       input1,
-                                       output);
-    }
-
-    return false;
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClComparisonWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input0,
+                                   input1,
+                                   output,
+                                   descriptor);
 }
 
 bool ClLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> inputs,
@@ -288,10 +305,9 @@ bool ClLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> inpu
 bool ClLayerSupport::IsConstantSupported(const TensorInfo& output,
                                          Optional<std::string&> reasonIfUnsupported) const
 {
-    return IsSupportedForDataTypeCl(reasonIfUnsupported,
-                                    output.GetDataType(),
-                                    &TrueFunc<>,
-                                    &TrueFunc<>);
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClConstantWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   output);
 }
 
 bool ClLayerSupport::IsConvertFp16ToFp32Supported(const TensorInfo& input,
@@ -321,13 +337,30 @@ bool ClLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
                                               const Optional<TensorInfo>& biases,
                                               Optional<std::string&> reasonIfUnsupported) const
 {
+    bool isFastMathEnabled = false;
+#if defined(ARMCOMPUTECL_ENABLED)
+    if (m_ModelContextPtr)
+    {
+        if (m_ModelContextPtr.get() != nullptr)
+        {
+            auto modelOptions = dynamic_cast<ClBackendModelContext*>(m_ModelContextPtr.get());
+            if (modelOptions)
+            {
+                isFastMathEnabled = modelOptions->IsFastMathEnabled();
+            }
+        }
+    }
+#endif
+
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClConvolution2dWorkloadValidate,
                                    reasonIfUnsupported,
                                    input,
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   isFastMathEnabled,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsDequantizeSupported(const TensorInfo& input,
@@ -365,7 +398,8 @@ bool ClLayerSupport::IsDepthwiseConvolutionSupported(const TensorInfo& input,
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsDilatedDepthwiseConvolutionSupported(const TensorInfo& input,
@@ -381,7 +415,8 @@ bool ClLayerSupport::IsDilatedDepthwiseConvolutionSupported(const TensorInfo& in
                                    output,
                                    descriptor,
                                    weights,
-                                   biases);
+                                   biases,
+                                   nullptr);
 }
 
 
@@ -394,7 +429,8 @@ bool ClLayerSupport::IsDivisionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
@@ -402,22 +438,43 @@ bool ClLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
                                                  const ElementwiseUnaryDescriptor& descriptor,
                                                  Optional<std::string&> reasonIfUnsupported) const
 {
-    if (descriptor.m_Operation == UnaryOperation::Abs)
+    switch(descriptor.m_Operation)
     {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(ClAbsWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input,
-                                       output);
+        case UnaryOperation::Abs:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClAbsWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Exp:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClExpWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Neg:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClNegWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Rsqrt:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClRsqrtWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        default:
+            return false;
     }
-    else if (descriptor.m_Operation == UnaryOperation::Rsqrt)
-    {
-        FORWARD_WORKLOAD_VALIDATE_FUNC(ClRsqrtWorkloadValidate,
-                                       reasonIfUnsupported,
-                                       input,
-                                       output);
-    }
+}
 
-    return false;
+bool ClLayerSupport::IsFillSupported(const TensorInfo& input,
+                                     const TensorInfo& output,
+                                     const FillDescriptor& descriptor,
+                                     Optional<std::string&> reasonIfUnsupported) const
+{
+    armnn::IgnoreUnused(input);
+    armnn::IgnoreUnused(output);
+    armnn::IgnoreUnused(descriptor);
+
+    return IsClBackendSupported(reasonIfUnsupported);
 }
 
 bool ClLayerSupport::IsFloorSupported(const TensorInfo& input,
@@ -443,6 +500,21 @@ bool ClLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
                                    output,
                                    weights,
                                    biases,
+                                   descriptor,
+                                   nullptr);
+}
+
+bool ClLayerSupport::IsGatherSupported(const TensorInfo& input0,
+                                       const TensorInfo& input1,
+                                       const TensorInfo& output,
+                                       const GatherDescriptor& descriptor,
+                                       Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClGatherWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input0,
+                                   input1,
+                                   output,
                                    descriptor);
 }
 
@@ -479,6 +551,18 @@ bool ClLayerSupport::IsL2NormalizationSupported(const TensorInfo& input,
                                                 Optional<std::string&> reasonIfUnsupported) const
 {
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClL2NormalizationWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   output,
+                                   descriptor);
+}
+
+bool ClLayerSupport::IsLogSoftmaxSupported(const TensorInfo& input,
+                                                const TensorInfo& output,
+                                                const LogSoftmaxDescriptor& descriptor,
+                                                Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClLogSoftmaxWorkloadValidate,
                                    reasonIfUnsupported,
                                    input,
                                    output,
@@ -562,7 +646,8 @@ bool ClLayerSupport::IsMultiplicationSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsNormalizationSupported(const TensorInfo& input,
@@ -615,6 +700,40 @@ bool ClLayerSupport::IsPreluSupported(const armnn::TensorInfo &input,
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClPreluWorkloadValidate, reasonIfUnsupported, input, alpha, output);
 }
 
+bool ClLayerSupport::IsQLstmSupported(const TensorInfo& input,
+                                      const TensorInfo& previousOutputIn,
+                                      const TensorInfo& previousCellStateIn,
+                                      const TensorInfo& outputStateOut,
+                                      const TensorInfo& cellStateOut,
+                                      const TensorInfo& output,
+                                      const QLstmDescriptor& descriptor,
+                                      const LstmInputParamsInfo& paramsInfo,
+                                      Optional<std::string&> reasonIfUnsupported) const
+{
+    if (input.GetDataType()               == armnn::DataType::QAsymmS8 &&
+        previousOutputIn.GetDataType()    == armnn::DataType::QAsymmS8 &&
+        previousCellStateIn.GetDataType() == armnn::DataType::QSymmS16 &&
+        outputStateOut.GetDataType()      == armnn::DataType::QAsymmS8 &&
+        cellStateOut.GetDataType()        == armnn::DataType::QSymmS16 &&
+        output.GetDataType()              == armnn::DataType::QAsymmS8)
+    {
+        FORWARD_WORKLOAD_VALIDATE_FUNC(ClQLstmWorkloadValidate,
+                                       reasonIfUnsupported,
+                                       input,
+                                       previousCellStateIn,
+                                       previousOutputIn,
+                                       cellStateOut,
+                                       outputStateOut,
+                                       output,
+                                       descriptor,
+                                       paramsInfo);
+    }
+    else
+    {
+        return false;
+    }
+}
+
 bool ClLayerSupport::IsQuantizedLstmSupported(const TensorInfo& input,
                                               const TensorInfo& previousCellStateIn,
                                               const TensorInfo& previousOutputIn,
@@ -648,7 +767,7 @@ bool ClLayerSupport::IsReshapeSupported(const TensorInfo& input,
                                         const ReshapeDescriptor& descriptor,
                                         Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClReshapeWorkloadValidate, reasonIfUnsupported, input, output);
 }
 
@@ -727,7 +846,7 @@ bool ClLayerSupport::IsSplitterSupported(const TensorInfo& input,
                                          const ViewsDescriptor& descriptor,
                                          Optional<std::string&> reasonIfUnsupported) const
 {
-    ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     return IsSupportedForDataTypeCl(reasonIfUnsupported,
                                     input.GetDataType(),
                                     &TrueFunc<>,
@@ -755,7 +874,7 @@ bool ClLayerSupport::IsSplitterSupported(const TensorInfo& input,
                                        *splitAxis.begin());
     }
 #endif
-    boost::ignore_unused(descriptor);
+    IgnoreUnused(descriptor);
     for (auto output : outputs)
     {
         if (!input.IsTypeSpaceMatch(output)) // Cannot use sub-tensors if the types are not same space
@@ -800,7 +919,8 @@ bool ClLayerSupport::IsSubtractionSupported(const TensorInfo& input0,
                                    reasonIfUnsupported,
                                    input0,
                                    input1,
-                                   output);
+                                   output,
+                                   nullptr);
 }
 
 bool ClLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
@@ -817,6 +937,14 @@ bool ClLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
                                    descriptor,
                                    weights,
                                    biases);
+}
+
+bool ClLayerSupport::IsTransposeSupported(const TensorInfo& input,
+                                          const TensorInfo& output,
+                                          const TransposeDescriptor& descriptor,
+                                          Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClTransposeWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
 }
 
 } // namespace armnn

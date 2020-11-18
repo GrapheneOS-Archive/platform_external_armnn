@@ -5,9 +5,8 @@
 
 #include "Slice.hpp"
 
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace armnn
 {
@@ -21,11 +20,11 @@ void Slice(const TensorInfo& inputInfo,
     const TensorShape& inputShape = inputInfo.GetShape();
     const unsigned int numDims    = inputShape.GetNumDimensions();
 
-    BOOST_ASSERT(descriptor.m_Begin.size() == numDims);
-    BOOST_ASSERT(descriptor.m_Size.size()  == numDims);
+    ARMNN_ASSERT(descriptor.m_Begin.size() == numDims);
+    ARMNN_ASSERT(descriptor.m_Size.size()  == numDims);
 
     constexpr unsigned int maxNumDims = 4;
-    BOOST_ASSERT(numDims <= maxNumDims);
+    ARMNN_ASSERT(numDims <= maxNumDims);
 
     std::vector<unsigned int> paddedInput(4);
     std::vector<unsigned int> paddedBegin(4);
@@ -64,15 +63,15 @@ void Slice(const TensorInfo& inputInfo,
     unsigned int size2  = paddedSize[2];
     unsigned int size3  = paddedSize[3];
 
-    BOOST_ASSERT(begin0 + size0 <= dim0);
-    BOOST_ASSERT(begin1 + size1 <= dim1);
-    BOOST_ASSERT(begin2 + size2 <= dim2);
-    BOOST_ASSERT(begin3 + size3 <= dim3);
+    ARMNN_ASSERT(begin0 + size0 <= dim0);
+    ARMNN_ASSERT(begin1 + size1 <= dim1);
+    ARMNN_ASSERT(begin2 + size2 <= dim2);
+    ARMNN_ASSERT(begin3 + size3 <= dim3);
 
     const unsigned char* input = reinterpret_cast<const unsigned char*>(inputData);
     unsigned char* output      = reinterpret_cast<unsigned char*>(outputData);
 
-    boost::ignore_unused(dim0);
+    IgnoreUnused(dim0);
     for (unsigned int idx0 = begin0; idx0 < begin0 + size0; ++idx0)
     {
         for (unsigned int idx1 = begin1; idx1 < begin1 + size1; ++idx1)

@@ -10,6 +10,8 @@
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <armnnUtils/TensorUtils.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEArgMinMaxLayer.h>
@@ -35,7 +37,7 @@ arm_compute::Status NeonArgMinMaxWorkloadValidate(const TensorInfo& input,
 
     auto numDims = input.GetNumDimensions();
     auto unsignedAxis = armnnUtils::GetUnsignedAxis(numDims, descriptor.m_Axis);
-    int aclAxis = boost::numeric_cast<int>(CalcAclAxis(numDims, unsignedAxis));
+    int aclAxis = armnn::numeric_cast<int>(CalcAclAxis(numDims, unsignedAxis));
 
     if (descriptor.m_Function == ArgMinMaxFunction::Max)
     {
@@ -54,12 +56,12 @@ NeonArgMinMaxWorkload::NeonArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& des
                                              const WorkloadInfo& info)
         : BaseWorkload<ArgMinMaxQueueDescriptor>(descriptor, info)
 {
-    arm_compute::ITensor& input = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
-    arm_compute::ITensor& output = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
+    arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
     auto numDims = info.m_InputTensorInfos[0].GetNumDimensions();
     auto unsignedAxis = armnnUtils::GetUnsignedAxis(numDims, m_Data.m_Parameters.m_Axis);
-    int aclAxis = boost::numeric_cast<int>(CalcAclAxis(numDims, unsignedAxis));
+    int aclAxis = armnn::numeric_cast<int>(CalcAclAxis(numDims, unsignedAxis));
 
     auto layer = std::make_unique<arm_compute::NEArgMinMaxLayer>();
 

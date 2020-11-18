@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <armnn/BackendOptions.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
 
 namespace armnn
@@ -39,15 +40,73 @@ IBackendInternal::IWorkloadFactoryPtr IBackendInternal::CreateWorkloadFactory(
     return IWorkloadFactoryPtr{};
 }
 
+IBackendInternal::IWorkloadFactoryPtr IBackendInternal::CreateWorkloadFactory(
+    const IMemoryManagerSharedPtr& memoryManager,
+    const ModelOptions& modelOptions) const
+{
+    if (!modelOptions.empty())
+    {
+        for (auto optionsGroup : modelOptions)
+        {
+            if (optionsGroup.GetBackendId() == GetId())
+            {
+                return IWorkloadFactoryPtr{};
+            }
+        }
+    }
+
+    return CreateWorkloadFactory(memoryManager);
+}
+
+IBackendInternal::IWorkloadFactoryPtr IBackendInternal::CreateWorkloadFactory(
+    class TensorHandleFactoryRegistry& tensorHandleFactoryRegistry,
+    const ModelOptions& modelOptions) const
+{
+    if (!modelOptions.empty())
+    {
+        for (auto optionsGroup : modelOptions)
+        {
+            if (optionsGroup.GetBackendId() == GetId())
+            {
+                return IWorkloadFactoryPtr{};
+            }
+        }
+    }
+
+    return CreateWorkloadFactory(tensorHandleFactoryRegistry);
+}
+
 IBackendInternal::IBackendContextPtr IBackendInternal::CreateBackendContext(const IRuntime::CreationOptions&) const
 {
     return IBackendContextPtr{};
+}
+
+IBackendInternal::IBackendSpecificModelContextPtr IBackendInternal::CreateBackendSpecificModelContext(
+    const ModelOptions&) const
+{
+    return IBackendSpecificModelContextPtr{};
 }
 
 IBackendInternal::IBackendProfilingContextPtr IBackendInternal::CreateBackendProfilingContext(
     const IRuntime::CreationOptions&, IBackendProfilingPtr&)
 {
     return IBackendProfilingContextPtr{};
+}
+
+IBackendInternal::ILayerSupportSharedPtr IBackendInternal::GetLayerSupport(const ModelOptions& modelOptions) const
+{
+    if (!modelOptions.empty())
+    {
+        for (auto optionsGroup : modelOptions)
+        {
+            if (optionsGroup.GetBackendId() == GetId())
+            {
+                return ILayerSupportSharedPtr{};
+            }
+        }
+    }
+
+    return GetLayerSupport();
 }
 
 // Default implementation of OptimizeSubgraphView for backward compatibility with the old API.
@@ -75,6 +134,12 @@ OptimizationViews IBackendInternal::OptimizeSubgraphView(const SubgraphView& sub
     }
 
     return result;
+}
+
+OptimizationViews IBackendInternal::OptimizeSubgraphView(const SubgraphView& subgraph,
+                                                         const ModelOptions& /*modelOptions*/) const
+{
+    return OptimizeSubgraphView(subgraph);
 }
 
 bool IBackendInternal::SupportsTensorAllocatorAPI() const

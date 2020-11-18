@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -6,7 +6,8 @@
 
 #include "Optimization.hpp"
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -23,7 +24,7 @@ public:
     /// the child layer, so the siblings are left unconnected (and later removed).
     void Run(Graph& graph, InputSlot& connection) const
     {
-        boost::ignore_unused(graph);
+        IgnoreUnused(graph);
         auto& child = connection.GetOwningLayer();
 
         if (!child.IsOutputUnconnected())
@@ -32,7 +33,7 @@ public:
 
             if (baseOutput.GetNumConnections() > 1)
             {
-                auto& comparableChild = *boost::polymorphic_downcast<Comparable*>(&child);
+                auto& comparableChild = *PolymorphicDowncast<Comparable*>(&child);
 
                 Layer* lowestPriorityChild = &child;
                 for (auto&& it : baseOutput.GetConnections())
@@ -64,6 +65,8 @@ protected:
 };
 
 using SquashEqualPermuteSiblings = OptimizeForConnection<Layer, PermuteLayer, SquashEqualSiblingsImpl<PermuteLayer>>;
+using SquashEqualTransposeSiblings = OptimizeForConnection<Layer, TransposeLayer,
+    SquashEqualSiblingsImpl<TransposeLayer>>;
 using SquashEqualReshapeSiblings = OptimizeForConnection<Layer, ReshapeLayer, SquashEqualSiblingsImpl<ReshapeLayer>>;
 
 } // namespace optimizations

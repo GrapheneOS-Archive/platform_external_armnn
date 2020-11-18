@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -9,13 +9,13 @@
 
 #include <LeakChecking.hpp>
 
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+
 #include <arm_compute/core/CL/CLKernelLibrary.h>
 #include <arm_compute/runtime/CL/CLScheduler.h>
 
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-#include <boost/polymorphic_cast.hpp>
-#include <boost/core/ignore_unused.hpp>
+#include <fmt/format.h>
 
 namespace cl
 {
@@ -33,7 +33,7 @@ ClContextControl::ClContextControl(arm_compute::CLTuner *tuner,
     , m_ProfilingEnabled(profilingEnabled)
 {
     // Ignore m_ProfilingEnabled if unused to avoid compiling problems when ArmCompute is disabled.
-    boost::ignore_unused(m_ProfilingEnabled);
+    IgnoreUnused(m_ProfilingEnabled);
 
     try
     {
@@ -51,18 +51,18 @@ ClContextControl::ClContextControl(arm_compute::CLTuner *tuner,
     }
     catch (const cl::Error& clError)
     {
-        throw ClRuntimeUnavailableException(boost::str(boost::format(
-            "Could not initialize the CL runtime. Error description: %1%. CL error code: %2%"
-        ) % clError.what() % clError.err()));
+        throw ClRuntimeUnavailableException(fmt::format(
+            "Could not initialize the CL runtime. Error description: {0}. CL error code: {1}",
+            clError.what(), clError.err()));
     }
 
     // Removes the use of global CL context.
     cl::Context::setDefault(cl::Context{});
-    BOOST_ASSERT(cl::Context::getDefault()() == NULL);
+    ARMNN_ASSERT(cl::Context::getDefault()() == NULL);
 
     // Removes the use of global CL command queue.
     cl::CommandQueue::setDefault(cl::CommandQueue{});
-    BOOST_ASSERT(cl::CommandQueue::getDefault()() == NULL);
+    ARMNN_ASSERT(cl::CommandQueue::getDefault()() == NULL);
 
     // Always load the OpenCL runtime.
     LoadOpenClRuntime();
@@ -149,9 +149,9 @@ void ClContextControl::DoLoadOpenClRuntime(bool updateTunedParameters)
     }
     catch (const cl::Error& clError)
     {
-        throw ClRuntimeUnavailableException(boost::str(boost::format(
-            "Could not initialize the CL runtime. Error description: %1%. CL error code: %2%"
-        ) % clError.what() % clError.err()));
+        throw ClRuntimeUnavailableException(fmt::format(
+            "Could not initialize the CL runtime. Error description: {0}. CL error code: {1}",
+            clError.what(), clError.err()));
     }
 
     // Note the first argument (path to cl source code) will be ignored as they should be embedded in the armcompute.

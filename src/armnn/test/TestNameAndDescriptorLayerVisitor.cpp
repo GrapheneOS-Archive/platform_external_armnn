@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "TestNameAndDescriptorLayerVisitor.hpp"
@@ -92,6 +92,18 @@ armnn::ElementwiseUnaryDescriptor GetDescriptor<armnn::ElementwiseUnaryDescripto
 }
 
 template<>
+armnn::FillDescriptor GetDescriptor<armnn::FillDescriptor>()
+{
+    return armnn::FillDescriptor(1);
+}
+
+template<>
+armnn::GatherDescriptor GetDescriptor<armnn::GatherDescriptor>()
+{
+    return armnn::GatherDescriptor();
+}
+
+template<>
 armnn::InstanceNormalizationDescriptor GetDescriptor<armnn::InstanceNormalizationDescriptor>()
 {
     armnn::InstanceNormalizationDescriptor descriptor;
@@ -111,6 +123,12 @@ armnn::L2NormalizationDescriptor GetDescriptor<armnn::L2NormalizationDescriptor>
     descriptor.m_DataLayout = armnn::DataLayout::NHWC;
 
     return descriptor;
+}
+
+template<>
+armnn::LogicalBinaryDescriptor GetDescriptor<armnn::LogicalBinaryDescriptor>()
+{
+    return armnn::LogicalBinaryDescriptor(armnn::LogicalBinaryOperation::LogicalOr);
 }
 
 template<>
@@ -247,6 +265,12 @@ armnn::StridedSliceDescriptor GetDescriptor<armnn::StridedSliceDescriptor>()
     return descriptor;
 }
 
+template<>
+armnn::TransposeDescriptor GetDescriptor<armnn::TransposeDescriptor>()
+{
+    return armnn::TransposeDescriptor({ 0, 1, 2, 3 });
+}
+
 } // anonymous namespace
 
 BOOST_AUTO_TEST_SUITE(TestNameAndDescriptorLayerVisitor)
@@ -258,8 +282,11 @@ TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(BatchToSpaceNd)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Comparison)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Concat)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(ElementwiseUnary)
+TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Fill)
+TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Gather)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(InstanceNormalization)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(L2Normalization)
+TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(LogicalBinary)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(LogSoftmax)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Mean)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Normalization)
@@ -275,5 +302,6 @@ TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(SpaceToDepth)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Splitter)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Stack)
 TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(StridedSlice)
+TEST_SUITE_NAME_AND_DESCRIPTOR_LAYER_VISITOR(Transpose)
 
 BOOST_AUTO_TEST_SUITE_END()

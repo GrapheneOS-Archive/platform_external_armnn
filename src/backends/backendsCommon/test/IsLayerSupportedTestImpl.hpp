@@ -1,14 +1,16 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <Graph.hpp>
 
+#include <backendsCommon/MapWorkload.hpp>
+#include <backendsCommon/UnmapWorkload.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
 
-#include <boost/core/ignore_unused.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace
 {
@@ -165,6 +167,22 @@ struct DummyLayer<armnn::ConcatLayer>
 };
 
 template<>
+struct DummyLayer<armnn::MapLayer, void>
+{
+    DummyLayer()
+    {
+        m_Layer = dummyGraph.AddLayer<armnn::MapLayer>("");
+    }
+
+    ~DummyLayer()
+    {
+        dummyGraph.EraseLayer(m_Layer);
+    }
+
+    armnn::MapLayer* m_Layer;
+};
+
+template<>
 struct DummyLayer<armnn::OutputLayer, armnn::LayerBindingId>
 {
     DummyLayer()
@@ -195,6 +213,22 @@ struct DummyLayer<armnn::SplitterLayer>
     }
 
     armnn::SplitterLayer* m_Layer;
+};
+
+template<>
+struct DummyLayer<armnn::UnmapLayer, void>
+{
+    DummyLayer()
+    {
+        m_Layer = dummyGraph.AddLayer<armnn::UnmapLayer>("");
+    }
+
+    ~DummyLayer()
+    {
+        dummyGraph.EraseLayer(m_Layer);
+    }
+
+    armnn::UnmapLayer* m_Layer;
 };
 
 template <typename ConvolutionLayerType>
@@ -288,8 +322,6 @@ struct DummyLstmLayer
                 armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Float32));
         m_Layer->m_CifgParameters.m_RecurrentToInputWeights    = std::make_unique<armnn::ScopedCpuTensorHandle>(
                 armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Float32));
-        m_Layer->m_CifgParameters.m_CellToInputWeights         = std::make_unique<armnn::ScopedCpuTensorHandle>(
-                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Float32));
         m_Layer->m_CifgParameters.m_InputGateBias              = std::make_unique<armnn::ScopedCpuTensorHandle>(
                 armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Float32));
     }
@@ -306,6 +338,82 @@ template<>
 struct DummyLayer<armnn::LstmLayer>
         : public DummyLstmLayer<armnn::LstmLayer>
 {
+};
+
+template <typename QLstmLayerType>
+struct DummyQLstmLayer
+{
+    DummyQLstmLayer()
+    {
+        typename QLstmLayerType::DescriptorType desc;
+        desc.m_CifgEnabled = false;
+        desc.m_PeepholeEnabled = true;
+        desc.m_ProjectionEnabled = true;
+        desc.m_LayerNormEnabled = true;
+
+        m_Layer = dummyGraph.AddLayer<QLstmLayerType>(armnn::QLstmDescriptor(), "qLstm");
+
+        // Basic params
+        m_Layer->m_BasicParameters.m_InputToForgetWeights     = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_BasicParameters.m_InputToCellWeights       = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_BasicParameters.m_InputToOutputWeights     = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+
+        m_Layer->m_BasicParameters.m_RecurrentToForgetWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_BasicParameters.m_RecurrentToCellWeights   = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_BasicParameters.m_RecurrentToOutputWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+
+        m_Layer->m_BasicParameters.m_ForgetGateBias           = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Signed32));
+        m_Layer->m_BasicParameters.m_CellBias                 = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Signed32));
+        m_Layer->m_BasicParameters.m_OutputGateBias           = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Signed32));
+
+        // CIFG optional params
+        m_Layer->m_CifgParameters.m_InputToInputWeights     = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_CifgParameters.m_RecurrentToInputWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_CifgParameters.m_InputGateBias           = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Signed32));
+
+        // Projection optional params
+        m_Layer->m_ProjectionParameters.m_ProjectionWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS8));
+        m_Layer->m_ProjectionParameters.m_ProjectionBias    = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::Signed32));
+
+        // Peephole optional params
+        m_Layer->m_PeepholeParameters.m_CellToInputWeights  = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+        m_Layer->m_PeepholeParameters.m_CellToForgetWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+        m_Layer->m_PeepholeParameters.m_CellToOutputWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+
+        // Layer normalization optional params
+        m_Layer->m_LayerNormParameters.m_InputLayerNormWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+        m_Layer->m_LayerNormParameters.m_ForgetLayerNormWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+        m_Layer->m_LayerNormParameters.m_CellLayerNormWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+        m_Layer->m_LayerNormParameters.m_OutputLayerNormWeights = std::make_unique<armnn::ScopedCpuTensorHandle>(
+                armnn::TensorInfo(armnn::TensorShape({1,1,1,1}), armnn::DataType::QSymmS16));
+    }
+
+    ~DummyQLstmLayer()
+    {
+        dummyGraph.EraseLayer(m_Layer);
+    }
+
+    armnn::QLstmLayer* m_Layer;
 };
 
 template<>
@@ -393,6 +501,27 @@ struct LayerTypePolicy<armnn::LayerType::name, DataType> \
     } \
 };
 
+#define DECLARE_LAYER_POLICY_MAP_PARAM(name, descType) \
+template<armnn::DataType DataType> \
+struct LayerTypePolicy<armnn::LayerType::name, DataType> \
+{ \
+    using Type = armnn::name##Layer; \
+    using Desc = descType; \
+    using QueueDesc = armnn::name##QueueDescriptor; \
+    using Workload = armnn::name##Workload; \
+    constexpr static const char* NameStr = #name; \
+    constexpr static const bool IsException = false; \
+    \
+    static std::unique_ptr<armnn::IWorkload> MakeDummyWorkload(armnn::IWorkloadFactory* factory, \
+        unsigned int nIn, unsigned int nOut) \
+    { \
+        IgnoreUnused(factory); \
+        QueueDesc desc; \
+        armnn::WorkloadInfo info = MakeDummyWorkloadInfo<DataType>(nIn, nOut); \
+        return std::make_unique<armnn::name##Workload>(desc, info); \
+    } \
+};
+
 // Define a layer policy specialization for use with the IsLayerSupported tests.
 // Use this version for layers whose constructor takes 1 parameter(name).
 #define DECLARE_LAYER_POLICY_1_PARAM(name) DECLARE_LAYER_POLICY_CUSTOM_PARAM(name, void)
@@ -414,7 +543,7 @@ struct LayerTypePolicy<armnn::LayerType::name, DataType> \
     static std::unique_ptr<armnn::IWorkload> MakeDummyWorkload(armnn::IWorkloadFactory *factory, \
         unsigned int nIn, unsigned int nOut) \
     { \
-        boost::ignore_unused(factory, nIn, nOut); \
+        IgnoreUnused(factory, nIn, nOut); \
         return std::unique_ptr<armnn::IWorkload>(); \
     } \
 };
@@ -443,7 +572,11 @@ DECLARE_LAYER_POLICY_2_PARAM(Concat)
 
 DECLARE_LAYER_POLICY_1_PARAM(Constant)
 
+DECLARE_LAYER_POLICY_1_PARAM(ConvertBf16ToFp32)
+
 DECLARE_LAYER_POLICY_1_PARAM(ConvertFp16ToFp32)
+
+DECLARE_LAYER_POLICY_1_PARAM(ConvertFp32ToBf16)
 
 DECLARE_LAYER_POLICY_1_PARAM(ConvertFp32ToFp16)
 
@@ -467,11 +600,13 @@ DECLARE_LAYER_POLICY_2_PARAM(ElementwiseUnary)
 
 DECLARE_LAYER_POLICY_2_PARAM(FakeQuantization)
 
+DECLARE_LAYER_POLICY_2_PARAM(Fill)
+
 DECLARE_LAYER_POLICY_1_PARAM(Floor)
 
 DECLARE_LAYER_POLICY_2_PARAM(FullyConnected)
 
-DECLARE_LAYER_POLICY_1_PARAM(Gather)
+DECLARE_LAYER_POLICY_2_PARAM(Gather)
 
 DECLARE_LAYER_POLICY_CUSTOM_PARAM(Input, armnn::LayerBindingId)
 
@@ -479,9 +614,13 @@ DECLARE_LAYER_POLICY_2_PARAM(InstanceNormalization)
 
 DECLARE_LAYER_POLICY_2_PARAM(L2Normalization)
 
+DECLARE_LAYER_POLICY_2_PARAM(LogicalBinary)
+
 DECLARE_LAYER_POLICY_2_PARAM(LogSoftmax)
 
 DECLARE_LAYER_POLICY_2_PARAM(Lstm)
+
+DECLARE_LAYER_POLICY_MAP_PARAM(Map, void)
 
 DECLARE_LAYER_POLICY_1_PARAM(Maximum)
 
@@ -508,10 +647,13 @@ DECLARE_LAYER_POLICY_2_PARAM(Pooling2d)
 DECLARE_LAYER_POLICY_2_PARAM(PreCompiled)
 
 DECLARE_LAYER_POLICY_1_PARAM(Prelu)
+DECLARE_LAYER_POLICY_2_PARAM(QLstm)
 
 DECLARE_LAYER_POLICY_1_PARAM(QuantizedLstm)
 
 DECLARE_LAYER_POLICY_1_PARAM(Division)
+
+DECLARE_LAYER_POLICY_1_PARAM(Rank)
 
 DECLARE_LAYER_POLICY_2_PARAM(Resize)
 
@@ -537,7 +679,11 @@ DECLARE_LAYER_POLICY_1_PARAM(Subtraction)
 
 DECLARE_LAYER_POLICY_1_PARAM(Switch)
 
+DECLARE_LAYER_POLICY_2_PARAM(Transpose)
+
 DECLARE_LAYER_POLICY_2_PARAM(TransposeConvolution2d)
+
+DECLARE_LAYER_POLICY_MAP_PARAM(Unmap, void)
 
 
 // Generic implementation to get the number of input slots for a given layer type;
@@ -557,7 +703,7 @@ unsigned int GetNumOutputs(const armnn::Layer& layer)
 template<>
 unsigned int GetNumInputs<armnn::LayerType::Concat>(const armnn::Layer& layer)
 {
-    boost::ignore_unused(layer);
+    IgnoreUnused(layer);
     return 2;
 }
 
@@ -611,7 +757,7 @@ bool IsLayerSupportedTest(FactoryType *factory, Tag<Type>)
         }
         catch(const armnn::InvalidArgumentException& e)
         {
-            boost::ignore_unused(e);
+            IgnoreUnused(e);
             // This is ok since we throw InvalidArgumentException when creating the dummy workload.
             return true;
         }
@@ -642,12 +788,12 @@ bool IsLayerSupportedTest(FactoryType *factory, Tag<Type>)
         // InvalidArgumentException or UnimplementedException.
         catch(const armnn::InvalidArgumentException& e)
         {
-            boost::ignore_unused(e);
+            IgnoreUnused(e);
             return true;
         }
         catch(const armnn::UnimplementedException& e)
         {
-            boost::ignore_unused(e);
+            IgnoreUnused(e);
             return true;
         }
         catch(const std::exception& e)
@@ -663,6 +809,20 @@ bool IsLayerSupportedTest(FactoryType *factory, Tag<Type>)
             return false;
         }
     }
+}
+
+template<typename FactoryType, armnn::DataType DataType, armnn::LayerType Type>
+bool IsLayerSupportedTest(FactoryType *factory, Tag<armnn::LayerType::Map>)
+{
+    IgnoreUnused(factory);
+    return true;
+}
+
+template<typename FactoryType, armnn::DataType DataType, armnn::LayerType Type>
+bool IsLayerSupportedTest(FactoryType *factory, Tag<armnn::LayerType::Unmap>)
+{
+    IgnoreUnused(factory);
+    return true;
 }
 
 // Helper function to compute the next type in the LayerType enum.
@@ -800,5 +960,22 @@ bool IsMeanLayerNotSupportedTests(std::string& reasonIfUnsupported)
     return result;
 }
 
+template<typename FactoryType, armnn::DataType OutputDataType>
+bool IsConstantLayerSupportedTests(std::string& reasonIfUnsupported)
+{
+    armnn::Graph graph;
+
+    armnn::Layer* const layer = graph.AddLayer<armnn::ConstantLayer>("ConstantLayerName");
+    armnn::Layer* const output = graph.AddLayer<armnn::OutputLayer>(0, "OutputLayerName");
+
+    armnn::TensorInfo outputTensorInfo({1, 1}, OutputDataType);
+
+    layer->GetOutputSlot(0).Connect(output->GetInputSlot(0));
+    layer->GetOutputHandler(0).SetTensorInfo(outputTensorInfo);
+
+    bool result = FactoryType::IsLayerSupported(*layer, OutputDataType, reasonIfUnsupported);
+
+    return result;
+}
 
 } //namespace

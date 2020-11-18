@@ -1,5 +1,5 @@
 #
-# Copyright © 2017 ARM Ltd. All rights reserved.
+# Copyright © 2017 ARM Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -16,6 +16,7 @@ ifeq ($(ARMNN_COMPUTE_CL_ENABLED),1)
 BACKEND_SOURCES := \
         ClBackend.cpp \
         ClBackendContext.cpp \
+        ClBackendModelContext.cpp \
         ClContextControl.cpp \
         ClLayerSupport.cpp \
         ClRegistryInitializer.cpp \
@@ -28,6 +29,7 @@ BACKEND_SOURCES := \
         workloads/ClArgMinMaxWorkload.cpp \
         workloads/ClBatchNormalizationFloatWorkload.cpp \
         workloads/ClBatchToSpaceNdWorkload.cpp \
+        workloads/ClComparisonWorkload.cpp \
         workloads/ClConcatWorkload.cpp \
         workloads/ClConstantWorkload.cpp \
         workloads/ClConvertFp16ToFp32Workload.cpp \
@@ -37,37 +39,41 @@ BACKEND_SOURCES := \
         workloads/ClDepthwiseConvolutionWorkload.cpp \
         workloads/ClDequantizeWorkload.cpp \
         workloads/ClDivisionFloatWorkload.cpp \
+        workloads/ClExpWorkload.cpp \
+        workloads/ClFillWorkload.cpp \
         workloads/ClFloorFloatWorkload.cpp \
         workloads/ClFullyConnectedWorkload.cpp \
-        workloads/ClGreaterWorkload.cpp \
+        workloads/ClGatherWorkload.cpp \
         workloads/ClInstanceNormalizationWorkload.cpp \
         workloads/ClL2NormalizationFloatWorkload.cpp \
+        workloads/ClLogSoftmaxWorkload.cpp \
         workloads/ClLstmFloatWorkload.cpp \
         workloads/ClMaximumWorkload.cpp \
         workloads/ClMeanWorkload.cpp \
         workloads/ClMinimumWorkload.cpp \
         workloads/ClMultiplicationWorkload.cpp \
+        workloads/ClNegWorkload.cpp \
         workloads/ClNormalizationFloatWorkload.cpp \
         workloads/ClPadWorkload.cpp \
         workloads/ClPermuteWorkload.cpp \
         workloads/ClPooling2dWorkload.cpp \
         workloads/ClPreluWorkload.cpp \
+        workloads/ClQLstmWorkload.cpp \
         workloads/ClQuantizedLstmWorkload.cpp \
         workloads/ClQuantizeWorkload.cpp \
         workloads/ClReshapeWorkload.cpp \
         workloads/ClResizeWorkload.cpp \
         workloads/ClRsqrtWorkload.cpp \
         workloads/ClSliceWorkload.cpp \
-        workloads/ClSoftmaxBaseWorkload.cpp \
-        workloads/ClSoftmaxFloatWorkload.cpp \
-        workloads/ClSoftmaxUint8Workload.cpp \
+        workloads/ClSoftmaxWorkload.cpp \
         workloads/ClSpaceToBatchNdWorkload.cpp \
         workloads/ClSpaceToDepthWorkload.cpp \
         workloads/ClSplitterWorkload.cpp \
         workloads/ClStackWorkload.cpp \
         workloads/ClStridedSliceWorkload.cpp \
         workloads/ClSubtractionWorkload.cpp \
-        workloads/ClTransposeConvolution2dWorkload.cpp
+        workloads/ClTransposeConvolution2dWorkload.cpp \
+        workloads/ClTransposeWorkload.cpp
 else
 
 # ARMNN_COMPUTE_CL_ENABLED == 0

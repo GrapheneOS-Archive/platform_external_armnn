@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,7 +29,7 @@ LayerTestResult<T, 4> DepthToSpaceTestImpl(
     const float qScale = 1.0f,
     const int32_t qOffset = 0)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     if (descriptor.m_Parameters.m_DataLayout == armnn::DataLayout::NCHW)
     {
         PermuteTensorNhwcToNchw<float>(inputInfo, inputData);
@@ -51,8 +51,10 @@ LayerTestResult<T, 4> DepthToSpaceTestImpl(
     result.outputExpected =
         MakeTensor<T, 4>(outputInfo, armnnUtils::QuantizedVector<T>(expectedOutputData, qScale, qOffset));
 
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputInfo);
+    ARMNN_NO_DEPRECATE_WARN_END
 
     armnn::WorkloadInfo info;
     AddInputToWorkload(descriptor, info, inputInfo, inputHandle.get());
@@ -303,6 +305,31 @@ DepthToSpaceTest3<armnn::DataType::QAsymmU8>(
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmU8>, 4>
 DepthToSpaceTest4<armnn::DataType::QAsymmU8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    armnn::DataLayout dataLayout);
+
+// QuantisedAsymmS8
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+DepthToSpaceTest1<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+DepthToSpaceTest2<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+DepthToSpaceTest3<armnn::DataType::QAsymmS8>(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    armnn::DataLayout dataLayout);
+
+template LayerTestResult<armnn::ResolveType<armnn::DataType::QAsymmS8>, 4>
+DepthToSpaceTest4<armnn::DataType::QAsymmS8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     armnn::DataLayout dataLayout);

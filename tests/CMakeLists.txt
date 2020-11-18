@@ -27,10 +27,6 @@ if(BUILD_CAFFE_PARSER)
         target_link_libraries(${testName} armnnCaffeParser)
         target_link_libraries(${testName} armnn)
         target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        target_link_libraries(${testName}
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${testName})
     endmacro()
 
@@ -94,10 +90,6 @@ if(BUILD_TF_PARSER)
         target_link_libraries(${testName} armnnTfParser)
         target_link_libraries(${testName} armnn)
         target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        target_link_libraries(${testName}
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${testName})
     endmacro()
 
@@ -142,10 +134,6 @@ if (BUILD_TF_LITE_PARSER)
         target_link_libraries(${testName} armnnTfLiteParser)
         target_link_libraries(${testName} armnn)
         target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        target_link_libraries(${testName}
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${testName})
     endmacro()
 
@@ -209,6 +197,15 @@ if (BUILD_TF_LITE_PARSER)
         ImagePreprocessor.hpp
         ImagePreprocessor.cpp)
     TfLiteParserTest(TfLiteMnasNet-Armnn "${TfLiteMnasNet-Armnn_sources}")
+
+
+    set(TfLiteYoloV3Big-Armnn_sources
+        TfLiteYoloV3Big-Armnn/NMS.cpp
+        TfLiteYoloV3Big-Armnn/NMS.hpp
+        TfLiteYoloV3Big-Armnn/TfLiteYoloV3Big-Armnn.cpp
+        ImagePreprocessor.hpp
+        ImagePreprocessor.cpp)
+    TfLiteParserTest(TfLiteYoloV3Big-Armnn "${TfLiteYoloV3Big-Armnn_sources}")
 endif()
 
 if (BUILD_ONNX_PARSER)
@@ -221,10 +218,6 @@ if (BUILD_ONNX_PARSER)
         target_link_libraries(${testName} armnnOnnxParser)
         target_link_libraries(${testName} armnn)
         target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        target_link_libraries(${testName}
-            ${Boost_SYSTEM_LIBRARY}
-            ${Boost_FILESYSTEM_LIBRARY}
-            ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${testName})
     endmacro()
 
@@ -243,12 +236,19 @@ endif()
 
 if (BUILD_ARMNN_SERIALIZER OR BUILD_CAFFE_PARSER OR BUILD_TF_PARSER OR BUILD_TF_LITE_PARSER OR BUILD_ONNX_PARSER)
     set(ExecuteNetwork_sources
-        ExecuteNetwork/ExecuteNetwork.cpp)
+        ExecuteNetwork/ExecuteNetwork.cpp
+        ExecuteNetwork/ExecuteNetworkProgramOptions.cpp
+        ExecuteNetwork/ExecuteNetworkProgramOptions.hpp
+        ExecuteNetwork/ExecuteNetworkParams.cpp
+        ExecuteNetwork/ExecuteNetworkParams.hpp
+        NetworkExecutionUtils/NetworkExecutionUtils.cpp
+        NetworkExecutionUtils/NetworkExecutionUtils.hpp)
 
     add_executable_ex(ExecuteNetwork ${ExecuteNetwork_sources})
     target_include_directories(ExecuteNetwork PRIVATE ../src/armnn)
     target_include_directories(ExecuteNetwork PRIVATE ../src/armnnUtils)
     target_include_directories(ExecuteNetwork PRIVATE ../src/backends)
+    target_include_directories(ExecuteNetwork PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
     if (BUILD_ARMNN_SERIALIZER)
         target_link_libraries(ExecuteNetwork armnnSerializer)
@@ -264,16 +264,15 @@ if (BUILD_ARMNN_SERIALIZER OR BUILD_CAFFE_PARSER OR BUILD_TF_PARSER OR BUILD_TF_
         target_link_libraries(ExecuteNetwork armnnTfLiteParser)
     endif()
     if (BUILD_ONNX_PARSER)
-            target_link_libraries(ExecuteNetwork armnnOnnxParser)
+        target_link_libraries(ExecuteNetwork armnnOnnxParser)
     endif()
-
+    if (BUILD_ARMNN_TFLITE_DELEGATE)
+        target_link_libraries(ExecuteNetwork ArmnnDelegate::ArmnnDelegate)
+    endif()
     target_link_libraries(ExecuteNetwork armnn)
-    target_link_libraries(ExecuteNetwork ${CMAKE_THREAD_LIBS_INIT})
-    target_link_libraries(ExecuteNetwork
-        ${Boost_SYSTEM_LIBRARY}
-        ${Boost_FILESYSTEM_LIBRARY}
-        ${Boost_PROGRAM_OPTIONS_LIBRARY})
-    addDllCopyCommands(ExecuteNetwork)
+
+   target_link_libraries(ExecuteNetwork ${CMAKE_THREAD_LIBS_INIT})
+   addDllCopyCommands(ExecuteNetwork)
 endif()
 
 if(BUILD_ACCURACY_TOOL)
@@ -294,10 +293,6 @@ if(BUILD_ACCURACY_TOOL)
         if (BUILD_ONNX_PARSER)
             target_link_libraries(${executorName} armnnOnnxParser)
         endif()
-        target_link_libraries(${executorName}
-                ${Boost_SYSTEM_LIBRARY}
-                ${Boost_FILESYSTEM_LIBRARY}
-                ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${executorName})
     endmacro()
 
@@ -317,10 +312,6 @@ endif()
 if(BUILD_ARMNN_QUANTIZER)
     macro(ImageTensorExecutor executorName)
         target_link_libraries(${executorName} ${CMAKE_THREAD_LIBS_INIT})
-        target_link_libraries(${executorName}
-                ${Boost_SYSTEM_LIBRARY}
-                ${Boost_FILESYSTEM_LIBRARY}
-                ${Boost_PROGRAM_OPTIONS_LIBRARY})
         addDllCopyCommands(${executorName})
     endmacro()
 
@@ -340,5 +331,6 @@ if(BUILD_ARMNN_QUANTIZER)
             ImageCSVFileGenerator/ImageCSVFileGenerator.cpp)
 
     add_executable_ex(ImageCSVFileGenerator ${ImageCSVFileGenerator_sources})
+    target_include_directories(ImageCSVFileGenerator PRIVATE ../src/armnnUtils)
     ImageTensorExecutor(ImageCSVFileGenerator)
 endif()

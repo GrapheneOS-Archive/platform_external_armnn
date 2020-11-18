@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -31,7 +31,7 @@ public:
 
     BaseWorkload(const QueueDescriptor& descriptor, const WorkloadInfo& info)
         : m_Data(descriptor),
-          m_Guid(profiling::ProfilingService::Instance().NextGuid())
+          m_Guid(profiling::ProfilingService::GetNextGuid())
     {
         m_Data.Validate(info);
     }
@@ -65,9 +65,9 @@ public:
 
             if (std::find(dataTypes.begin(), dataTypes.end(), expectedInputType) == dataTypes.end())
             {
-                BOOST_ASSERT_MSG(false, "Trying to create workload with incorrect type");
+                ARMNN_ASSERT_MSG(false, "Trying to create workload with incorrect type");
             }
-            BOOST_ASSERT_MSG(std::all_of(std::next(info.m_InputTensorInfos.begin()),
+            ARMNN_ASSERT_MSG(std::all_of(std::next(info.m_InputTensorInfos.begin()),
                                          info.m_InputTensorInfos.end(),
                                          [&](auto it){
                                              return it.GetDataType() == expectedInputType;
@@ -84,14 +84,14 @@ public:
             {
                 if (expectedOutputType != expectedInputType)
                 {
-                    BOOST_ASSERT_MSG(false, "Trying to create workload with incorrect type");
+                    ARMNN_ASSERT_MSG(false, "Trying to create workload with incorrect type");
                 }
             }
             else if (std::find(dataTypes.begin(), dataTypes.end(), expectedOutputType) == dataTypes.end())
             {
-                BOOST_ASSERT_MSG(false, "Trying to create workload with incorrect type");
+                ARMNN_ASSERT_MSG(false, "Trying to create workload with incorrect type");
             }
-            BOOST_ASSERT_MSG(std::all_of(std::next(info.m_OutputTensorInfos.begin()),
+            ARMNN_ASSERT_MSG(std::all_of(std::next(info.m_OutputTensorInfos.begin()),
                                          info.m_OutputTensorInfos.end(),
                                          [&](auto it){
                                              return it.GetDataType() == expectedOutputType;
@@ -109,14 +109,14 @@ public:
     MultiTypedWorkload(const QueueDescriptor& descriptor, const WorkloadInfo& info)
         : BaseWorkload<QueueDescriptor>(descriptor, info)
     {
-        BOOST_ASSERT_MSG(std::all_of(info.m_InputTensorInfos.begin(),
+        ARMNN_ASSERT_MSG(std::all_of(info.m_InputTensorInfos.begin(),
                                      info.m_InputTensorInfos.end(),
                                      [&](auto it){
                                          return it.GetDataType() == InputDataType;
                                      }),
                          "Trying to create workload with incorrect type");
 
-        BOOST_ASSERT_MSG(std::all_of(info.m_OutputTensorInfos.begin(),
+        ARMNN_ASSERT_MSG(std::all_of(info.m_OutputTensorInfos.begin(),
                                      info.m_OutputTensorInfos.end(),
                                      [&](auto it){
                                          return it.GetDataType() == OutputDataType;
@@ -136,11 +136,11 @@ public:
     {
         if (!info.m_InputTensorInfos.empty())
         {
-            BOOST_ASSERT_MSG(info.m_InputTensorInfos.front().GetDataType() == DataType,
+            ARMNN_ASSERT_MSG(info.m_InputTensorInfos.front().GetDataType() == DataType,
                                  "Trying to create workload with incorrect type");
         }
 
-        BOOST_ASSERT_MSG(std::all_of(info.m_OutputTensorInfos.begin(),
+        ARMNN_ASSERT_MSG(std::all_of(info.m_OutputTensorInfos.begin(),
                                      info.m_OutputTensorInfos.end(),
                                      [&](auto it){
                                          return it.GetDataType() == DataType;
@@ -175,6 +175,16 @@ template <typename QueueDescriptor>
 using BaseUint8ComparisonWorkload = MultiTypedWorkload<QueueDescriptor,
                                                        armnn::DataType::QAsymmU8,
                                                        armnn::DataType::Boolean>;
+
+template <typename QueueDescriptor>
+using BFloat16ToFloat32Workload = MultiTypedWorkload<QueueDescriptor,
+                                                     armnn::DataType::BFloat16,
+                                                     armnn::DataType::Float32>;
+
+template <typename QueueDescriptor>
+using Float32ToBFloat16Workload = MultiTypedWorkload<QueueDescriptor,
+                                                     armnn::DataType::Float32,
+                                                     armnn::DataType::BFloat16>;
 
 template <typename QueueDescriptor>
 using Float16ToFloat32Workload = MultiTypedWorkload<QueueDescriptor,

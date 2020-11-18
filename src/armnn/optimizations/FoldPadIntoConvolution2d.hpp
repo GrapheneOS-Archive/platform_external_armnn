@@ -7,6 +7,8 @@
 
 #include "Optimization.hpp"
 
+#include <armnn/utility/PolymorphicDowncast.hpp>
+
 namespace armnn
 {
 namespace optimizations
@@ -21,14 +23,13 @@ public:
         Layer& base = connection.GetConnectedOutputSlot()->GetOwningLayer();
         Layer& child = connection.GetOwningLayer();
 
-        BOOST_ASSERT(base.GetType() == LayerType::Pad);
-        BOOST_ASSERT(child.GetType() == LayerType::Convolution2d);
+        ARMNN_ASSERT(base.GetType() == LayerType::Pad);
+        ARMNN_ASSERT(child.GetType() == LayerType::Convolution2d);
 
-        PadLayer* padLayer = boost::polymorphic_downcast<PadLayer*>(&base);
-        Convolution2dLayer* convolution2dLayer = boost::polymorphic_downcast<Convolution2dLayer*>(&child);
+        PadLayer* padLayer = PolymorphicDowncast<PadLayer*>(&base);
+        Convolution2dLayer* convolution2dLayer = PolymorphicDowncast<Convolution2dLayer*>(&child);
 
         OutputSlot* parentOut = base.GetInputSlot(0).GetConnectedOutputSlot();
-        const TensorInfo& outInfo = child.GetOutputHandler().GetTensorInfo();
 
         const std::string name = std::string("folded-") + base.GetName() + std::string("-into-") + child.GetName();
         Convolution2dDescriptor descriptor = convolution2dLayer->GetParameters();
@@ -57,15 +58,14 @@ public:
         auto& newConv2dLayer = *graph.InsertNewLayer<Convolution2dLayer>(base.GetInputSlot(0),
                                                                          descriptor,
                                                                          name.c_str());
-        newConv2dLayer.GetOutputHandler().SetTensorInfo(outInfo);
 
         // Copy weights and bias to the new convolution layer
-        BOOST_ASSERT_MSG(convolution2dLayer->m_Weight != nullptr,
+        ARMNN_ASSERT_MSG(convolution2dLayer->m_Weight != nullptr,
                          "FoldPadIntoConvolution2d: Weights data should not be null.");
         newConv2dLayer.m_Weight = std::move(convolution2dLayer->m_Weight);
         if (descriptor.m_BiasEnabled)
         {
-            BOOST_ASSERT_MSG(convolution2dLayer->m_Bias != nullptr,
+            ARMNN_ASSERT_MSG(convolution2dLayer->m_Bias != nullptr,
                              "FoldPadIntoConvolution2d: Bias data should not be null if bias is enabled.");
             newConv2dLayer.m_Bias = std::move(convolution2dLayer->m_Bias);
         }

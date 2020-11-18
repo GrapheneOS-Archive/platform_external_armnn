@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -9,27 +9,15 @@
 
 #include <armnn/TypesUtils.hpp>
 #include <armnn/Exceptions.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <backendsCommon/TensorHandleFactoryRegistry.hpp>
 
-#include <boost/cast.hpp>
 #include <boost/test/unit_test.hpp>
-
-/// Checks that first comes before second in the order.
-bool CheckOrder(const armnn::Graph& graph, const armnn::Layer* first, const armnn::Layer* second)
-{
-    graph.Print();
-
-    const auto& order = graph.TopologicalSort();
-
-    auto firstPos = std::find(order.begin(), order.end(), first);
-    auto secondPos = std::find(firstPos, order.end(), second);
-
-    return (secondPos != order.end());
-}
 
 BOOST_AUTO_TEST_SUITE(Graph)
 
@@ -274,7 +262,7 @@ static std::vector<Edge> GetEdgeList(const armnn::Graph& graph)
             const unsigned int numConnections = outputSlot.GetNumConnections();
             for (unsigned int c = 0; c < numConnections; ++c)
             {
-                auto inputSlot = boost::polymorphic_downcast<const armnn::InputSlot*>(outputSlot.GetConnection(c));
+                auto inputSlot = armnn::PolymorphicDowncast<const armnn::InputSlot*>(outputSlot.GetConnection(c));
                 edges.emplace_back(srcLayer, &inputSlot->GetOwningLayer());
             }
         }
@@ -311,7 +299,7 @@ static void TestGraphAfterAddingCopyLayers(const armnn::Graph& graph, const armn
             if (origEdge.first->GetNameStr() == edge.first->GetNameStr() &&
                 origEdge.second->GetNameStr() == edge.second->GetNameStr())
             {
-                originalEdge = boost::numeric_cast<int>(i);
+                originalEdge = armnn::numeric_cast<int>(i);
             }
         }
 

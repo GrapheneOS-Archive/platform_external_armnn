@@ -1,26 +1,21 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
+
 #include <armnn/Logging.hpp>
-
-
+#include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/Utils.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #if defined(_MSC_VER)
-#ifndef NOMINMAX
-#define NOMINMAX // Prevent definition of min/max macros that interfere with std::min/max
-#endif
-#include <Windows.h>
-#undef TIME_MS  // Windows.h defines this but we don't need it and it interferes with our definition in Instrument.hpp
+#include <common/include/WindowsWrapper.hpp>
 #endif
 
 #if defined(__ANDROID__)
 #include <android/log.h>
 #endif
 
-#include <boost/assert.hpp>
-#include <boost/core/ignore_unused.hpp>
 #include <iostream>
 
 namespace armnn
@@ -55,7 +50,7 @@ void SetLogFilter(LogSeverity level)
             SimpleLogger<LogSeverity::Fatal>::Get().Enable(true);
             break;
         default:
-            BOOST_ASSERT(false);
+            ARMNN_ASSERT(false);
     }
 }
 
@@ -107,14 +102,14 @@ class DebugOutputSink : public LogSink
 public:
     void Consume(const std::string& s) override
     {
-        boost::ignore_unused(s);
+        IgnoreUnused(s);
 #if defined(_MSC_VER)
         OutputDebugString(s.c_str());
         OutputDebugString("\n");
 #elif defined(__ANDROID__)
         __android_log_write(ANDROID_LOG_DEBUG, "armnn", s.c_str());
 #else
-        boost::ignore_unused(s);
+        IgnoreUnused(s);
 #endif
     }
 };

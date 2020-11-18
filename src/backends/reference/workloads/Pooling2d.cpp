@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -9,8 +9,7 @@
 #include <armnn/Types.hpp>
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
-
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <limits>
 #include <algorithm>
@@ -151,28 +150,25 @@ void Pooling2d(Decoder<float>& rInputDecoder,
     auto heightIndex = dataLayout.GetHeightIndex();
     auto widthIndex = dataLayout.GetWidthIndex();
 
-    const int batchSize    = boost::numeric_cast<int>(outputInfo.GetShape()[0]);
-    const int channels     = boost::numeric_cast<int>(outputInfo.GetShape()[channelsIndex]);
-    const int heightOutput = boost::numeric_cast<int>(outputInfo.GetShape()[heightIndex]);
-    const int widthOutput  = boost::numeric_cast<int>(outputInfo.GetShape()[widthIndex]);
-    const int heightInput  = boost::numeric_cast<int>(inputInfo.GetShape()[heightIndex]);
-    const int widthInput   = boost::numeric_cast<int>(inputInfo.GetShape()[widthIndex]);
-    const int padLeft      = boost::numeric_cast<int>(params.m_PadLeft);
-    const int padRight     = boost::numeric_cast<int>(params.m_PadRight);
-    const int padTop       = boost::numeric_cast<int>(params.m_PadTop);
-    const int padBottom    = boost::numeric_cast<int>(params.m_PadBottom);
-    const int strideX      = boost::numeric_cast<int>(params.m_StrideX);
-    const int strideY      = boost::numeric_cast<int>(params.m_StrideY);
-    const int poolHeight   = boost::numeric_cast<int>(params.m_PoolHeight);
-    const int poolWidth    = boost::numeric_cast<int>(params.m_PoolWidth);
+    const int batchSize    = armnn::numeric_cast<int>(outputInfo.GetShape()[0]);
+    const int channels     = armnn::numeric_cast<int>(outputInfo.GetShape()[channelsIndex]);
+    const int heightOutput = armnn::numeric_cast<int>(outputInfo.GetShape()[heightIndex]);
+    const int widthOutput  = armnn::numeric_cast<int>(outputInfo.GetShape()[widthIndex]);
+    const int heightInput  = armnn::numeric_cast<int>(inputInfo.GetShape()[heightIndex]);
+    const int widthInput   = armnn::numeric_cast<int>(inputInfo.GetShape()[widthIndex]);
+    const int padLeft      = armnn::numeric_cast<int>(params.m_PadLeft);
+    const int padRight     = armnn::numeric_cast<int>(params.m_PadRight);
+    const int padTop       = armnn::numeric_cast<int>(params.m_PadTop);
+    const int padBottom    = armnn::numeric_cast<int>(params.m_PadBottom);
+    const int strideX      = armnn::numeric_cast<int>(params.m_StrideX);
+    const int strideY      = armnn::numeric_cast<int>(params.m_StrideY);
+    const int poolHeight   = armnn::numeric_cast<int>(params.m_PoolHeight);
+    const int poolWidth    = armnn::numeric_cast<int>(params.m_PoolWidth);
 
     float defaultInitializer = DefaultInitializer(params.m_PoolType);
 
     Accumulator accumulate = GetAccumulator(params.m_PoolType);
     Executor execute       = GetExecutor(params.m_PoolType);
-
-    TensorShape outputShape = outputInfo.GetShape();
-    TensorShape inputShape =  inputInfo.GetShape();
 
     // Check supported padding methods outside the loop to simplify
     // the inner loop.
@@ -181,6 +177,8 @@ void Pooling2d(Decoder<float>& rInputDecoder,
     {
         throw armnn::InvalidArgumentException("Unsupported padding type");
     }
+
+    const std::vector<float> decodedInputVec = rInputDecoder.DecodeTensor(inputInfo.GetShape());
 
     for (int n = 0; n < batchSize; n++)
     {
@@ -208,7 +206,7 @@ void Pooling2d(Decoder<float>& rInputDecoder,
                     wend = std::min(wend, widthInput + padRight);
 
                     float result = defaultInitializer;
-                    float poolAreaSize = boost::numeric_cast<float>(height * (wend - wstart));
+                    float poolAreaSize = armnn::numeric_cast<float>(height * (wend - wstart));
 
                     // Special case: when the pooling kernel is over a padding region and the padding
                     //               size is larger or equal to the kernel and the kernel only covers
@@ -220,12 +218,24 @@ void Pooling2d(Decoder<float>& rInputDecoder,
                     {
                         result = 0.0f;
 
-                        unsigned int outputIndex = dataLayout.GetIndex(outputShape,
-                                                                       boost::numeric_cast<unsigned int>(n),
-                                                                       boost::numeric_cast<unsigned int>(c),
-                                                                       boost::numeric_cast<unsigned int>(yOutput),
-                                                                       boost::numeric_cast<unsigned int>(xOutput));
-                        rOutputEncoder[outputIndex];
+                        int outputIndex;
+
+                        if(dataLayout.GetDataLayout() == DataLayout::NHWC)
+                        {
+                            outputIndex = n * heightOutput * widthOutput * channels +
+                                          yOutput * widthOutput * channels +
+                                          xOutput * channels +
+                                          c;
+                        }
+                        else
+                        {
+                            outputIndex = n * heightOutput * widthOutput * channels +
+                                          c * heightOutput * widthOutput +
+                                          yOutput * widthOutput +
+                                          xOutput;
+                        }
+
+                        rOutputEncoder[static_cast<unsigned int>(outputIndex)];
                         rOutputEncoder.Set(result);
                         continue;
                     }
@@ -236,35 +246,55 @@ void Pooling2d(Decoder<float>& rInputDecoder,
                     {
                         // When we exclude the padding, it means we calculate with a smaller
                         // kernel size, so I changed the divisor here.
-                        poolAreaSize = boost::numeric_cast<float>((hend - hstart) * (wend - wstart));
+                        poolAreaSize = armnn::numeric_cast<float>((hend - hstart) * (wend - wstart));
                     }
 
                     for (auto yInput = hstart; yInput < hend; yInput++)
                     {
                         for (auto xInput = wstart; xInput < wend; xInput++)
                         {
-                            unsigned int inputIndex = dataLayout.GetIndex(inputShape,
-                                                                          boost::numeric_cast<unsigned int>(n),
-                                                                          boost::numeric_cast<unsigned int>(c),
-                                                                          boost::numeric_cast<unsigned int>(yInput),
-                                                                          boost::numeric_cast<unsigned int>(xInput));
 
-                            rInputDecoder[inputIndex];
-                            float inval = rInputDecoder.Get();
+                            int inputIndex;
+                            if(dataLayout.GetDataLayout() == DataLayout::NHWC)
+                            {
+                                inputIndex = n * heightInput * widthInput * channels +
+                                             yInput * widthInput * channels +
+                                             xInput * channels +
+                                             c;
 
-                            accumulate(result, inval);
+                            }
+                            else
+                            {
+                                inputIndex = n * heightInput * widthInput * channels +
+                                             c * heightInput * widthInput +
+                                             yInput * widthInput +
+                                             xInput;
+                            }
+
+                            accumulate(result, decodedInputVec[static_cast<unsigned int>(inputIndex)]);
                         }
                     }
 
                     execute(result, poolAreaSize);
 
-                    unsigned int outputIndex = dataLayout.GetIndex(outputShape,
-                                                                   boost::numeric_cast<unsigned int>(n),
-                                                                   boost::numeric_cast<unsigned int>(c),
-                                                                   boost::numeric_cast<unsigned int>(yOutput),
-                                                                   boost::numeric_cast<unsigned int>(xOutput));
+                    int outputIndex;
 
-                    rOutputEncoder[outputIndex];
+                    if(dataLayout.GetDataLayout() == DataLayout::NHWC)
+                    {
+                        outputIndex = n * heightOutput * widthOutput * channels +
+                                      yOutput * widthOutput * channels +
+                                      xOutput * channels +
+                                      c;
+                    }
+                    else
+                    {
+                        outputIndex = n * heightOutput * widthOutput * channels +
+                                      c * heightOutput * widthOutput +
+                                      yOutput * widthOutput +
+                                      xOutput;
+                    }
+
+                    rOutputEncoder[static_cast<unsigned int>(outputIndex)];
                     rOutputEncoder.Set(result);
                 }
             }

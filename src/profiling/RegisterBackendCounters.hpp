@@ -20,16 +20,16 @@ class RegisterBackendCounters : public IRegisterBackendCounters
 {
 public:
 
-    RegisterBackendCounters(uint16_t currentMaxGlobalCounterID, const BackendId& backendId)
-                            : m_CurrentMaxGlobalCounterID(currentMaxGlobalCounterID),
-                              m_CounterDirectory(ProfilingService::Instance().GetCounterRegistry()),
-                              m_BackendId(backendId) {}
+    RegisterBackendCounters(
+        uint16_t currentMaxGlobalCounterID, const BackendId& backendId, ProfilingService& profilingService)
+        : m_CurrentMaxGlobalCounterID(currentMaxGlobalCounterID),
+          m_BackendId(backendId),
+          m_ProfilingService(profilingService),
+          m_CounterDirectory(m_ProfilingService.GetCounterRegistry()) {}
 
     ~RegisterBackendCounters() = default;
 
-    void RegisterCategory(const std::string& categoryName,
-                          const Optional<uint16_t>& deviceUid     = EmptyOptional(),
-                          const Optional<uint16_t>& counterSetUid = EmptyOptional()) override;
+    void RegisterCategory(const std::string& categoryName) override;
 
     uint16_t RegisterDevice(const std::string& deviceName,
                             uint16_t cores = 0,
@@ -53,8 +53,9 @@ public:
 
 private:
     uint16_t m_CurrentMaxGlobalCounterID;
-    ICounterRegistry& m_CounterDirectory;
     const BackendId& m_BackendId;
+    ProfilingService& m_ProfilingService;
+    ICounterRegistry& m_CounterDirectory;
 };
 
 } // namespace profiling

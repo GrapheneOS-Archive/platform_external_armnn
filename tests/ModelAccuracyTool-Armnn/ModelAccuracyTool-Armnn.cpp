@@ -7,11 +7,9 @@
 #include "../InferenceTest.hpp"
 #include "ModelAccuracyChecker.hpp"
 #include "armnnDeserializer/IDeserializer.hpp"
+#include <Filesystem.hpp>
 
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/program_options/variables_map.hpp>
-#include <boost/range/iterator_range.hpp>
+#include <cxxopts/cxxopts.hpp>
 #include <map>
 
 using namespace armnn::test;
@@ -50,87 +48,100 @@ int main(int argc, char* argv[])
 {
     try
     {
-        using namespace boost::filesystem;
         armnn::LogSeverity level = armnn::LogSeverity::Debug;
         armnn::ConfigureLogging(true, true, level);
 
-        // Set-up program Options
-        namespace po = boost::program_options;
-
-        std::vector<armnn::BackendId> computeDevice;
-        std::vector<armnn::BackendId> defaultBackends = {armnn::Compute::CpuAcc, armnn::Compute::CpuRef};
         std::string modelPath;
         std::string modelFormat;
+        std::vector<std::string> inputNames;
+        std::vector<std::string> outputNames;
         std::string dataDir;
-        std::string inputName;
-        std::string inputLayout;
-        std::string outputName;
         std::string modelOutputLabelsPath;
         std::string validationLabelPath;
+        std::string inputLayout;
+        std::vector<armnn::BackendId> computeDevice;
         std::string validationRange;
         std::string blacklistPath;
 
         const std::string backendsMessage = "Which device to run layers on by default. Possible choices: "
                                             + armnn::BackendRegistryInstance().GetBackendIdsAsString();
 
-        po::options_description desc("Options");
         try
         {
-            // Adds generic options needed to run Accuracy Tool.
-            desc.add_options()
-                ("help,h", "Display help messages")
-                ("model-path,m", po::value<std::string>(&modelPath)->required(), "Path to armnn format model file")
-                ("model-format,f", po::value<std::string>(&modelFormat)->required(),
-                 "The model format. Supported values: caffe, tensorflow, tflite")
-                ("input-name,i", po::value<std::string>(&inputName)->required(),
-                 "Identifier of the input tensors in the network separated by comma.")
-                ("output-name,o", po::value<std::string>(&outputName)->required(),
-                 "Identifier of the output tensors in the network separated by comma.")
-                ("data-dir,d", po::value<std::string>(&dataDir)->required(),
-                 "Path to directory containing the ImageNet test data")
-                ("model-output-labels,p", po::value<std::string>(&modelOutputLabelsPath)->required(),
-                 "Path to model output labels file.")
-                ("validation-labels-path,v", po::value<std::string>(&validationLabelPath)->required(),
-                 "Path to ImageNet Validation Label file")
-                ("data-layout,l", po::value<std::string>(&inputLayout)->default_value("NHWC"),
-                 "Data layout. Supported value: NHWC, NCHW. Default: NHWC")
-                ("compute,c", po::value<std::vector<armnn::BackendId>>(&computeDevice)->default_value(defaultBackends),
-                 backendsMessage.c_str())
-                ("validation-range,r", po::value<std::string>(&validationRange)->default_value("1:0"),
-                 "The range of the images to be evaluated. Specified in the form <begin index>:<end index>."
-                 "The index starts at 1 and the range is inclusive."
-                 "By default the evaluation will be performed on all images.")
-                ("blacklist-path,b", po::value<std::string>(&blacklistPath)->default_value(""),
-                 "Path to a blacklist file where each line denotes the index of an image to be "
-                 "excluded from evaluation.");
+            cxxopts::Options options("ModeAccuracyTool-Armnn","Options");
+
+            options.add_options()
+                ("h,help", "Display help messages")
+                ("m,model-path",
+                    "Path to armnn format model file",
+                    cxxopts::value<std::string>(modelPath))
+                ("f,model-format",
+                    "The model format. Supported values: caffe, tensorflow, tflite",
+                    cxxopts::value<std::string>(modelFormat))
+                ("i,input-name",
+                    "Identifier of the input tensors in the network separated by comma with no space.",
+                    cxxopts::value<std::vector<std::string>>(inputNames))
+                ("o,output-name",
+                    "Identifier of the output tensors in the network separated by comma with no space.",
+                    cxxopts::value<std::vector<std::string>>(outputNames))
+                ("d,data-dir",
+                    "Path to directory containing the ImageNet test data",
+                    cxxopts::value<std::string>(dataDir))
+                ("p,model-output-labels",
+                    "Path to model output labels file.",
+                    cxxopts::value<std::string>(modelOutputLabelsPath))
+                ("v,validation-labels-path",
+                    "Path to ImageNet Validation Label file",
+                    cxxopts::value<std::string>(validationLabelPath))
+                ("l,data-layout",
+                    "Data layout. Supported value: NHWC, NCHW. Default: NHWC",
+                    cxxopts::value<std::string>(inputLayout)->default_value("NHWC"))
+                ("c,compute",
+                    backendsMessage.c_str(),
+                    cxxopts::value<std::vector<armnn::BackendId>>(computeDevice)->default_value("CpuAcc,CpuRef"))
+                ("r,validation-range",
+                    "The range of the images to be evaluated. Specified in the form <begin index>:<end index>."
+                    "The index starts at 1 and the range is inclusive."
+                    "By default the evaluation will be performed on all images.",
+                    cxxopts::value<std::string>(validationRange)->default_value("1:0"))
+                ("b,blacklist-path",
+                    "Path to a blacklist file where each line denotes the index of an image to be "
+                    "excluded from evaluation.",
+                    cxxopts::value<std::string>(blacklistPath)->default_value(""));
+
+            auto result = options.parse(argc, argv);
+
+            if (result.count("help") > 0)
+            {
+                std::cout << options.help() << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            // Check for mandatory single options.
+            std::string mandatorySingleParameters[] = { "model-path", "model-format", "input-name", "output-name",
+                                                        "data-dir", "model-output-labels", "validation-labels-path" };
+            for (auto param : mandatorySingleParameters)
+            {
+                if (result.count(param) != 1)
+                {
+                    std::cerr << "Parameter \'--" << param << "\' is required but missing." << std::endl;
+                    return EXIT_FAILURE;
+                }
+            }
+        }
+        catch (const cxxopts::OptionException& e)
+        {
+            std::cerr << e.what() << std::endl << std::endl;
+            return EXIT_FAILURE;
         }
         catch (const std::exception& e)
         {
             // Coverity points out that default_value(...) can throw a bad_lexical_cast,
             // and that desc.add_options() can throw boost::io::too_few_args.
             // They really won't in any of these cases.
-            BOOST_ASSERT_MSG(false, "Caught unexpected exception");
+            ARMNN_ASSERT_MSG(false, "Caught unexpected exception");
             std::cerr << "Fatal internal error: " << e.what() << std::endl;
-            return 1;
-        }
-
-        po::variables_map vm;
-        try
-        {
-            po::store(po::parse_command_line(argc, argv, desc), vm);
-
-            if (vm.count("help"))
-            {
-                std::cout << desc << std::endl;
-                return 1;
-            }
-            po::notify(vm);
-        }
-        catch (po::error& e)
-        {
-            std::cerr << e.what() << std::endl << std::endl;
-            std::cerr << desc << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Check if the requested backend are all valid
@@ -161,12 +172,12 @@ int main(int argc, char* argv[])
         {
             optimizedNet = armnn::Optimize(*network, computeDevice, runtime->GetDeviceSpec());
         }
-        catch (armnn::Exception& e)
+        catch (const armnn::Exception& e)
         {
             std::stringstream message;
             message << "armnn::Exception (" << e.what() << ") caught from optimize.";
             ARMNN_LOG(fatal) << message.str();
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Loads the network into the runtime.
@@ -175,29 +186,38 @@ int main(int argc, char* argv[])
         if (status == armnn::Status::Failure)
         {
             ARMNN_LOG(fatal) << "armnn::IRuntime: Failed to load network";
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Set up Network
         using BindingPointInfo = InferenceModelInternal::BindingPointInfo;
 
-        const armnnDeserializer::BindingPointInfo&
-            inputBindingInfo = armnnparser->GetNetworkInputBindingInfo(0, inputName);
+        // Handle inputNames and outputNames, there can be multiple.
+        std::vector<BindingPointInfo> inputBindings;
+        for(auto& input: inputNames)
+        {
+            const armnnDeserializer::BindingPointInfo&
+                    inputBindingInfo = armnnparser->GetNetworkInputBindingInfo(0, input);
 
-        std::pair<armnn::LayerBindingId, armnn::TensorInfo>
-            m_InputBindingInfo(inputBindingInfo.m_BindingId, inputBindingInfo.m_TensorInfo);
-        std::vector<BindingPointInfo> inputBindings  = { m_InputBindingInfo };
+            std::pair<armnn::LayerBindingId, armnn::TensorInfo>
+                    m_InputBindingInfo(inputBindingInfo.m_BindingId, inputBindingInfo.m_TensorInfo);
+            inputBindings.push_back(m_InputBindingInfo);
+        }
 
-        const armnnDeserializer::BindingPointInfo&
-            outputBindingInfo = armnnparser->GetNetworkOutputBindingInfo(0, outputName);
+        std::vector<BindingPointInfo> outputBindings;
+        for(auto& output: outputNames)
+        {
+            const armnnDeserializer::BindingPointInfo&
+                    outputBindingInfo = armnnparser->GetNetworkOutputBindingInfo(0, output);
 
-        std::pair<armnn::LayerBindingId, armnn::TensorInfo>
-            m_OutputBindingInfo(outputBindingInfo.m_BindingId, outputBindingInfo.m_TensorInfo);
-        std::vector<BindingPointInfo> outputBindings = { m_OutputBindingInfo };
+            std::pair<armnn::LayerBindingId, armnn::TensorInfo>
+                    m_OutputBindingInfo(outputBindingInfo.m_BindingId, outputBindingInfo.m_TensorInfo);
+            outputBindings.push_back(m_OutputBindingInfo);
+        }
 
         // Load model output labels
-        if (modelOutputLabelsPath.empty() || !boost::filesystem::exists(modelOutputLabelsPath) ||
-            !boost::filesystem::is_regular_file(modelOutputLabelsPath))
+        if (modelOutputLabelsPath.empty() || !fs::exists(modelOutputLabelsPath) ||
+            !fs::is_regular_file(modelOutputLabelsPath))
         {
             ARMNN_LOG(fatal) << "Invalid model output labels path at " << modelOutputLabelsPath;
         }
@@ -211,7 +231,7 @@ int main(int argc, char* argv[])
         if (imageIndexStrs.size() != 2)
         {
             ARMNN_LOG(fatal) << "Invalid validation range specification: Invalid format " << validationRange;
-            return 1;
+            return EXIT_FAILURE;
         }
         try
         {
@@ -221,34 +241,42 @@ int main(int argc, char* argv[])
         catch (const std::exception& e)
         {
             ARMNN_LOG(fatal) << "Invalid validation range specification: " << validationRange;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Validate  blacklist file if it's specified
         if (!blacklistPath.empty() &&
-            !(boost::filesystem::exists(blacklistPath) && boost::filesystem::is_regular_file(blacklistPath)))
+            !(fs::exists(blacklistPath) && fs::is_regular_file(blacklistPath)))
         {
             ARMNN_LOG(fatal) << "Invalid path to blacklist file at " << blacklistPath;
-            return 1;
+            return EXIT_FAILURE;
         }
 
-        path pathToDataDir(dataDir);
+        fs::path pathToDataDir(dataDir);
         const map<std::string, std::string> imageNameToLabel = LoadValidationImageFilenamesAndLabels(
             validationLabelPath, pathToDataDir.string(), imageBegIndex, imageEndIndex, blacklistPath);
         armnnUtils::ModelAccuracyChecker checker(imageNameToLabel, modelOutputLabels);
-        using TContainer = boost::variant<std::vector<float>, std::vector<int>, std::vector<uint8_t>>;
+        using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<uint8_t>>;
 
         if (ValidateDirectory(dataDir))
         {
             InferenceModel<armnnDeserializer::IDeserializer, float>::Params params;
+
             params.m_ModelPath      = modelPath;
             params.m_IsModelBinary  = true;
             params.m_ComputeDevices = computeDevice;
-            params.m_InputBindings.push_back(inputName);
-            params.m_OutputBindings.push_back(outputName);
+            // Insert inputNames and outputNames into params vector
+            params.m_InputBindings.insert(std::end(params.m_InputBindings),
+                                          std::begin(inputNames),
+                                          std::end(inputNames));
+            params.m_OutputBindings.insert(std::end(params.m_OutputBindings),
+                                           std::begin(outputNames),
+                                           std::end(outputNames));
 
             using TParser = armnnDeserializer::IDeserializer;
-            InferenceModel<TParser, float> model(params, false);
+            // If dynamicBackends is empty it will be disabled by default.
+            InferenceModel<TParser, float> model(params, false, "");
+
             // Get input tensor information
             const armnn::TensorInfo& inputTensorInfo   = model.GetInputBindingInfo().second;
             const armnn::TensorShape& inputTensorShape = inputTensorInfo.GetShape();
@@ -265,7 +293,7 @@ int main(int argc, char* argv[])
             else
             {
                 ARMNN_LOG(fatal) << "Invalid Data layout: " << inputLayout;
-                return 1;
+                return EXIT_FAILURE;
             }
             const unsigned int inputTensorWidth =
                 inputTensorDataLayout == armnn::DataLayout::NCHW ? inputTensorShape[3] : inputTensorShape[2];
@@ -278,7 +306,7 @@ int main(int argc, char* argv[])
             {
                 ARMNN_LOG(fatal) << "Number of output elements: " << outputNumElements
                                          << " , mismatches the number of output labels: " << modelOutputLabels.size();
-                return 1;
+                return EXIT_FAILURE;
             }
 
             const unsigned int batchSize = 1;
@@ -299,7 +327,7 @@ int main(int argc, char* argv[])
             else
             {
                 ARMNN_LOG(fatal) << "Unsupported frontend: " << modelFormat;
-                return 1;
+                return EXIT_FAILURE;
             }
             const NormalizationParameters& normParams = GetNormalizationParameters(modelFrontend, inputTensorDataType);
             for (const auto& imageEntry : imageNameToLabel)
@@ -310,7 +338,7 @@ int main(int argc, char* argv[])
                 vector<TContainer> inputDataContainers;
                 vector<TContainer> outputDataContainers;
 
-                auto imagePath = pathToDataDir / boost::filesystem::path(imageName);
+                auto imagePath = pathToDataDir / fs::path(imageName);
                 switch (inputTensorDataType)
                 {
                     case armnn::DataType::Signed32:
@@ -357,7 +385,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            return 1;
+            return EXIT_SUCCESS;
         }
 
         for(unsigned int i = 1; i <= 5; ++i)
@@ -366,22 +394,22 @@ int main(int argc, char* argv[])
         }
 
         ARMNN_LOG(info) << "Accuracy Tool ran successfully!";
-        return 0;
+        return EXIT_SUCCESS;
     }
-    catch (armnn::Exception const & e)
+    catch (const armnn::Exception& e)
     {
         // Coverity fix: BOOST_LOG_TRIVIAL (typically used to report errors) may throw an
         // exception of type std::length_error.
         // Using stderr instead in this context as there is no point in nesting try-catch blocks here.
         std::cerr << "Armnn Error: " << e.what() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
-    catch (const std::exception & e)
+    catch (const std::exception& e)
     {
         // Coverity fix: various boost exceptions can be thrown by methods called by this test.
         std::cerr << "WARNING: ModelAccuracyTool-Armnn: An error has occurred when running the "
                      "Accuracy Tool: " << e.what() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 }
 
@@ -393,12 +421,15 @@ map<std::string, std::string> LoadValidationImageFilenamesAndLabels(const string
 {
     // Populate imageFilenames with names of all .JPEG, .PNG images
     std::vector<std::string> imageFilenames;
-    for (const auto& imageEntry :
-         boost::make_iterator_range(boost::filesystem::directory_iterator(boost::filesystem::path(imageDirectoryPath))))
+    for (const auto& imageEntry : fs::directory_iterator(fs::path(imageDirectoryPath)))
     {
-        boost::filesystem::path imagePath = imageEntry.path();
-        std::string imageExtension        = boost::to_upper_copy<std::string>(imagePath.extension().string());
-        if (boost::filesystem::is_regular_file(imagePath) && (imageExtension == ".JPEG" || imageExtension == ".PNG"))
+        fs::path imagePath = imageEntry.path();
+
+        // Get extension and convert to uppercase
+        std::string imageExtension = imagePath.extension().string();
+        std::transform(imageExtension.begin(), imageExtension.end(), imageExtension.begin(), ::toupper);
+
+        if (fs::is_regular_file(imagePath) && (imageExtension == ".JPEG" || imageExtension == ".PNG"))
         {
             imageFilenames.push_back(imagePath.filename().string());
         }

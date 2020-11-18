@@ -28,6 +28,20 @@ armnnSerializer::ComparisonOperation GetFlatBufferComparisonOperation(armnn::Com
     }
 }
 
+armnnSerializer::LogicalBinaryOperation GetFlatBufferLogicalBinaryOperation(
+    armnn::LogicalBinaryOperation logicalBinaryOperation)
+{
+    switch (logicalBinaryOperation)
+    {
+        case armnn::LogicalBinaryOperation::LogicalAnd:
+            return armnnSerializer::LogicalBinaryOperation::LogicalBinaryOperation_LogicalAnd;
+        case armnn::LogicalBinaryOperation::LogicalOr:
+            return armnnSerializer::LogicalBinaryOperation::LogicalBinaryOperation_LogicalOr;
+        default:
+            throw armnn::InvalidArgumentException("Logical Binary operation unknown");
+    }
+}
+
 armnnSerializer::ConstTensorData GetFlatBufferConstTensorData(armnn::DataType dataType)
 {
     switch (dataType)
@@ -39,6 +53,7 @@ armnnSerializer::ConstTensorData GetFlatBufferConstTensorData(armnn::DataType da
         case armnn::DataType::QSymmS16:
             return armnnSerializer::ConstTensorData::ConstTensorData_ShortData;
         case armnn::DataType::QAsymmU8:
+        case armnn::DataType::QSymmS8:
         case armnn::DataType::Boolean:
             return armnnSerializer::ConstTensorData::ConstTensorData_ByteData;
         default:
@@ -58,8 +73,12 @@ armnnSerializer::DataType GetFlatBufferDataType(armnn::DataType dataType)
             return armnnSerializer::DataType::DataType_Signed32;
         case armnn::DataType::QSymmS16:
             return armnnSerializer::DataType::DataType_QSymmS16;
+        case armnn::DataType::QAsymmS8:
+            return armnnSerializer::DataType::DataType_QAsymmS8;
         case armnn::DataType::QAsymmU8:
             return armnnSerializer::DataType::DataType_QAsymmU8;
+        case armnn::DataType::QSymmS8:
+            return armnnSerializer::DataType::DataType_QSymmS8;
         case armnn::DataType::Boolean:
             return armnnSerializer::DataType::DataType_Boolean;
         default:
@@ -93,6 +112,8 @@ armnnSerializer::UnaryOperation GetFlatBufferUnaryOperation(armnn::UnaryOperatio
             return armnnSerializer::UnaryOperation::UnaryOperation_Exp;
         case armnn::UnaryOperation::Neg:
             return armnnSerializer::UnaryOperation::UnaryOperation_Neg;
+        case armnn::UnaryOperation::LogicalNot:
+            return armnnSerializer::UnaryOperation::UnaryOperation_LogicalNot;
         default:
             throw armnn::InvalidArgumentException("Unary operation unknown");
     }

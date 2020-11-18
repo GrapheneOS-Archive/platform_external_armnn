@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -34,8 +34,20 @@ public:
                                  Optional<DataType> dataType,
                                  std::string& outReasonIfUnsupported);
 
+    static bool IsLayerSupported(const IConnectableLayer& layer,
+                                 Optional<DataType> dataType,
+                                 std::string& outReasonIfUnsupported,
+                                 const ModelOptions& modelOptions);
+
+    static bool IsLayerSupported(const BackendId& backendId,
+                                 const IConnectableLayer& layer,
+                                 Optional<DataType> dataType,
+                                 std::string& outReasonIfUnsupported,
+                                 const ModelOptions& modelOptions);
+
     virtual bool SupportsSubTensors() const = 0;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateSubTensorHandle instead")
     virtual std::unique_ptr<ITensorHandle> CreateSubTensorHandle(ITensorHandle& parent,
                                                                  TensorShape const& subTensorShape,
                                                                  unsigned int const* subTensorOrigin
@@ -44,9 +56,11 @@ public:
     virtual std::unique_ptr<IWorkload> CreateInput(const InputQueueDescriptor& descriptor,
                                                    const WorkloadInfo& info) const = 0;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     virtual std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                               const bool IsMemoryManaged = true) const = 0;
 
+    ARMNN_DEPRECATED_MSG("Use ITensorHandleFactory::CreateTensorHandle instead")
     virtual std::unique_ptr<ITensorHandle> CreateTensorHandle(const TensorInfo& tensorInfo,
                                                               DataLayout dataLayout,
                                                               const bool IsMemoryManaged = true) const = 0;
@@ -79,7 +93,13 @@ public:
     virtual std::unique_ptr<IWorkload> CreateConstant(const ConstantQueueDescriptor& descriptor,
                                                       const WorkloadInfo& info) const;
 
+    virtual std::unique_ptr<IWorkload> CreateConvertBf16ToFp32(const ConvertBf16ToFp32QueueDescriptor& descriptor,
+                                                               const WorkloadInfo& info) const;
+
     virtual std::unique_ptr<IWorkload> CreateConvertFp16ToFp32(const ConvertFp16ToFp32QueueDescriptor& descriptor,
+                                                               const WorkloadInfo& info) const;
+
+    virtual std::unique_ptr<IWorkload> CreateConvertFp32ToBf16(const ConvertFp32ToBf16QueueDescriptor& descriptor,
                                                                const WorkloadInfo& info) const;
 
     virtual std::unique_ptr<IWorkload> CreateConvertFp32ToFp16(const ConvertFp32ToFp16QueueDescriptor& descriptor,
@@ -116,6 +136,9 @@ public:
     virtual std::unique_ptr<IWorkload> CreateFakeQuantization(const FakeQuantizationQueueDescriptor& descriptor,
                                                               const WorkloadInfo& info) const;
 
+    virtual std::unique_ptr<IWorkload> CreateFill(const FillQueueDescriptor& descriptor,
+                                                  const WorkloadInfo&        info) const;
+
     virtual std::unique_ptr<IWorkload> CreateFloor(const FloorQueueDescriptor& descriptor,
                                                    const WorkloadInfo& info) const;
 
@@ -135,6 +158,12 @@ public:
 
     virtual std::unique_ptr<IWorkload> CreateL2Normalization(const L2NormalizationQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info) const;
+
+    virtual std::unique_ptr<IWorkload> CreateLogicalBinary(const LogicalBinaryQueueDescriptor& descriptor,
+                                                           const WorkloadInfo& Info) const;
+
+    virtual std::unique_ptr<IWorkload> CreateLogicalUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
+                                                          const WorkloadInfo& Info) const;
 
     virtual std::unique_ptr<IWorkload> CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
                                                         const WorkloadInfo& info) const;
@@ -191,8 +220,14 @@ public:
     virtual std::unique_ptr<IWorkload> CreateQuantize(const QuantizeQueueDescriptor& descriptor,
                                                       const WorkloadInfo& Info) const;
 
+    virtual std::unique_ptr<IWorkload> CreateQLstm(const QLstmQueueDescriptor& descriptor,
+                                                   const WorkloadInfo& info) const;
+
     virtual std::unique_ptr<IWorkload> CreateQuantizedLstm(const QuantizedLstmQueueDescriptor& descriptor,
                                                            const WorkloadInfo& info) const;
+
+    virtual std::unique_ptr<IWorkload> CreateRank(const RankQueueDescriptor& descriptor,
+                                                  const WorkloadInfo& info) const;
 
     virtual std::unique_ptr<IWorkload> CreateReshape(const ReshapeQueueDescriptor& descriptor,
                                                      const WorkloadInfo& info) const;
@@ -235,9 +270,19 @@ public:
     virtual std::unique_ptr<IWorkload> CreateSwitch(const SwitchQueueDescriptor& descriptor,
                                                     const WorkloadInfo& Info) const;
 
+    virtual std::unique_ptr<IWorkload> CreateTranspose(const TransposeQueueDescriptor& descriptor,
+                                                       const WorkloadInfo& info) const;
+
     virtual std::unique_ptr<IWorkload> CreateTransposeConvolution2d(
         const TransposeConvolution2dQueueDescriptor& descriptor,
         const WorkloadInfo& info) const;
+
+private:
+    static bool IsLayerConfigurationSupported(const BackendId& backendId,
+                                       const IConnectableLayer& connectableLayer,
+                                       Optional<DataType> dataType,
+                                       std::string& outReasonIfUnsupported,
+                                       const ModelOptions& modelOptions = {});
 };
 
 } // namespace armnn

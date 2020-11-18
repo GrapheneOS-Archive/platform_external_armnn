@@ -37,6 +37,26 @@ ElementwiseUnaryFunction<Functor>::ElementwiseUnaryFunction(const TensorShape& i
     BroadcastLoop(inShape, outShape).Unroll(Functor(), 0, inData, outData);
 }
 
+template <typename Functor>
+LogicalBinaryFunction<Functor>::LogicalBinaryFunction(const TensorShape& inShape0,
+                                                      const TensorShape& inShape1,
+                                                      const TensorShape& outShape,
+                                                      Decoder<InType>& inData0,
+                                                      Decoder<InType>& inData1,
+                                                      Encoder<OutType>& outData)
+{
+    BroadcastLoop(inShape0, inShape1, outShape).Unroll(Functor(), 0, inData0, inData1, outData);
+}
+
+template <typename Functor>
+LogicalUnaryFunction<Functor>::LogicalUnaryFunction(const TensorShape& inShape,
+                                                    const TensorShape& outShape,
+                                                    Decoder<InType>& inData,
+                                                    Encoder<OutType>& outData)
+{
+    BroadcastLoop(inShape, outShape).Unroll(Functor(), 0, inData, outData);
+}
+
 } //namespace armnn
 
 template struct armnn::ElementwiseBinaryFunction<std::plus<float>>;
@@ -45,6 +65,13 @@ template struct armnn::ElementwiseBinaryFunction<std::multiplies<float>>;
 template struct armnn::ElementwiseBinaryFunction<std::divides<float>>;
 template struct armnn::ElementwiseBinaryFunction<armnn::maximum<float>>;
 template struct armnn::ElementwiseBinaryFunction<armnn::minimum<float>>;
+
+template struct armnn::ElementwiseBinaryFunction<std::plus<int32_t>>;
+template struct armnn::ElementwiseBinaryFunction<std::minus<int32_t>>;
+template struct armnn::ElementwiseBinaryFunction<std::multiplies<int32_t>>;
+template struct armnn::ElementwiseBinaryFunction<std::divides<int32_t>>;
+template struct armnn::ElementwiseBinaryFunction<armnn::maximum<int32_t>>;
+template struct armnn::ElementwiseBinaryFunction<armnn::minimum<int32_t>>;
 
 // Comparison
 template struct armnn::ElementwiseBinaryFunction<std::equal_to<float>>;
@@ -60,3 +87,8 @@ template struct armnn::ElementwiseUnaryFunction<armnn::exp<float>>;
 template struct armnn::ElementwiseUnaryFunction<std::negate<float>>;
 template struct armnn::ElementwiseUnaryFunction<armnn::rsqrt<float>>;
 template struct armnn::ElementwiseUnaryFunction<armnn::sqrt<float>>;
+
+// Logical Unary
+template struct armnn::LogicalUnaryFunction<std::logical_not<bool>>;
+template struct armnn::LogicalBinaryFunction<std::logical_and<bool>>;
+template struct armnn::LogicalBinaryFunction<std::logical_or<bool>>;

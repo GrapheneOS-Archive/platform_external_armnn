@@ -6,7 +6,9 @@
 #include "SubgraphView.hpp"
 #include "Graph.hpp"
 
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <utility>
 
@@ -24,13 +26,13 @@ void AssertIfNullsOrDuplicates(const C& container, const std::string& errorMessa
     std::for_each(container.begin(), container.end(), [&duplicateSet, &errorMessage](const T& i)
     {
         // Ignore unused for release builds
-        boost::ignore_unused(errorMessage);
+        IgnoreUnused(errorMessage);
 
         // Check if the item is valid
-        BOOST_ASSERT_MSG(i, errorMessage.c_str());
+        ARMNN_ASSERT_MSG(i, errorMessage.c_str());
 
         // Check if a duplicate has been found
-        BOOST_ASSERT_MSG(duplicateSet.find(i) == duplicateSet.end(), errorMessage.c_str());
+        ARMNN_ASSERT_MSG(duplicateSet.find(i) == duplicateSet.end(), errorMessage.c_str());
 
         duplicateSet.insert(i);
     });
@@ -73,20 +75,20 @@ SubgraphView::SubgraphView(SubgraphView&& subgraph)
 SubgraphView::SubgraphView(IConnectableLayer* layer)
     : m_InputSlots{}
     , m_OutputSlots{}
-    , m_Layers{boost::polymorphic_downcast<Layer*>(layer)}
+    , m_Layers{PolymorphicDowncast<Layer*>(layer)}
 {
     unsigned int numInputSlots = layer->GetNumInputSlots();
     m_InputSlots.resize(numInputSlots);
     for (unsigned int i = 0; i < numInputSlots; i++)
     {
-        m_InputSlots.at(i) = boost::polymorphic_downcast<InputSlot*>(&(layer->GetInputSlot(i)));
+        m_InputSlots.at(i) = PolymorphicDowncast<InputSlot*>(&(layer->GetInputSlot(i)));
     }
 
     unsigned int numOutputSlots = layer->GetNumOutputSlots();
     m_OutputSlots.resize(numOutputSlots);
     for (unsigned int i = 0; i < numOutputSlots; i++)
     {
-        m_OutputSlots.at(i) = boost::polymorphic_downcast<OutputSlot*>(&(layer->GetOutputSlot(i)));
+        m_OutputSlots.at(i) = PolymorphicDowncast<OutputSlot*>(&(layer->GetOutputSlot(i)));
     }
 
     CheckSubgraph();
@@ -147,12 +149,12 @@ OutputSlot* SubgraphView::GetOutputSlot(unsigned int index)
 
 unsigned int SubgraphView::GetNumInputSlots() const
 {
-    return boost::numeric_cast<unsigned int>(m_InputSlots.size());
+    return armnn::numeric_cast<unsigned int>(m_InputSlots.size());
 }
 
 unsigned int SubgraphView::GetNumOutputSlots() const
 {
-    return boost::numeric_cast<unsigned int>(m_OutputSlots.size());
+    return armnn::numeric_cast<unsigned int>(m_OutputSlots.size());
 }
 
 const SubgraphView::Layers& SubgraphView::GetLayers() const

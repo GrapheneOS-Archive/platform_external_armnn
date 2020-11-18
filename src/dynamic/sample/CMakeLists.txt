@@ -1,5 +1,5 @@
 #
-# Copyright © 2020 Arm Ltd. All rights reserved.
+# Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -7,11 +7,6 @@ cmake_minimum_required (VERSION 3.0.2)
 project(sample-dynamic)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-add_definitions("-DBOOST_ALL_NO_LIB") # Turn off auto-linking as we specify the libs manually
-find_package(Boost REQUIRED COMPONENTS system filesystem)
-include_directories(SYSTEM "${Boost_INCLUDE_DIRS}")
-link_directories(${Boost_LIBRARY_DIRS})
 
 list(APPEND armnnSampleDynamicBackend_sources
         SampleDynamicAdditionWorkload.cpp
@@ -26,6 +21,8 @@ list(APPEND armnnSampleDynamicBackend_sources
         SampleMemoryManager.hpp
         SampleTensorHandle.cpp
         SampleTensorHandle.hpp
+        SampleDynamicTensorHandleFactory.cpp
+        SampleDynamicTensorHandleFactory.hpp
 )
 
 add_library(Arm_SampleDynamic_backend MODULE ${armnnSampleDynamicBackend_sources})
@@ -36,6 +33,6 @@ target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DI
 target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DIR}/../../../src/armnnUtils)
 target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DIR}/../../../src/backends)
 target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DIR}/../../../src/profiling)
-target_include_directories(Arm_SampleDynamic_backend PRIVATE ${Boost_INCLUDE_DIRS})
-target_link_libraries(Arm_SampleDynamic_backend ${Boost_SYSTEM_LIBRARY} ${Boost_FILESYSTEM_LIBRARY})
+target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DIR}/../../../profiling/common/include)
+target_include_directories(Arm_SampleDynamic_backend PRIVATE ${PROJECT_SOURCE_DIR}/../../../profiling)
 target_link_libraries(Arm_SampleDynamic_backend ${ARMNN_PATH})

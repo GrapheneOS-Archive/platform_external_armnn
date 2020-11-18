@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -14,7 +14,9 @@
 #include "layers/ComparisonLayer.hpp"
 #include "layers/ConcatLayer.hpp"
 #include "layers/ConstantLayer.hpp"
+#include "layers/ConvertBf16ToFp32Layer.hpp"
 #include "layers/ConvertFp16ToFp32Layer.hpp"
+#include "layers/ConvertFp32ToBf16Layer.hpp"
 #include "layers/ConvertFp32ToFp16Layer.hpp"
 #include "layers/Convolution2dLayer.hpp"
 #include "layers/DebugLayer.hpp"
@@ -25,14 +27,17 @@
 #include "layers/DivisionLayer.hpp"
 #include "layers/ElementwiseUnaryLayer.hpp"
 #include "layers/FakeQuantizationLayer.hpp"
+#include "layers/FillLayer.hpp"
 #include "layers/FloorLayer.hpp"
 #include "layers/FullyConnectedLayer.hpp"
 #include "layers/GatherLayer.hpp"
 #include "layers/InputLayer.hpp"
 #include "layers/InstanceNormalizationLayer.hpp"
 #include "layers/L2NormalizationLayer.hpp"
+#include "layers/LogicalBinaryLayer.hpp"
 #include "layers/LogSoftmaxLayer.hpp"
 #include "layers/LstmLayer.hpp"
+#include "layers/MapLayer.hpp"
 #include "layers/MaximumLayer.hpp"
 #include "layers/MeanLayer.hpp"
 #include "layers/MemCopyLayer.hpp"
@@ -48,7 +53,9 @@
 #include "layers/PreCompiledLayer.hpp"
 #include "layers/PreluLayer.hpp"
 #include "layers/QuantizeLayer.hpp"
+#include "layers/QLstmLayer.hpp"
 #include "layers/QuantizedLstmLayer.hpp"
+#include "layers/RankLayer.hpp"
 #include "layers/ReshapeLayer.hpp"
 #include "layers/ResizeLayer.hpp"
 #include "layers/SliceLayer.hpp"
@@ -62,6 +69,8 @@
 #include "layers/SubtractionLayer.hpp"
 #include "layers/SwitchLayer.hpp"
 #include "layers/TransposeConvolution2dLayer.hpp"
+#include "layers/TransposeLayer.hpp"
+#include "layers/UnmapLayer.hpp"
 
 namespace armnn
 {
@@ -98,7 +107,9 @@ DECLARE_LAYER(BatchToSpaceNd)
 DECLARE_LAYER(Comparison)
 DECLARE_LAYER(Concat)
 DECLARE_LAYER(Constant)
+DECLARE_LAYER(ConvertBf16ToFp32)
 DECLARE_LAYER(ConvertFp16ToFp32)
+DECLARE_LAYER(ConvertFp32ToBf16)
 DECLARE_LAYER(ConvertFp32ToFp16)
 DECLARE_LAYER(Convolution2d)
 DECLARE_LAYER(Debug)
@@ -109,14 +120,17 @@ DECLARE_LAYER(DetectionPostProcess)
 DECLARE_LAYER(Division)
 DECLARE_LAYER(ElementwiseUnary)
 DECLARE_LAYER(FakeQuantization)
+DECLARE_LAYER(Fill)
 DECLARE_LAYER(Floor)
 DECLARE_LAYER(FullyConnected)
 DECLARE_LAYER(Gather)
 DECLARE_LAYER(Input)
 DECLARE_LAYER(InstanceNormalization)
 DECLARE_LAYER(L2Normalization)
+DECLARE_LAYER(LogicalBinary)
 DECLARE_LAYER(LogSoftmax)
 DECLARE_LAYER(Lstm)
+DECLARE_LAYER(Map)
 DECLARE_LAYER(Maximum)
 DECLARE_LAYER(Mean)
 DECLARE_LAYER(MemCopy)
@@ -132,7 +146,9 @@ DECLARE_LAYER(Pooling2d)
 DECLARE_LAYER(PreCompiled)
 DECLARE_LAYER(Prelu)
 DECLARE_LAYER(Quantize)
+DECLARE_LAYER(QLstm)
 DECLARE_LAYER(QuantizedLstm)
+DECLARE_LAYER(Rank)
 DECLARE_LAYER(Reshape)
 DECLARE_LAYER(Resize)
 DECLARE_LAYER(Slice)
@@ -145,6 +161,8 @@ DECLARE_LAYER(StandIn)
 DECLARE_LAYER(StridedSlice)
 DECLARE_LAYER(Subtraction)
 DECLARE_LAYER(Switch)
+DECLARE_LAYER(Transpose)
 DECLARE_LAYER(TransposeConvolution2d)
+DECLARE_LAYER(Unmap)
 
 }

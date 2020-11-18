@@ -1,11 +1,13 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
+#include "ProfilingService.hpp"
 #include "armnn/profiling/ISendTimelinePacket.hpp"
+
 #include <armnn/Types.hpp>
 
 namespace armnn
@@ -20,9 +22,10 @@ public:
 
     // static factory method which will return a pointer to a timelie utility methods
     // object if profiling is enabled. Otherwise will return a null unique_ptr
-    static std::unique_ptr<TimelineUtilityMethods> GetTimelineUtils();
+    static std::unique_ptr<TimelineUtilityMethods> GetTimelineUtils(ProfilingService& profilingService);
 
-    TimelineUtilityMethods(std::unique_ptr<ISendTimelinePacket>& sendTimelinePacket)
+    TimelineUtilityMethods(
+        std::unique_ptr<ISendTimelinePacket>& sendTimelinePacket)
         : m_SendTimelinePacket(std::move(sendTimelinePacket)) {}
 
     TimelineUtilityMethods(TimelineUtilityMethods&& other)
@@ -36,7 +39,7 @@ public:
 
     ~TimelineUtilityMethods() = default;
 
-    void SendWellKnownLabelsAndEventClasses();
+    static void SendWellKnownLabelsAndEventClasses(ISendTimelinePacket& timelinePacket);
 
     ProfilingDynamicGuid CreateNamedTypedEntity(const std::string& name, const std::string& type);
 
@@ -44,7 +47,7 @@ public:
 
     void CreateNamedTypedEntity(ProfilingGuid entityGuid, const std::string& name, ProfilingStaticGuid typeGuid);
 
-    void MarkEntityWithLabel(ProfilingGuid entityGuid, const std::string &labelName, ProfilingStaticGuid labelLinkGuid);
+    void MarkEntityWithLabel(ProfilingGuid entityGuid, const std::string& labelName, ProfilingStaticGuid labelLinkGuid);
 
     ProfilingStaticGuid DeclareLabel(const std::string& labelName);
 
@@ -68,7 +71,8 @@ public:
 
     ProfilingDynamicGuid CreateRelationship(ProfilingRelationshipType relationshipType,
                                             ProfilingGuid headGuid,
-                                            ProfilingGuid tailGuid);
+                                            ProfilingGuid tailGuid,
+                                            ProfilingGuid relationshipCategory);
 
     ProfilingDynamicGuid CreateConnectionRelationship(ProfilingRelationshipType relationshipType,
                                                       ProfilingGuid headGuid,

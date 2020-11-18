@@ -9,6 +9,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
@@ -74,12 +75,12 @@ NeonSplitterWorkload::NeonSplitterWorkload(const SplitterQueueDescriptor& descri
         return;
     }
 
-    arm_compute::ITensor& input = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
 
     std::vector<arm_compute::ITensor *> aclOutputs;
     for (auto output : m_Data.m_Outputs)
     {
-        arm_compute::ITensor& aclOutput  = boost::polymorphic_pointer_downcast<IAclTensorHandle>(output)->GetTensor();
+        arm_compute::ITensor& aclOutput  = PolymorphicPointerDowncast<IAclTensorHandle>(output)->GetTensor();
         aclOutputs.emplace_back(&aclOutput);
     }
 

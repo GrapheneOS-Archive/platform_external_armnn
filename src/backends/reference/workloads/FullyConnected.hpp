@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -19,6 +19,7 @@ void FullyConnected(const TensorShape& rInputShape,
                     Decoder<float>& rInputDecoder,
                     const TensorShape& rOutputShape,
                     Encoder<float>& rOutputEncoder,
+                    const TensorShape& rWeightsShape,
                     Decoder<float>& rWeightDecoder,
                     Decoder<float>& rBiasDecoder,
                     bool biasEnabled,

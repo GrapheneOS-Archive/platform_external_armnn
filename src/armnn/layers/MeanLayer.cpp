@@ -1,10 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "MeanLayer.hpp"
 #include "LayerCloneBase.hpp"
+
+#include <armnn/utility/NumericCast.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <backendsCommon/WorkloadData.hpp>
@@ -24,6 +26,7 @@ std::unique_ptr<IWorkload> MeanLayer::CreateWorkload(const armnn::IWorkloadFacto
     MeanQueueDescriptor descriptor;
     descriptor.m_Parameters.m_Axis = m_Param.m_Axis;
     descriptor.m_Parameters.m_KeepDims = m_Param.m_KeepDims;
+    SetAdditionalInfo(descriptor);
 
     return factory.CreateMean(descriptor, PrepInfoAndDesc(descriptor));
 }
@@ -42,9 +45,13 @@ void MeanLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     const TensorInfo& input = GetInputSlot(0).GetConnection()->GetTensorInfo();
 
-    BOOST_ASSERT_MSG(input.GetNumDimensions() > 0 && input.GetNumDimensions() <= 4,
+    ARMNN_ASSERT_MSG(input.GetNumDimensions() > 0 && input.GetNumDimensions() <= 4,
                      "MeanLayer: Mean supports up to 4D input.");
 
     unsigned int rank = input.GetNumDimensions();
@@ -59,13 +66,13 @@ void MeanLayer::ValidateTensorShapesFromInputs()
     {
         outputRank = 1;
     }
-    else if (m_Param.m_Axis.size() >= input.GetNumDimensions())
+    else if (m_Param.m_Axis.size() > input.GetNumDimensions())
     {
         throw LayerValidationException("MeanLayer: Dimensions to reduce can not be bigger than input dimensions");
     }
     else
     {
-        outputRank = input.GetNumDimensions() - boost::numeric_cast<unsigned int>(m_Param.m_Axis.size());
+        outputRank = input.GetNumDimensions() - armnn::numeric_cast<unsigned int>(m_Param.m_Axis.size());
         if (outputRank == 0)
         {
             outputRank = 1;
@@ -81,7 +88,7 @@ void MeanLayer::ValidateTensorShapesFromInputs()
         {
             if (std::find(m_Param.m_Axis.begin(), m_Param.m_Axis.end(), i) == m_Param.m_Axis.end())
             {
-                dimSizes[outputIndex] = boost::numeric_cast<unsigned int>(input.GetShape()[i]);
+                dimSizes[outputIndex] = armnn::numeric_cast<unsigned int>(input.GetShape()[i]);
                 ++outputIndex;
             }
             else if (m_Param.m_KeepDims)
@@ -93,10 +100,7 @@ void MeanLayer::ValidateTensorShapesFromInputs()
     }
     const TensorShape& inferredShape = TensorShape(outputRank, dimSizes.data());
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "MeanLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShape);
+    ValidateAndCopyShape(outputShape, inferredShape, m_ShapeInferenceMethod, "MeanLayer");
 }
 
 void MeanLayer::Accept(ILayerVisitor& visitor) const

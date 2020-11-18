@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "InstanceNormalizationLayer.hpp"
@@ -21,6 +21,8 @@ InstanceNormalizationLayer::InstanceNormalizationLayer(const InstanceNormalizati
 std::unique_ptr<IWorkload> InstanceNormalizationLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     InstanceNormalizationQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateInstanceNormalization(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -33,14 +35,15 @@ void InstanceNormalizationLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "InstanceNormalizationLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "InstanceNormalizationLayer");
 }
 
 void InstanceNormalizationLayer::Accept(ILayerVisitor& visitor) const

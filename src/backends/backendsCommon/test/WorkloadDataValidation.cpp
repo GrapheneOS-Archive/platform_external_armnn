@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -19,7 +19,31 @@ using namespace armnn;
 
 BOOST_AUTO_TEST_SUITE(WorkloadInfoValidation)
 
+BOOST_AUTO_TEST_CASE(BatchNormalizationQueueDescriptor_Validate_DifferentQuantizationData)
+{
+    TensorShape inputShape { 1, 3, 2, 2 };
+    TensorShape outputShape { 1, 3, 2, 2 };
 
+    TensorInfo inputTensorInfo(inputShape, armnn::DataType::QAsymmU8, .1f, 125);
+    TensorInfo outputTensorInfo(outputShape, armnn::DataType::QAsymmU8, .2f, 120);
+
+    BatchNormalizationQueueDescriptor invalidData;
+    WorkloadInfo                      invalidInfo;
+
+    unsigned int sameShape[] = { 10 };
+    TensorInfo sameInfo = armnn::TensorInfo(1, sameShape, armnn::DataType::QAsymmU8);
+    ScopedCpuTensorHandle sameTensor(sameInfo);
+
+    AddInputToWorkload(invalidData, invalidInfo, inputTensorInfo, nullptr);
+    AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
+
+    invalidData.m_Mean = &sameTensor;
+    invalidData.m_Variance = &sameTensor;
+    invalidData.m_Beta= &sameTensor;
+    invalidData.m_Gamma = &sameTensor;
+
+    BOOST_CHECK_NO_THROW(RefBatchNormalizationWorkload(invalidData, invalidInfo));
+}
 
 BOOST_AUTO_TEST_CASE(QueueDescriptor_Validate_WrongNumOfInputsOutputs)
 {
@@ -312,17 +336,17 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputNumbers)
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
     // Too few inputs.
-    BOOST_CHECK_THROW(RefAdditionWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
     AddInputToWorkload(invalidData, invalidInfo, input2TensorInfo, nullptr);
 
     // Correct.
-    BOOST_CHECK_NO_THROW(RefAdditionWorkload(invalidData, invalidInfo));
+    BOOST_CHECK_NO_THROW(RefAdditionWorkload<>(invalidData, invalidInfo));
 
     AddInputToWorkload(invalidData, invalidInfo, input3TensorInfo, nullptr);
 
     // Too many inputs.
-    BOOST_CHECK_THROW(RefAdditionWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
 BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
@@ -347,7 +371,7 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
         AddInputToWorkload(invalidData, invalidInfo, input2TensorInfo, nullptr);
         AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefAdditionWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 
     // Output size not compatible with input sizes.
@@ -364,7 +388,7 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
         AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
         // Output differs.
-        BOOST_CHECK_THROW(RefAdditionWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 }
 
@@ -399,7 +423,7 @@ BOOST_AUTO_TEST_CASE(MultiplicationQueueDescriptor_Validate_InputTensorDimension
         AddInputToWorkload(invalidData, invalidInfo, input0TensorInfo, nullptr);
         AddInputToWorkload(invalidData, invalidInfo, input1TensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefMultiplicationWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        BOOST_CHECK_THROW(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 
     // Checks dimension consistency for input and output tensors.
@@ -424,7 +448,7 @@ BOOST_AUTO_TEST_CASE(MultiplicationQueueDescriptor_Validate_InputTensorDimension
         AddInputToWorkload(invalidData, invalidInfo, input0TensorInfo, nullptr);
         AddInputToWorkload(invalidData, invalidInfo, input1TensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefMultiplicationWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        BOOST_CHECK_THROW(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 }
 

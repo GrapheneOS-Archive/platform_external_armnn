@@ -7,13 +7,13 @@
 #include "ClContextControl.hpp"
 
 #include <armnn/Logging.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <arm_compute/core/CL/OpenCL.h>
 #include <arm_compute/core/CL/CLKernelLibrary.h>
 #include <arm_compute/runtime/CL/CLScheduler.h>
 #include <arm_compute/runtime/CL/CLTunerTypes.h>
-
-#include <boost/polymorphic_cast.hpp>
 
 namespace armnn
 {
@@ -79,7 +79,7 @@ TuningLevel ParseTuningLevel(const BackendOptions::Var& value, TuningLevel defau
 {
     if (value.IsInt())
     {
-        int v = value.IsInt();
+        int v = value.AsInt();
         if (v > static_cast<int>(TuningLevel::Exhaustive) ||
             v < static_cast<int>(TuningLevel::None))
         {
@@ -99,7 +99,6 @@ bool ParseBoolean(const BackendOptions::Var& value, bool defaultValue)
     {
         return value.AsBool();
     }
-
     return defaultValue;
 }
 
@@ -110,22 +109,6 @@ std::string ParseFile(const BackendOptions::Var& value, std::string defaultValue
         return value.AsString();
     }
     return defaultValue;
-}
-
-template <typename F>
-void ParseOptions(const std::vector<BackendOptions>& options, BackendId backend, F f)
-{
-    for (auto optionsGroup : options)
-    {
-        if (optionsGroup.GetBackendId() == backend)
-        {
-            for (size_t i=0; i < optionsGroup.GetOptionCount(); i++)
-            {
-                const BackendOptions::BackendOption option = optionsGroup.GetOption(i);
-                f(option.GetName(), option.GetValue());
-            }
-        }
-    }
 }
 
 void ConfigureTuner(arm_compute::CLTuner &tuner, TuningLevel level)
@@ -160,7 +143,7 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
     bool useLegacyTunerAPI = options.m_GpuAccTunedParameters.get() != nullptr;
     if (useLegacyTunerAPI)
     {
-        auto clTunerParams = boost::polymorphic_downcast<ClTunedParameters*>(
+        auto clTunerParams = PolymorphicDowncast<ClTunedParameters*>(
                                 options.m_GpuAccTunedParameters.get());
         tuner = &clTunerParams->m_Tuner;
 
@@ -184,7 +167,7 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
                             return TuningLevel::Exhaustive;
                         default:
                         {
-                            BOOST_ASSERT_MSG(false, "Tuning level not recognised.");
+                            ARMNN_ASSERT_MSG(false, "Tuning level not recognised.");
                             return TuningLevel::None;
                         }
                     }
@@ -218,18 +201,18 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
 
         ConfigureTuner(*(m_Tuner.get()), tuningLevel);
 
-        if (!m_TuningFile.empty())
+        if (!m_TuningFile.empty() && tuningLevel == TuningLevel::None)
         {
             try
             {
                 m_Tuner->load_from_file(m_TuningFile.c_str());
-            } catch (const std::exception& e)
+            }
+            catch (const std::exception& e)
             {
                 ARMNN_LOG(warning) << "Could not load GpuAcc tuner data file.";
             }
-
-            tuner = m_Tuner.get();
         }
+        tuner = m_Tuner.get();
     }
 
     m_ClContextControlWrapper = std::make_unique<ClContextControlWrapper>(

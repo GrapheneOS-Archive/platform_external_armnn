@@ -6,24 +6,25 @@
 #pragma once
 
 #include <armnn/BackendRegistry.hpp>
-#include <armnn/ILayerSupport.hpp>
-
 #include <armnn/backends/DynamicBackend.hpp>
-
-#include <backendsCommon/DynamicBackendUtils.hpp>
+#include <armnn/ILayerSupport.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
-
+#include <backendsCommon/DynamicBackendUtils.hpp>
+#include <Filesystem.hpp>
 #include <reference/workloads/RefConvolution2dWorkload.hpp>
-
 #include <Runtime.hpp>
 
 #include <string>
 #include <memory>
 
 #include <boost/test/unit_test.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/dll.hpp>
 
+#if !defined(DYNAMIC_BACKEND_BUILD_DIR)
+#define DYNAMIC_BACKEND_BUILD_DIR fs::path("./")
+#endif
+
+static std::string g_TestDirCLI                             = "--dynamic-backend-build-dir";
 static std::string g_TestBaseDir                            = "src/backends/backendsCommon/test/";
 
 static std::string g_TestSharedObjectSubDir                 = "testSharedObject/";
@@ -107,12 +108,48 @@ private:
 
 std::string GetBasePath(const std::string& basePath)
 {
-    using namespace boost::filesystem;
-
-    path programLocation = boost::dll::program_location().parent_path();
+    using namespace fs;
+    // What we're looking for here is the location of the UnitTests executable.
+    // In the normal build environment there are a series of files and
+    // directories created by cmake. If the executable has been relocated they
+    // may not be there. The search hierarchy is:
+    // * User specified --dynamic-backend-build-dir
+    // * Compile time value of DYNAMIC_BACKEND_BUILD_DIR.
+    // * Arg0 location.
+    // * Fall back value of current directory.
+    path programLocation = DYNAMIC_BACKEND_BUILD_DIR;
+    // Look for the specific argument --dynamic-backend-build-dir?
+    if (boost::unit_test::framework::master_test_suite().argc == 3)
+    {
+        // Boost custom arguments begin after a '--' on the command line.
+        if (g_TestDirCLI.compare(boost::unit_test::framework::master_test_suite().argv[1]) == 0)
+        {
+            // Then the next argument is the path.
+            programLocation = boost::unit_test::framework::master_test_suite().argv[2];
+        }
+    }
+    else
+    {
+        // Start by checking if DYNAMIC_BACKEND_BUILD_DIR value exist.
+        if (!exists(programLocation))
+        {
+            // That doesn't exist try looking at arg[0].
+            path arg0Path(boost::unit_test::framework::master_test_suite().argv[0]);
+            arg0Path.remove_filename();
+            path arg0SharedObjectPath(arg0Path);
+            arg0SharedObjectPath.append(basePath);
+            if (exists(arg0SharedObjectPath))
+            {
+                // Yeah arg0 worked.
+                programLocation = arg0Path;
+            }
+        }
+    }
+    // This is the base path from the build where the test libraries were built.
     path sharedObjectPath = programLocation.append(basePath);
-    BOOST_CHECK(exists(sharedObjectPath));
-
+    BOOST_REQUIRE_MESSAGE(exists(sharedObjectPath), "Base path for shared objects does not exist: " +
+                          sharedObjectPath.string() + "\nTo specify the root of this base path on the " +
+                          "command line add: \'-- --dynamic-backend-build-dir <path>\'");
     return sharedObjectPath.string();
 }
 
@@ -128,7 +165,7 @@ std::string GetDynamicBackendsBasePath()
 
 std::string GetTestSubDirectory(const std::string& subdir)
 {
-    using namespace boost::filesystem;
+    using namespace fs;
 
     std::string testDynamicBackendsBaseDir = GetTestDirectoryBasePath();
     path testDynamicBackendsBasePath(testDynamicBackendsBaseDir);
@@ -140,7 +177,7 @@ std::string GetTestSubDirectory(const std::string& subdir)
 
 std::string GetTestSubDirectory(const std::string& basePath, const std::string& subdir)
 {
-    using namespace boost::filesystem;
+    using namespace fs;
 
     path testDynamicBackendsBasePath(basePath);
     path testDynamicBackendsSubDir = testDynamicBackendsBasePath.append(subdir);
@@ -151,7 +188,7 @@ std::string GetTestSubDirectory(const std::string& basePath, const std::string& 
 
 std::string GetTestFilePath(const std::string& directory, const std::string& fileName)
 {
-    using namespace boost::filesystem;
+    using namespace fs;
 
     path directoryPath(directory);
     path fileNamePath = directoryPath.append(fileName);
@@ -337,6 +374,7 @@ void BackendVersioningTestImpl()
     BOOST_TEST(TestDynamicBackendUtils::IsBackendCompatibleTest(backendApiVersion, earlierMinorBackendVersion) == true);
 }
 
+#if defined(ARMNNREF_ENABLED)
 void CreateValidDynamicBackendObjectTestImpl()
 {
     // Valid shared object handle
@@ -347,6 +385,11 @@ void CreateValidDynamicBackendObjectTestImpl()
     using namespace armnn;
 
     std::string testSubDirectory = GetTestSubDirectory(g_TestDynamicBackendSubDir);
+
+    // We expect this path to exists so we can load a valid dynamic backend.
+    BOOST_CHECK_MESSAGE(fs::exists(testSubDirectory),
+                       "Base path for shared objects does not exist: " + testSubDirectory);
+
     std::string sharedObjectFilePath = GetTestFilePath(testSubDirectory, g_TestValidTestDynamicBackendFileName);
 
     void* sharedObjectHandle = nullptr;
@@ -380,6 +423,7 @@ void CreateValidDynamicBackendObjectTestImpl()
     BOOST_TEST((dynamicBackendInstance1->GetId() == "ValidTestDynamicBackend"));
     BOOST_TEST((dynamicBackendInstance2->GetId() == "ValidTestDynamicBackend"));
 }
+#endif
 
 void CreateDynamicBackendObjectInvalidHandleTestImpl()
 {
@@ -558,7 +602,7 @@ void CreateDynamicBackendObjectInvalidInterface7TestImpl()
 void GetBackendPathsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // The test covers four directories:
     // <unit test path>/src/backends/backendsCommon/test/
@@ -638,7 +682,7 @@ void GetBackendPathsTestImpl()
 void GetBackendPathsOverrideTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     std::string subDir1 = GetTestSubDirectory(g_TestDynamicBackendsSubDir1);
     std::string subDir4 = GetTestSubDirectory(g_TestDynamicBackendsSubDir4);
@@ -659,7 +703,7 @@ void GetBackendPathsOverrideTestImpl()
 void GetSharedObjectsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // The test covers four directories:
     // <unit test path>/src/backends/backendsCommon/test/
@@ -722,35 +766,35 @@ void GetSharedObjectsTestImpl()
         testDynamicBackendsSubDir4
     };
     std::vector<std::string> sharedObjects = DynamicBackendUtils::GetSharedObjects(backendPaths);
-    std::vector<std::string> expectedSharedObjects
+    std::vector<fs::path> expectedSharedObjects
     {
-        testDynamicBackendsSubDir1 + "Arm123_GpuAcc_backend.so",      // Digits in vendor name are allowed
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc456_backend.so",      // Digits in backend id are allowed
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so",         // Basic backend name
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1",       // Single field version number
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1.2",     // Multiple field version number
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1.2.3",   // Multiple field version number
-        testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.10.1.27", // Multiple digit version
-        testDynamicBackendsSubDir2 + "Arm_CpuAcc_backend.so",         // Duplicate symlinks removed
-        testDynamicBackendsSubDir2 + "Arm_GpuAcc_backend.so"          // Duplicates on different paths are allowed
+        path(testDynamicBackendsSubDir1 + "Arm123_GpuAcc_backend.so"),      // Digits in vendor name are allowed
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc456_backend.so"),      // Digits in backend id are allowed
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so"),         // Basic backend name
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1"),       // Single field version number
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1.2"),     // Multiple field version number
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.1.2.3"),   // Multiple field version number
+        path(testDynamicBackendsSubDir1 + "Arm_GpuAcc_backend.so.10.1.27"), // Multiple digit version
+        path(testDynamicBackendsSubDir2 + "Arm_CpuAcc_backend.so"),         // Duplicate symlinks removed
+        path(testDynamicBackendsSubDir2 + "Arm_GpuAcc_backend.so")          // Duplicates on different paths are allowed
     };
 
     BOOST_TEST(sharedObjects.size() == expectedSharedObjects.size());
-    BOOST_TEST(sharedObjects[0] == expectedSharedObjects[0]);
-    BOOST_TEST(sharedObjects[1] == expectedSharedObjects[1]);
-    BOOST_TEST(sharedObjects[2] == expectedSharedObjects[2]);
-    BOOST_TEST(sharedObjects[3] == expectedSharedObjects[3]);
-    BOOST_TEST(sharedObjects[4] == expectedSharedObjects[4]);
-    BOOST_TEST(sharedObjects[5] == expectedSharedObjects[5]);
-    BOOST_TEST(sharedObjects[6] == expectedSharedObjects[6]);
-    BOOST_TEST(sharedObjects[7] == expectedSharedObjects[7]);
-    BOOST_TEST(sharedObjects[8] == expectedSharedObjects[8]);
+    BOOST_TEST(fs::equivalent(path(sharedObjects[0]), expectedSharedObjects[0]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[1]), expectedSharedObjects[1]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[2]), expectedSharedObjects[2]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[3]), expectedSharedObjects[3]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[4]), expectedSharedObjects[4]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[5]), expectedSharedObjects[5]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[6]), expectedSharedObjects[6]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[7]), expectedSharedObjects[7]));
+    BOOST_TEST(fs::equivalent(path(sharedObjects[8]), expectedSharedObjects[8]));
 }
 
 void CreateDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // The test covers four directories:
     // <unit test path>/src/backends/backendsCommon/test/
@@ -837,7 +881,7 @@ void CreateDynamicBackendsAllInvalidTestImpl()
 void CreateDynamicBackendsMixedTypesTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     std::string testDynamicBackendsSubDir5 = GetTestSubDirectory(g_TestDynamicBackendsSubDir5);
     std::string testDynamicBackendsSubDir6 = GetTestSubDirectory(g_TestDynamicBackendsSubDir6);
@@ -868,10 +912,11 @@ void CreateDynamicBackendsMixedTypesTestImpl()
     BOOST_TEST((dynamicBackends[0]->GetBackendId() == "TestValid2"));
 }
 
+#if defined(ARMNNREF_ENABLED)
 void RegisterSingleDynamicBackendTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Register one valid dynamic backend
 
@@ -918,7 +963,7 @@ void RegisterSingleDynamicBackendTestImpl()
 void RegisterMultipleDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Register many valid dynamic backends
 
@@ -991,70 +1036,10 @@ void RegisterMultipleDynamicBackendsTestImpl()
     }
 }
 
-void RegisterMultipleInvalidDynamicBackendsTestImpl()
-{
-    using namespace armnn;
-    using namespace boost::filesystem;
-
-    // Try to register many invalid dynamic backends
-
-    // The test covers one directory:
-    // <unit test path>/src/backends/backendsCommon/test/
-    //                                                └─ backendsTestPath9/   -> exists, contains files
-    //
-    // The test sub-directory backendsTestPath9/ contains the following test files:
-    //
-    // Arm_TestInvalid10_backend.so -> not valid (invalid backend id)
-    // Arm_TestInvalid11_backend.so -> not valid (invalid backend id)
-
-    std::string testDynamicBackendsSubDir9 = GetTestSubDirectory(g_TestDynamicBackendsSubDir9);
-    BOOST_CHECK(exists(testDynamicBackendsSubDir9));
-
-    std::string testInvalidBackend10FilePath = GetTestFilePath(testDynamicBackendsSubDir9,
-                                                               g_TestInvalidBackend10FileName);
-    std::string testInvalidBackend11FilePath = GetTestFilePath(testDynamicBackendsSubDir9,
-                                                               g_TestInvalidBackend11FileName);
-    BOOST_CHECK(exists(testInvalidBackend10FilePath));
-    BOOST_CHECK(exists(testInvalidBackend11FilePath));
-
-    std::vector<std::string> sharedObjects
-    {
-        testInvalidBackend10FilePath,
-        testInvalidBackend11FilePath,
-        "InvalidSharedObject"
-    };
-    std::vector<DynamicBackendPtr> dynamicBackends = TestDynamicBackendUtils::CreateDynamicBackends(sharedObjects);
-
-    BOOST_TEST(dynamicBackends.size() == 2);
-    BOOST_TEST((dynamicBackends[0] != nullptr));
-    BOOST_TEST((dynamicBackends[1] != nullptr));
-
-    BackendId dynamicBackendId1 = dynamicBackends[0]->GetBackendId();
-    BackendId dynamicBackendId2 = dynamicBackends[1]->GetBackendId();
-    BOOST_TEST((dynamicBackendId1 == ""));
-    BOOST_TEST((dynamicBackendId2 == "Unknown"));
-
-    for (size_t i = 0; i < dynamicBackends.size(); i++)
-    {
-        BackendVersion dynamicBackendVersion = dynamicBackends[i]->GetBackendVersion();
-        BOOST_TEST(TestDynamicBackendUtils::IsBackendCompatible(dynamicBackendVersion));
-    }
-
-    // Dummy registry used for testing
-    BackendRegistry backendRegistry;
-    BOOST_TEST(backendRegistry.Size() == 0);
-
-    // Check that no dynamic backend got registered
-    BackendIdSet registeredBackendIds = TestDynamicBackendUtils::RegisterDynamicBackendsImplTest(backendRegistry,
-                                                                                                 dynamicBackends);
-    BOOST_TEST(backendRegistry.Size() == 0);
-    BOOST_TEST(registeredBackendIds.empty());
-}
-
 void RegisterMixedDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // The test covers five directories:
     // <unit test path>/src/backends/backendsCommon/test/
@@ -1196,6 +1181,67 @@ void RegisterMixedDynamicBackendsTestImpl()
         BOOST_TEST((dynamicBackend->GetId() == expectedRegisteredbackendId));
     }
 }
+#endif
+
+void RegisterMultipleInvalidDynamicBackendsTestImpl()
+{
+    using namespace armnn;
+    using namespace fs;
+
+    // Try to register many invalid dynamic backends
+
+    // The test covers one directory:
+    // <unit test path>/src/backends/backendsCommon/test/
+    //                                                └─ backendsTestPath9/   -> exists, contains files
+    //
+    // The test sub-directory backendsTestPath9/ contains the following test files:
+    //
+    // Arm_TestInvalid10_backend.so -> not valid (invalid backend id)
+    // Arm_TestInvalid11_backend.so -> not valid (invalid backend id)
+
+    std::string testDynamicBackendsSubDir9 = GetTestSubDirectory(g_TestDynamicBackendsSubDir9);
+    BOOST_CHECK(exists(testDynamicBackendsSubDir9));
+
+    std::string testInvalidBackend10FilePath = GetTestFilePath(testDynamicBackendsSubDir9,
+                                                               g_TestInvalidBackend10FileName);
+    std::string testInvalidBackend11FilePath = GetTestFilePath(testDynamicBackendsSubDir9,
+                                                               g_TestInvalidBackend11FileName);
+    BOOST_CHECK(exists(testInvalidBackend10FilePath));
+    BOOST_CHECK(exists(testInvalidBackend11FilePath));
+
+    std::vector<std::string> sharedObjects
+    {
+        testInvalidBackend10FilePath,
+        testInvalidBackend11FilePath,
+        "InvalidSharedObject"
+    };
+    std::vector<DynamicBackendPtr> dynamicBackends = TestDynamicBackendUtils::CreateDynamicBackends(sharedObjects);
+
+    BOOST_TEST(dynamicBackends.size() == 2);
+    BOOST_TEST((dynamicBackends[0] != nullptr));
+    BOOST_TEST((dynamicBackends[1] != nullptr));
+
+    BackendId dynamicBackendId1 = dynamicBackends[0]->GetBackendId();
+    BackendId dynamicBackendId2 = dynamicBackends[1]->GetBackendId();
+    BOOST_TEST((dynamicBackendId1 == ""));
+    BOOST_TEST((dynamicBackendId2 == "Unknown"));
+
+    for (size_t i = 0; i < dynamicBackends.size(); i++)
+    {
+        BackendVersion dynamicBackendVersion = dynamicBackends[i]->GetBackendVersion();
+        BOOST_TEST(TestDynamicBackendUtils::IsBackendCompatible(dynamicBackendVersion));
+    }
+
+    // Dummy registry used for testing
+    BackendRegistry backendRegistry;
+    BOOST_TEST(backendRegistry.Size() == 0);
+
+    // Check that no dynamic backend got registered
+    BackendIdSet registeredBackendIds = TestDynamicBackendUtils::RegisterDynamicBackendsImplTest(backendRegistry,
+                                                                                                 dynamicBackends);
+    BOOST_TEST(backendRegistry.Size() == 0);
+    BOOST_TEST(registeredBackendIds.empty());
+}
 
 #if !defined(ARMNN_DYNAMIC_BACKEND_ENABLED)
 
@@ -1212,7 +1258,7 @@ void RuntimeEmptyTestImpl()
     IRuntime::CreationOptions creationOptions;
     IRuntimePtr runtime = IRuntime::Create(creationOptions);
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.empty());
 
@@ -1224,7 +1270,7 @@ void RuntimeEmptyTestImpl()
 void RuntimeDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Swapping the backend registry storage for testing
     TestBackendRegistry testBackendRegistry;
@@ -1253,7 +1299,7 @@ void RuntimeDynamicBackendsTestImpl()
         BOOST_TEST((backendIds.find(expectedRegisteredbackendId) != backendIds.end()));
     }
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.size() == expectedRegisteredbackendIds.size());
     for (const BackendId& expectedRegisteredbackendId : expectedRegisteredbackendIds)
@@ -1265,7 +1311,7 @@ void RuntimeDynamicBackendsTestImpl()
 void RuntimeDuplicateDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Swapping the backend registry storage for testing
     TestBackendRegistry testBackendRegistry;
@@ -1294,7 +1340,7 @@ void RuntimeDuplicateDynamicBackendsTestImpl()
         BOOST_TEST((backendIds.find(expectedRegisteredbackendId) != backendIds.end()));
     }
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.size() == expectedRegisteredbackendIds.size());
     for (const BackendId& expectedRegisteredbackendId : expectedRegisteredbackendIds)
@@ -1306,7 +1352,7 @@ void RuntimeDuplicateDynamicBackendsTestImpl()
 void RuntimeInvalidDynamicBackendsTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Swapping the backend registry storage for testing
     TestBackendRegistry testBackendRegistry;
@@ -1323,7 +1369,7 @@ void RuntimeInvalidDynamicBackendsTestImpl()
     const BackendRegistry& backendRegistry = BackendRegistryInstance();
     BOOST_TEST(backendRegistry.Size() == 0);
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.empty());
 }
@@ -1343,7 +1389,7 @@ void RuntimeInvalidOverridePathTestImpl()
     const BackendRegistry& backendRegistry = BackendRegistryInstance();
     BOOST_TEST(backendRegistry.Size() == 0);
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.empty());
 }
@@ -1355,7 +1401,7 @@ void RuntimeInvalidOverridePathTestImpl()
 void CreateReferenceDynamicBackendTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
+    using namespace fs;
 
     // Swapping the backend registry storage for testing
     TestBackendRegistry testBackendRegistry;
@@ -1382,7 +1428,7 @@ void CreateReferenceDynamicBackendTestImpl()
     BackendIdSet backendIds = backendRegistry.GetBackendIds();
     BOOST_TEST((backendIds.find("CpuRef") != backendIds.end()));
 
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.size() == 1);
     BOOST_TEST((supportedBackendIds.find("CpuRef") != supportedBackendIds.end()));
@@ -1433,27 +1479,39 @@ void CreateReferenceDynamicBackendTestImpl()
     // Create a convolution workload with the dummy settings
     auto workload = referenceWorkloadFactory->CreateConvolution2d(convolution2dQueueDescriptor, workloadInfo);
     BOOST_TEST((workload != nullptr));
-    BOOST_TEST(workload.get() == boost::polymorphic_downcast<RefConvolution2dWorkload*>(workload.get()));
+    BOOST_TEST(workload.get() == PolymorphicDowncast<RefConvolution2dWorkload*>(workload.get()));
 }
 
 #endif
 
 #if defined(SAMPLE_DYNAMIC_BACKEND_ENABLED)
+
+void CheckSampleDynamicBackendLoaded()
+{
+    using namespace armnn;
+    // At this point we expect DYNAMIC_BACKEND_PATHS to include a path to where libArm_SampleDynamic_backend.so is.
+    // If it hasn't been loaded there's no point continuing with the rest of the tests.
+    BackendIdSet backendIds = BackendRegistryInstance().GetBackendIds();
+    if (backendIds.find("SampleDynamic") == backendIds.end())
+    {
+        std::string message = "The SampleDynamic backend has not been loaded. This may be a build configuration error. "
+                              "Ensure a DYNAMIC_BACKEND_PATHS was set at compile time to the location of "
+                              "libArm_SampleDynamic_backend.so. "
+                              "To disable this test recompile with: -DSAMPLE_DYNAMIC_BACKEND_ENABLED=0";
+        BOOST_FAIL(message);
+    }
+}
+
 void CreateSampleDynamicBackendTestImpl()
 {
     using namespace armnn;
-
     // Using the path override in CreationOptions to load the reference dynamic backend
     IRuntime::CreationOptions creationOptions;
     IRuntimePtr runtime = IRuntime::Create(creationOptions);
-
     const BackendRegistry& backendRegistry = BackendRegistryInstance();
     BOOST_TEST(backendRegistry.Size() >= 1);
-
-    BackendIdSet backendIds = backendRegistry.GetBackendIds();
-    BOOST_TEST((backendIds.find("SampleDynamic") != backendIds.end()));
-
-    const DeviceSpec& deviceSpec = *boost::polymorphic_downcast<const DeviceSpec*>(&runtime->GetDeviceSpec());
+    CheckSampleDynamicBackendLoaded();
+    const DeviceSpec& deviceSpec = *PolymorphicDowncast<const DeviceSpec*>(&runtime->GetDeviceSpec());
     BackendIdSet supportedBackendIds = deviceSpec.GetSupportedBackends();
     BOOST_TEST(supportedBackendIds.size()>= 1);
     BOOST_TEST((supportedBackendIds.find("SampleDynamic") != supportedBackendIds.end()));
@@ -1506,11 +1564,10 @@ void CreateSampleDynamicBackendTestImpl()
 void SampleDynamicBackendEndToEndTestImpl()
 {
     using namespace armnn;
-    using namespace boost::filesystem;
     // Create runtime in which test will run
     IRuntime::CreationOptions options;
     IRuntimePtr runtime(IRuntime::Create(options));
-
+    CheckSampleDynamicBackendLoaded();
     // Builds up the structure of the network.
     INetworkPtr net(INetwork::Create());
 

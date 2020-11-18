@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,9 +8,8 @@
 #include "RefWorkloadUtils.hpp"
 
 #include <backendsCommon/WorkloadData.hpp>
-
-#include <boost/core/ignore_unused.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 namespace armnn
 {
@@ -20,9 +19,12 @@ void Gather(const TensorInfo& paramsInfo,
             const TensorInfo& outputInfo,
             Decoder<float>& params,
             const int32_t* indices,
-            Encoder<float>& output)
+            Encoder<float>& output,
+            const int32_t axis)
 {
-    boost::ignore_unused(outputInfo);
+    IgnoreUnused(outputInfo);
+    IgnoreUnused(axis);
+
     const TensorShape& paramsShape = paramsInfo.GetShape();
 
     unsigned int paramsProduct = 1;
@@ -34,9 +36,9 @@ void Gather(const TensorInfo& paramsInfo,
     unsigned int outIndex = 0;
     for (unsigned int i = 0; i < indicesInfo.GetNumElements(); ++i)
     {
-        unsigned int indx = boost::numeric_cast<unsigned int>(indices[i]);
+        unsigned int indx = armnn::numeric_cast<unsigned int>(indices[i]);
 
-        BOOST_ASSERT(indices[i] >= 0 && indx < paramsShape[0]);
+        ARMNN_ASSERT(indices[i] >= 0 && indx < paramsShape[0]);
 
         unsigned int startOffset = indx * paramsProduct;
         unsigned int endOffset = startOffset + paramsProduct;
@@ -51,7 +53,7 @@ void Gather(const TensorInfo& paramsInfo,
         }
     }
 
-    BOOST_ASSERT(outIndex == outputInfo.GetNumElements());
+    ARMNN_ASSERT(outIndex == outputInfo.GetNumElements());
 }
 
 } //namespace armnn

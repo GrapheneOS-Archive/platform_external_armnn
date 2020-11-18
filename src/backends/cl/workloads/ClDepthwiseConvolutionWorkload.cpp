@@ -8,11 +8,13 @@
 #include <ResolveType.hpp>
 #include "ClWorkloadUtils.hpp"
 
+#include <armnn/Exceptions.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <backendsCommon/WorkloadUtils.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLDepthwiseConvolutionLayer.h>
 
@@ -25,7 +27,8 @@ arm_compute::Status ClDepthwiseConvolutionWorkloadValidate(const TensorInfo& inp
                                                            const TensorInfo& output,
                                                            const DepthwiseConvolution2dDescriptor& descriptor,
                                                            const TensorInfo& weights,
-                                                           const Optional<TensorInfo>& biases)
+                                                           const Optional<TensorInfo>& biases,
+                                                           const ActivationDescriptor* activationDescriptor)
 {
     const arm_compute::TensorInfo aclInputInfo  = BuildArmComputeTensorInfo(input,  descriptor.m_DataLayout);
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output, descriptor.m_DataLayout);
@@ -45,7 +48,7 @@ arm_compute::Status ClDepthwiseConvolutionWorkloadValidate(const TensorInfo& inp
 
     if (descriptor.m_BiasEnabled)
     {
-        BOOST_ASSERT(biases.has_value());
+        ARMNN_ASSERT(biases.has_value());
 
         aclBiasesInfo = BuildArmComputeTensorInfo(biases.value(), descriptor.m_DataLayout);
         optionalAclBiasesInfo = &aclBiasesInfo;
@@ -56,13 +59,16 @@ arm_compute::Status ClDepthwiseConvolutionWorkloadValidate(const TensorInfo& inp
             descriptor.m_DilationX,
             descriptor.m_DilationY);
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertActivationDescriptorToAclActivationLayerInfo(
+            activationDescriptor);
+
     return arm_compute::CLDepthwiseConvolutionLayer::validate(&aclInputInfo,
                                                               &aclWeightsInfo,
                                                               optionalAclBiasesInfo,
                                                               &aclOutputInfo,
                                                               aclPadStrideInfo,
                                                               aclDepthMultiplier,
-                                                              arm_compute::ActivationLayerInfo(),
+                                                              activationInfo,
                                                               aclDilationInfo);
 
 }
@@ -114,6 +120,8 @@ ClDepthwiseConvolutionWorkload::ClDepthwiseConvolutionWorkload(
 
     arm_compute::PadStrideInfo padStrideInfo = BuildArmComputePadStrideInfo(m_Data.m_Parameters);
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
+
     m_DepthwiseConvolutionLayer = std::make_unique<arm_compute::CLDepthwiseConvolutionLayer>();
     static_cast<arm_compute::CLDepthwiseConvolutionLayer*>(m_DepthwiseConvolutionLayer.get())->configure(
         &input,
@@ -122,10 +130,10 @@ ClDepthwiseConvolutionWorkload::ClDepthwiseConvolutionWorkload(
         &output,
         padStrideInfo,
         depthMultiplier,
-        arm_compute::ActivationLayerInfo(),
+        activationInfo,
         aclDilationInfo);
 
-    BOOST_ASSERT(m_DepthwiseConvolutionLayer);
+    ARMNN_ASSERT(m_DepthwiseConvolutionLayer);
 
     ScopedCpuTensorHandle weightsPermutedHandle(weightPermuted);
     InitializeArmComputeClTensorData(*m_KernelTensor, &weightsPermutedHandle);
@@ -148,7 +156,7 @@ void ClDepthwiseConvolutionWorkload::FreeUnusedTensors()
 void ClDepthwiseConvolutionWorkload::Execute() const
 {
     ARMNN_SCOPED_PROFILING_EVENT_CL("ClDepthwiseConvolutionWorkload_Execute");
-    BOOST_ASSERT(m_DepthwiseConvolutionLayer);
+    ARMNN_ASSERT(m_DepthwiseConvolutionLayer);
 
     RunClFunction(*m_DepthwiseConvolutionLayer, CHECK_LOCATION());
 }

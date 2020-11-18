@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 
 #include <armnn/backends/IBackendInternal.hpp>
 
-#include <boost/assert.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #include <cstring>
 #include <algorithm>
@@ -144,7 +144,7 @@ bool IsConcatSupported(const BackendId& backend,
                        char* reasonIfUnsupported,
                        size_t reasonIfUnsupportedMaxLength)
 {
-    BOOST_ASSERT(inputs.size() > 0);
+    ARMNN_ASSERT(inputs.size() > 0);
 
     FORWARD_LAYER_SUPPORT_FUNC(backend, IsConcatSupported, inputs, output, descriptor);
 }
@@ -305,6 +305,7 @@ bool IsFullyConnectedSupported(const BackendId& backend,
     FORWARD_LAYER_SUPPORT_FUNC(backend, IsFullyConnectedSupported, input, output, weights, biases, descriptor);
 }
 
+ARMNN_DEPRECATED_MSG("Use IsGatherSupported with descriptor instead")
 bool IsGatherSupported(const BackendId& backend,
                        const TensorInfo& input0,
                        const TensorInfo& input1,
@@ -312,7 +313,19 @@ bool IsGatherSupported(const BackendId& backend,
                        char* reasonIfUnsupported,
                        size_t reasonIfUnsupportedMaxLength)
 {
-    FORWARD_LAYER_SUPPORT_FUNC(backend, IsGatherSupported, input0, input1, output);
+    const GatherDescriptor descriptor{};
+    FORWARD_LAYER_SUPPORT_FUNC(backend, IsGatherSupported, input0, input1, output, descriptor);
+}
+
+bool IsGatherSupported(const BackendId& backend,
+                       const TensorInfo& input0,
+                       const TensorInfo& input1,
+                       const TensorInfo& output,
+                       const GatherDescriptor& descriptor,
+                       char* reasonIfUnsupported,
+                       size_t reasonIfUnsupportedMaxLength)
+{
+    FORWARD_LAYER_SUPPORT_FUNC(backend, IsGatherSupported, input0, input1, output, descriptor);
 }
 
 bool IsGreaterSupported(const BackendId& backend,
@@ -418,7 +431,7 @@ bool IsMergerSupported(const BackendId& backend,
                        char* reasonIfUnsupported,
                        size_t reasonIfUnsupportedMaxLength)
 {
-    BOOST_ASSERT(inputs.size() > 0);
+    ARMNN_ASSERT(inputs.size() > 0);
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     FORWARD_LAYER_SUPPORT_FUNC(backend, IsMergerSupported, inputs, output, descriptor);
@@ -481,6 +494,23 @@ bool IsQuantizeSupported(const BackendId& backend,
                          size_t reasonIfUnsupportedMaxLength)
 {
     FORWARD_LAYER_SUPPORT_FUNC(backend, IsQuantizeSupported, input, output);
+}
+
+bool IsQLstmSupported(const BackendId& backend,
+                      const TensorInfo& input,
+                      const TensorInfo& previousOutputIn,
+                      const TensorInfo& previousCellStateIn,
+                      const TensorInfo& outputStateOut,
+                      const TensorInfo& cellStateOut,
+                      const TensorInfo& output,
+                      const QLstmDescriptor& descriptor,
+                      const LstmInputParamsInfo& paramsInfo,
+                      char* reasonIfUnsupported,
+                      size_t reasonIfUnsupportedMaxLength)
+
+{
+    FORWARD_LAYER_SUPPORT_FUNC(backend, IsQLstmSupported, input, previousOutputIn, previousCellStateIn,
+                               outputStateOut, cellStateOut, output, descriptor, paramsInfo);
 }
 
 bool IsQuantizedLstmSupported(const BackendId& backend,

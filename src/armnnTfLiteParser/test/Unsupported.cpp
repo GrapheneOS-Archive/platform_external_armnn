@@ -7,11 +7,12 @@
 #include "../TfLiteParser.hpp"
 
 #include <armnn/LayerVisitorBase.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <layers/StandInLayer.hpp>
 
-#include <boost/assert.hpp>
-#include <boost/polymorphic_cast.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <sstream>
@@ -39,15 +40,15 @@ public:
                            const StandInDescriptor& descriptor,
                            const char*) override
     {
-        unsigned int numInputs = boost::numeric_cast<unsigned int>(m_InputInfos.size());
+        unsigned int numInputs = armnn::numeric_cast<unsigned int>(m_InputInfos.size());
         BOOST_CHECK(descriptor.m_NumInputs    == numInputs);
         BOOST_CHECK(layer->GetNumInputSlots() == numInputs);
 
-        unsigned int numOutputs = boost::numeric_cast<unsigned int>(m_OutputInfos.size());
+        unsigned int numOutputs = armnn::numeric_cast<unsigned int>(m_OutputInfos.size());
         BOOST_CHECK(descriptor.m_NumOutputs    == numOutputs);
         BOOST_CHECK(layer->GetNumOutputSlots() == numOutputs);
 
-        const StandInLayer* standInLayer = boost::polymorphic_downcast<const StandInLayer*>(layer);
+        const StandInLayer* standInLayer = PolymorphicDowncast<const StandInLayer*>(layer);
         for (unsigned int i = 0u; i < numInputs; ++i)
         {
             const OutputSlot* connectedSlot = standInLayer->GetInputSlot(i).GetConnectedOutputSlot();
@@ -77,11 +78,11 @@ public:
         : ParserFlatbuffersFixture()
         , m_StandInLayerVerifier(inputInfos, outputInfos)
     {
-        const unsigned int numInputs = boost::numeric_cast<unsigned int>(inputInfos.size());
-        BOOST_ASSERT(numInputs > 0);
+        const unsigned int numInputs = armnn::numeric_cast<unsigned int>(inputInfos.size());
+        ARMNN_ASSERT(numInputs > 0);
 
-        const unsigned int numOutputs = boost::numeric_cast<unsigned int>(outputInfos.size());
-        BOOST_ASSERT(numOutputs > 0);
+        const unsigned int numOutputs = armnn::numeric_cast<unsigned int>(outputInfos.size());
+        ARMNN_ASSERT(numOutputs > 0);
 
         m_JsonString = R"(
             {

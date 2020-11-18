@@ -1,13 +1,11 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
 #include "CounterIdMap.hpp"
-#include "Packet.hpp"
-#include "CommandHandlerFunctor.hpp"
 #include "Holder.hpp"
 #include "ProfilingStateMachine.hpp"
 #include "SendCounterPacket.hpp"
@@ -18,8 +16,10 @@
 #include "armnn/Logging.hpp"
 #include "armnn/BackendRegistry.hpp"
 
-#include <set>
+#include <common/include/CommandHandlerFunctor.hpp>
+#include <common/include/Packet.hpp>
 
+#include <set>
 
 namespace armnn
 {
@@ -28,7 +28,7 @@ namespace profiling
 {
 
 
-class PeriodicCounterSelectionCommandHandler : public CommandHandlerFunctor
+class PeriodicCounterSelectionCommandHandler : public arm::pipe::CommandHandlerFunctor
 {
 
 public:
@@ -37,7 +37,7 @@ public:
                                            uint32_t version,
                                            const std::unordered_map<BackendId,
                                                    std::shared_ptr<armnn::profiling::IBackendProfilingContext>>&
-                                           backendProfilingContext,
+                                                   backendProfilingContexts,
                                            const ICounterMappings& counterIdMap,
                                            Holder& captureDataHolder,
                                            const uint16_t maxArmnnCounterId,
@@ -46,7 +46,7 @@ public:
                                            ISendCounterPacket& sendCounterPacket,
                                            const ProfilingStateMachine& profilingStateMachine)
         : CommandHandlerFunctor(familyId, packetId, version)
-        , m_BackendProfilingContext(backendProfilingContext)
+        , m_BackendProfilingContexts(backendProfilingContexts)
         , m_CounterIdMap(counterIdMap)
         , m_CaptureDataHolder(captureDataHolder)
         , m_MaxArmCounterId(maxArmnnCounterId)
@@ -60,13 +60,13 @@ public:
 
     }
 
-    void operator()(const Packet& packet) override;
+    void operator()(const arm::pipe::Packet& packet) override;
 
 private:
 
     std::unordered_map<armnn::BackendId, std::vector<uint16_t>> m_BackendCounterMap;
     const std::unordered_map<BackendId,
-          std::shared_ptr<armnn::profiling::IBackendProfilingContext>>& m_BackendProfilingContext;
+          std::shared_ptr<armnn::profiling::IBackendProfilingContext>>& m_BackendProfilingContexts;
     const ICounterMappings& m_CounterIdMap;
     Holder& m_CaptureDataHolder;
     const uint16_t m_MaxArmCounterId;
@@ -82,7 +82,7 @@ private:
                                 const std::vector<uint16_t> counterIds)
     {
         Optional<std::string> errorMsg =
-                m_BackendProfilingContext.at(backendId)->ActivateCounters(capturePeriod, counterIds);
+                m_BackendProfilingContexts.at(backendId)->ActivateCounters(capturePeriod, counterIds);
 
         if(errorMsg.has_value())
         {
@@ -90,10 +90,10 @@ private:
                                << errorMsg.value();
         }
     }
-    void ParseData(const Packet& packet, CaptureData& captureData);
-    std::set<armnn::BackendId> ProcessBackendCounterIds(const u_int32_t capturePeriod,
-                                                        std::set<uint16_t> newCounterIds,
-                                                        std::set<uint16_t> unusedCounterIds);
+    void ParseData(const arm::pipe::Packet& packet, CaptureData& captureData);
+    std::set<armnn::BackendId> ProcessBackendCounterIds(const uint32_t capturePeriod,
+                                                        const std::set<uint16_t> newCounterIds,
+                                                        const std::set<uint16_t> unusedCounterIds);
 
 };
 

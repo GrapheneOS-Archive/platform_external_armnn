@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "FloorLayer.hpp"
@@ -21,6 +21,8 @@ FloorLayer::FloorLayer(const char* name)
 std::unique_ptr<IWorkload> FloorLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     FloorQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateFloor(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -33,14 +35,14 @@ void FloorLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
-
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "FloorLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "FloorLayer");
 }
 
 void FloorLayer::Accept(ILayerVisitor& visitor) const

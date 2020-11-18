@@ -32,6 +32,7 @@ public:
     MockBackendProfilingContext(IBackendInternal::IBackendProfilingPtr& backendProfiling)
         : m_BackendProfiling(std::move(backendProfiling))
         , m_CapturePeriod(0)
+        , m_IsTimelineEnabled(true)
     {}
 
     ~MockBackendProfilingContext() = default;
@@ -44,18 +45,19 @@ public:
     uint16_t RegisterCounters(uint16_t currentMaxGlobalCounterId)
     {
         std::unique_ptr<profiling::IRegisterBackendCounters> counterRegistrar =
-            m_BackendProfiling->GetCounterRegistrationInterface(currentMaxGlobalCounterId);
+            m_BackendProfiling->GetCounterRegistrationInterface(static_cast<uint16_t>(currentMaxGlobalCounterId));
 
         std::string categoryName("MockCounters");
         counterRegistrar->RegisterCategory(categoryName);
-        uint16_t nextMaxGlobalCounterId =
-            counterRegistrar->RegisterCounter(0, categoryName, 0, 0, 1.f, "Mock Counter One", "Some notional counter");
 
-        nextMaxGlobalCounterId = counterRegistrar->RegisterCounter(1, categoryName, 0, 0, 1.f, "Mock Counter Two",
+        counterRegistrar->RegisterCounter(0, categoryName, 0, 0, 1.f, "Mock Counter One", "Some notional counter");
+
+        counterRegistrar->RegisterCounter(1, categoryName, 0, 0, 1.f, "Mock Counter Two",
                                                                    "Another notional counter");
 
         std::string units("microseconds");
-        nextMaxGlobalCounterId = counterRegistrar->RegisterCounter(2, categoryName, 0, 0, 1.f, "Mock MultiCore Counter",
+        uint16_t nextMaxGlobalCounterId =
+                counterRegistrar->RegisterCounter(2, categoryName, 0, 0, 1.f, "Mock MultiCore Counter",
                                                                    "A dummy four core counter", units, 4);
         return nextMaxGlobalCounterId;
     }
@@ -88,13 +90,30 @@ public:
         return { profiling::Timestamp{ timestamp, counterValues } };
     }
 
-    void EnableProfiling(bool)
-    {}
+    bool EnableProfiling(bool)
+    {
+        auto sendTimelinePacket = m_BackendProfiling->GetSendTimelinePacket();
+        sendTimelinePacket->SendTimelineEntityBinaryPacket(4256);
+        sendTimelinePacket->Commit();
+        return true;
+    }
+
+    bool EnableTimelineReporting(bool isEnabled)
+    {
+        m_IsTimelineEnabled = isEnabled;
+        return isEnabled;
+    }
+
+    bool TimelineReportingEnabled()
+    {
+        return m_IsTimelineEnabled;
+    }
 
 private:
     IBackendInternal::IBackendProfilingPtr m_BackendProfiling;
     uint32_t m_CapturePeriod;
     std::vector<uint16_t> m_ActiveCounters;
+    bool m_IsTimelineEnabled;
 };
 
 class MockBackendProfilingService

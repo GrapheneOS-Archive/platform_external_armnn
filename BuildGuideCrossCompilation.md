@@ -13,7 +13,7 @@
 
 #### <a name="introduction">Introduction</a>
 These are the step by step instructions on Cross-Compiling ArmNN under an x86_64 system to target an Arm64 system. This build flow has been tested with Ubuntu 16.04.
-The instructions show how to build the ArmNN core library and the Boost, Protobuf, Caffe and Compute Libraries necessary for compilation.
+The instructions show how to build the ArmNN core library and the Boost, Protobuf, Caffe, Tensorflow, Tflite, Flatbuffer and Compute Libraries necessary for compilation.
 
 #### <a name="installCCT">Cross-compiling ToolChain</a>
 * Install the standard cross-compilation libraries for arm64:
@@ -23,11 +23,13 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
 
 #### <a name="buildProtobuf">Build and install Google's Protobuf library</a>
 
-* Get protobuf-all-3.5.1.tar.gz from here: https://github.com/protocolbuffers/protobuf/releases/tag/v3.5.1
-* Extract:
+## We support protobuf version 3.12.0
+* Get protobuf from here: https://github.com/protocolbuffers/protobuf : 
     ```bash
-    tar -zxvf protobuf-all-3.5.1.tar.gz
-    cd protobuf-3.5.1
+    git clone -b v3.12.0 https://github.com/google/protobuf.git protobuf
+    cd protobuf
+    git submodule update --init --recursive
+    ./autogen
     ```
 * Build a native (x86_64) version of the protobuf libraries and compiler (protoc):
   (Requires cUrl, autoconf, llibtool, and other build dependencies if not previously installed: sudo apt install curl autoconf libtool build-essential g++)
@@ -42,8 +44,8 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     ```
     mkdir arm64_build
     cd arm64_build
-    CC=aarch64-linux-gnu-gcc \
-    CXX=aarch64-linux-gnu-g++ \
+    export CC=aarch64-linux-gnu-gcc \
+    export CXX=aarch64-linux-gnu-g++ \
     ../configure --host=aarch64-linux \
     --prefix=$HOME/armnn-devenv/google/arm64_pb_install \
     --with-protoc=$HOME/armnn-devenv/google/x86_64_pb_install/bin/protoc
@@ -61,10 +63,11 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     sudo apt-get install libopenblas-dev
     sudo apt-get install libatlas-base-dev
     ```
-* Download Caffe-Master from: https://github.com/BVLC/caffe
+* Download Caffe from: https://github.com/BVLC/caffe. We have tested using tag 1.0
     ```bash
     git clone https://github.com/BVLC/caffe.git
     cd caffe
+    git checkout eeebdab16155d34ff8f5f42137da7df4d1c7eab0
     cp Makefile.config.example Makefile.config
     ```
 * Adjust Makefile.config as necessary for your environment, for example:
@@ -99,7 +102,7 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     cd boost_1_64_0
     echo "using gcc : arm : aarch64-linux-gnu-g++ ;" > user_config.jam
     ./bootstrap.sh --prefix=$HOME/armnn-devenv/boost_arm64_install
-    ./b2 install toolset=gcc-arm link=static cxxflags=-fPIC --with-filesystem --with-test --with-log --with-program_options -j32 --user-config=user_config.jam
+    ./b2 install toolset=gcc-arm link=static cxxflags=-fPIC --with-test --with-log --with-program_options -j32 --user-config=user_config.jam
     ```
 
 #### <a name="buildCL">Build Compute Library</a>
@@ -107,7 +110,71 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     ```bash
     git clone https://github.com/ARM-software/ComputeLibrary.git
     cd ComputeLibrary/
+    git checkout <branch_name>
+    git pull
     scons arch=arm64-v8a neon=1 opencl=1 embed_kernels=1 extra_cxx_flags="-fPIC" -j8 internal_only=0
+    ```
+
+    For example, if you want to checkout release branch of 20.02:
+        ```bash
+        git checkout branches/arm_compute_20_02
+        git pull
+        ```
+
+#### <a name="buildtf">Build Tensorflow</a>
+* Building Tensorflow version 1.15:
+    ```bash
+    git clone https://github.com/tensorflow/tensorflow.git
+    cd tensorflow/
+    git checkout 590d6eef7e91a6a7392c8ffffb7b58f2e0c8bc6b
+    ../armnn/scripts/generate_tensorflow_protobuf.sh ../tensorflow-protobuf ../google/x86_64_pb_install
+    ```
+
+#### <a name="buildflatbuffer">Build Flatbuffer</a>
+* Building Flatbuffer version 1.12.0
+    ```bash
+    wget -O flatbuffers-1.12.0.tar.gz https://github.com/google/flatbuffers/archive/v1.12.0.tar.gz
+    tar xf flatbuffers-1.12.0.tar.gz
+    cd flatbuffers-1.12.0
+    rm -f CMakeCache.txt
+    mkdir build
+    cd build
+    cmake .. -DFLATBUFFERS_BUILD_FLATC=1 \
+	     -DCMAKE_INSTALL_PREFIX:PATH=$<DIRECTORY_PATH> \
+	     -DFLATBUFFERS_BUILD_TESTS=0
+    make all install
+    ```
+
+* Build arm64 version of flatbuffer
+    ```bash
+    mkdir build-arm64
+    cd build-arm64
+    # Add -fPIC to allow us to use the libraries in shared objects.
+    CXXFLAGS="-fPIC" cmake .. -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc \
+	     -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++ \
+	     -DFLATBUFFERS_BUILD_FLATC=1 \
+	     -DCMAKE_INSTALL_PREFIX:PATH=$<DIRECTORY_PATH> \
+	     -DFLATBUFFERS_BUILD_TESTS=0
+    make all install
+    ```
+
+#### <a name="buildingONNX">Build Onnx</a>
+* Building Onnx
+    ```bash
+    git clone https://github.com/onnx/onnx.git
+    cd onnx
+    git fetch https://github.com/onnx/onnx.git 553df22c67bee5f0fe6599cff60f1afc6748c635 && git checkout FETCH_HEAD
+    export LD_LIBRARY_PATH=$<DIRECTORY_PATH>/protobuf-host/lib:$LD_LIBRARY_PATH
+    ../google/x86_64_pb_install/bin/protoc onnx/onnx.proto --proto_path=. --proto_path=../google/x86_64_pb_install/include --cpp_out ../onnx
+    ```
+
+#### <a name="buildingtflite">Build TfLite</a>
+* Building TfLite
+    ```bash
+    mkdir tflite
+    cd tflite
+    cp ../tensorflow/tensorflow/lite/schema/schema.fbs .
+    ../flatbuffers-1.12.0/build/flatc -c --gen-object-api --reflect-types --reflect-names schema.fbs
     ```
 
 #### <a name="buildANN">Build ArmNN</a>
@@ -115,15 +182,23 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     ```bash
     git clone https://github.com/ARM-software/armnn.git
     cd armnn
+    git checkout <branch_name>
+    git pull
     mkdir build
     cd build
     ```
 
+    For example, if you want to checkout release branch of 20.02:
+        ```bash
+        git checkout branches/armnn_20_02
+        git pull
+        ```
+
 * Use CMake to configure your build environment, update the following script and run it from the armnn/build directory to set up the armNN build:
     ```bash
     #!/bin/bash
-    CXX=aarch64-linux-gnu-g++ \
-    CC=aarch64-linux-gnu-gcc \
+    export CXX=aarch64-linux-gnu-g++ \
+    export CC=aarch64-linux-gnu-gcc \
     cmake .. \
     -DARMCOMPUTE_ROOT=$HOME/armnn-devenv/ComputeLibrary \
     -DARMCOMPUTE_BUILD_DIR=$HOME/armnn-devenv/ComputeLibrary/build/ \
@@ -131,9 +206,18 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     -DARMCOMPUTENEON=1 -DARMCOMPUTECL=1 -DARMNNREF=1 \
     -DCAFFE_GENERATED_SOURCES=$HOME/armnn-devenv/caffe/build/src \
     -DBUILD_CAFFE_PARSER=1 \
+    -DONNX_GENERATED_SOURCES=$HOME/onnx \
+    -DBUILD_ONNX_PARSER=1 \
+    -DTF_GENERATED_SOURCES=$HOME/tensorflow-protobuf \
+    -DBUILD_TF_PARSER=1 \
+    -DBUILD_TF_LITE_PARSER=1 \
+    -DTF_LITE_GENERATED_PATH=$HOME/tflite \
+    -DFLATBUFFERS_ROOT=$HOME/flatbuffers-arm64 \
+    -DFLATC_DIR=$HOME/flatbuffers-1.12.0/build \
+    -DPROTOBUF_ROOT=$HOME/google/x86_64_pb_install \
     -DPROTOBUF_ROOT=$HOME/armnn-devenv/google/x86_64_pb_install/ \
-    -DPROTOBUF_LIBRARY_DEBUG=$HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so.15.0.1 \
-    -DPROTOBUF_LIBRARY_RELEASE=$HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so.15.0.1
+    -DPROTOBUF_LIBRARY_DEBUG=$HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so.23.0.0 \
+    -DPROTOBUF_LIBRARY_RELEASE=$HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so.23.0.0
     ```
 
 * If you want to include standalone sample dynamic backend tests, add the argument to enable the tests and the dynamic backend path to the CMake command:
@@ -156,13 +240,12 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
 * Use CMake to configure your build environment, update the following script and run it from the armnn/src/dynamic/sample/build directory to set up the armNN build:
     ```bash
     #!/bin/bash
-    CXX=aarch64-linux-gnu-g++ \
-    CC=aarch64-linux-gnu-gcc \
+    export CXX=aarch64-linux-gnu-g++ \
+    export CC=aarch64-linux-gnu-gcc \
     cmake .. \
     -DCMAKE_CXX_FLAGS=--std=c++14 \
     -DBOOST_ROOT=$HOME/armnn-devenv/boost_arm64_install/ \
     -DBoost_SYSTEM_LIBRARY=$HOME/armnn-devenv/boost_arm64_install/lib/libboost_system.a \
-    -DBoost_FILESYSTEM_LIBRARY=$HOME/armnn-devenv/boost_arm64_install/lib/libboost_filesystem.a \
     -DARMNN_PATH=$HOME/armnn-devenv/armnn/build/libarmnn.so
     ```
 
@@ -180,9 +263,9 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
     cd build/
     export LD_LIBRARY_PATH=`pwd`
     ```
-* Create a symbolic link to libprotobuf.so.15.0.1:
+* Create a symbolic link to libprotobuf.so.23.0.0:
     ```
-    ln -s libprotobuf.so.15.0.1 ./libprotobuf.so.15
+    ln -s libprotobuf.so.23.0.0 ./libprotobuf.so.23
     ```
 * Run the UnitTests:
     ```
@@ -234,7 +317,7 @@ The instructions show how to build the ArmNN core library and the Boost, Protobu
 #### Missing libz.so.1
 * When compiling armNN:
     ```bash
-    /usr/lib/gcc-cross/aarch64-linux-gnu/5/../../../../aarch64-linux-gnu/bin/ld: warning: libz.so.1, needed by /home/<username>/armNN/usr/lib64/libprotobuf.so.15.0.0, not found (try using -rpath or -rpath-link)
+    /usr/lib/gcc-cross/aarch64-linux-gnu/5/../../../../aarch64-linux-gnu/bin/ld: warning: libz.so.1, needed by /home/<username>/armNN/usr/lib64/libprotobuf.so.23.0.0, not found (try using -rpath or -rpath-link)
     ```
 
 * Missing arm64 libraries for libz.so.1, these can be added by adding a second architecture to dpkg and explicitly installing them:
@@ -284,8 +367,8 @@ https://askubuntu.com/questions/430705/how-to-use-apt-get-to-download-multi-arch
     libarmnnCaffeParser.so: undefined reference to `google::protobuf:*
     ```
 * Missing or out of date protobuf compilation libraries.
-    Use the command 'protoc --version' to check which version of protobuf is available (version 3.5.1 is required).
-    Follow the instructions above to install protobuf 3.5.1
+    Use the command 'protoc --version' to check which version of protobuf is available (version 3.12.0 is required).
+    Follow the instructions above to install protobuf 3.12.0
     Note this will require you to recompile Caffe for x86_64
 
 ##

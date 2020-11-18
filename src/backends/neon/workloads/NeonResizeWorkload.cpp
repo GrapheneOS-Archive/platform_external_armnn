@@ -9,7 +9,9 @@
 
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
+
 #include <neon/NeonTensorHandle.hpp>
 
 using namespace armnn::armcomputetensorutils;
@@ -31,12 +33,20 @@ arm_compute::Status NeonResizeWorkloadValidate(const TensorInfo& input,
     arm_compute::InterpolationPolicy aclInterpolationPolicy =
             ConvertResizeMethodToAclInterpolationPolicy(descriptor.m_Method);
 
+    arm_compute::SamplingPolicy samplingPolicy = descriptor.m_HalfPixelCenters ? arm_compute::SamplingPolicy::CENTER :
+                                                                                 arm_compute::SamplingPolicy::TOP_LEFT;
+
+    bool usePadding = false;
+
     return arm_compute::NEScale::validate(&aclInputInfo,
                                           &aclOutputInfo,
-                                          aclInterpolationPolicy,
-                                          arm_compute::BorderMode::REPLICATE,
-                                          arm_compute::PixelValue(0.f),
-                                          arm_compute::SamplingPolicy::TOP_LEFT);
+                                          arm_compute::ScaleKernelInfo(aclInterpolationPolicy,
+                                                                       arm_compute::BorderMode::REPLICATE,
+                                                                       arm_compute::PixelValue(0.f),
+                                                                       samplingPolicy,
+                                                                       usePadding,
+                                                                       descriptor.m_AlignCorners));
+
 }
 
 NeonResizeWorkload::NeonResizeWorkload(const ResizeQueueDescriptor& descriptor,
@@ -45,8 +55,8 @@ NeonResizeWorkload::NeonResizeWorkload(const ResizeQueueDescriptor& descriptor,
 {
     m_Data.ValidateInputsOutputs("NeonResizeWorkload", 1, 1);
 
-    arm_compute::ITensor& input = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
-    arm_compute::ITensor& output = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
+    arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
     input.info()->set_data_layout(aclDataLayout);
@@ -55,14 +65,20 @@ NeonResizeWorkload::NeonResizeWorkload(const ResizeQueueDescriptor& descriptor,
     arm_compute::InterpolationPolicy aclInterpolationPolicy =
             ConvertResizeMethodToAclInterpolationPolicy(descriptor.m_Parameters.m_Method);
 
+    arm_compute::SamplingPolicy samplingPolicy = descriptor.m_Parameters.m_HalfPixelCenters
+                                                 ? arm_compute::SamplingPolicy::CENTER
+                                                 : arm_compute::SamplingPolicy::TOP_LEFT;
+
+    bool usePadding = false;
+
     m_ResizeLayer.configure(&input,
                             &output,
-                            aclInterpolationPolicy,
-                            arm_compute::BorderMode::REPLICATE,
-                            arm_compute::PixelValue(0.f),
-                            arm_compute::SamplingPolicy::TOP_LEFT,
-                            true,
-                            descriptor.m_Parameters.m_BilinearAlignCorners);
+                            arm_compute::ScaleKernelInfo(aclInterpolationPolicy,
+                                                         arm_compute::BorderMode::REPLICATE,
+                                                         arm_compute::PixelValue(0.f),
+                                                         samplingPolicy,
+                                                         usePadding,
+                                                         descriptor.m_Parameters.m_AlignCorners));
 };
 
 void NeonResizeWorkload::Execute() const

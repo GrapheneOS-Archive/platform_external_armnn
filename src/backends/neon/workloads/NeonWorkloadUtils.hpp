@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -35,7 +35,7 @@ void CopyArmComputeTensorData(arm_compute::Tensor& dstTensor, const T* srcData)
 inline void InitializeArmComputeTensorData(arm_compute::Tensor& tensor,
                                            const ConstCpuTensorHandle* handle)
 {
-    BOOST_ASSERT(handle);
+    ARMNN_ASSERT(handle);
 
     switch(handle->GetTensorInfo().GetDataType())
     {
@@ -52,14 +52,18 @@ inline void InitializeArmComputeTensorData(arm_compute::Tensor& tensor,
         case DataType::QuantizedSymm8PerAxis:
             ARMNN_FALLTHROUGH;
         case DataType::QSymmS8:
+        case DataType::QAsymmS8:
             CopyArmComputeTensorData(tensor, handle->GetConstTensor<int8_t>());
             break;
         ARMNN_NO_DEPRECATE_WARN_END
         case DataType::Signed32:
             CopyArmComputeTensorData(tensor, handle->GetConstTensor<int32_t>());
             break;
+        case DataType::QSymmS16:
+            CopyArmComputeTensorData(tensor, handle->GetConstTensor<int16_t>());
+            break;
         default:
-            BOOST_ASSERT_MSG(false, "Unexpected tensor type.");
+            ARMNN_ASSERT_MSG(false, "Unexpected tensor type.");
     }
 };
 

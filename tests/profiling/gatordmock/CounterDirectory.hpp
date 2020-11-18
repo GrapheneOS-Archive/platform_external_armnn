@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,8 +9,9 @@
 #include "GatordMockService.hpp"
 #include "MockUtils.hpp"
 
-#include "Packet.hpp"
-#include "CommandHandlerFunctor.hpp"
+#include <common/include/Packet.hpp>
+#include <common/include/CommandHandlerFunctor.hpp>
+
 #include "SendCounterPacket.hpp"
 #include "IPeriodicCounterCapture.hpp"
 
@@ -106,8 +107,6 @@ struct EventRecord
 
 struct CategoryRecord
 {
-    uint16_t m_DeviceUid;
-    uint16_t m_CounterSet;
     uint16_t m_EventCount;
     std::string m_CategoryName;
     std::vector<EventRecord> m_EventRecords;
@@ -119,18 +118,10 @@ struct CategoryRecord
 
         header.append(gatordmock::CentreAlignFormatting("Name", 20));
         header.append(" | ");
-        header.append(gatordmock::CentreAlignFormatting("Device", 12));
-        header.append(" | ");
-        header.append(gatordmock::CentreAlignFormatting("Counter set UID:", 16));
-        header.append(" | ");
         header.append(gatordmock::CentreAlignFormatting("Event Count", 14));
         header.append("\n");
 
         body.append(gatordmock::CentreAlignFormatting(m_CategoryName, 20));
-        body.append(" | ");
-        body.append(gatordmock::CentreAlignFormatting(std::to_string(m_DeviceUid), 12));
-        body.append(" | ");
-        body.append(gatordmock::CentreAlignFormatting(std::to_string(m_CounterSet), 16));
         body.append(" | ");
         body.append(gatordmock::CentreAlignFormatting(std::to_string(m_EventCount), 14));
 

@@ -5,14 +5,13 @@
 #include "ClConcatWorkload.hpp"
 #include "ClWorkloadUtils.hpp"
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
 
 #include <arm_compute/core/Types.h>
 #include <arm_compute/runtime/CL/functions/CLConcatenateLayer.h>
-
-#include <boost/polymorphic_pointer_cast.hpp>
 
 namespace armnn
 {
@@ -37,7 +36,7 @@ arm_compute::Status ClConcatWorkloadValidate(const std::vector<const TensorInfo*
         aclInputs.emplace_back(aclInputInfo);
     }
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output);
-    std::vector<arm_compute::ITensorInfo*> aclInputPtrs;
+    std::vector<const arm_compute::ITensorInfo*> aclInputPtrs;
     for (arm_compute::ITensorInfo& input : aclInputs)
     {
         aclInputPtrs.emplace_back(&input);
@@ -69,14 +68,15 @@ ClConcatWorkload::ClConcatWorkload(const ConcatQueueDescriptor& descriptor, cons
         return;
     }
 
-    std::vector<arm_compute::ICLTensor *> aclInputs;
+    std::vector<const arm_compute::ICLTensor *> aclInputs;
     for (auto input : m_Data.m_Inputs)
     {
-        arm_compute::ICLTensor& aclInput  = boost::polymorphic_pointer_downcast<IClTensorHandle>(input)->GetTensor();
+        arm_compute::ICLTensor& aclInput  = armnn::PolymorphicPointerDowncast<IClTensorHandle>(input)->GetTensor();
         aclInputs.emplace_back(&aclInput);
     }
-    arm_compute::ICLTensor& output = boost::polymorphic_pointer_downcast<IClTensorHandle>(
-                                                                         m_Data.m_Outputs[0])->GetTensor();
+
+    arm_compute::ICLTensor& output =
+            armnn::PolymorphicPointerDowncast<IClTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
 
     // Create the layer function
     auto layer = std::make_unique<arm_compute::CLConcatenateLayer>();

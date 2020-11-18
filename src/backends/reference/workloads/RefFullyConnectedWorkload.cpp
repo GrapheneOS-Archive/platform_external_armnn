@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -32,7 +32,7 @@ RefFullyConnectedWorkload::RefFullyConnectedWorkload(
 void RefFullyConnectedWorkload::PostAllocationConfigure()
 {
     const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
-    BOOST_ASSERT(inputInfo.GetNumDimensions() > 1);
+    ARMNN_ASSERT(inputInfo.GetNumDimensions() > 1);
     m_InputShape = inputInfo.GetShape();
     m_InputDecoder = MakeDecoder<float>(inputInfo);
 
@@ -58,6 +58,7 @@ void RefFullyConnectedWorkload::Execute() const
                    *m_InputDecoder,
                    m_OutputShape,
                    *m_OutputEncoder,
+                   m_WeightShape,
                    *m_WeightDecoder,
                    *m_BiasDecoder,
                    m_Data.m_Parameters.m_BiasEnabled,

@@ -1,11 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ConcatLayer.hpp"
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
 
@@ -30,20 +31,29 @@ std::unique_ptr<IWorkload> ConcatLayer::CreateWorkload(const IWorkloadFactory& f
         descriptor.m_ViewOrigins.emplace_back(
             std::vector<unsigned int>(m_Param.GetViewOrigin(i), m_Param.GetViewOrigin(i) + m_Param.GetNumDimensions()));
     }
+    SetAdditionalInfo(descriptor);
 
     return factory.CreateConcat(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 template<typename FactoryType>
-void ConcatLayer::CreateTensors(const FactoryType& factory)
+void ConcatLayer::CreateTensors(const TensorHandleFactoryRegistry& registry,
+                                const FactoryType& factory,
+                                bool isMemoryManaged)
 {
     //If sub tensors are supported then the concat
     //just needs to make sure that the outputs of the prev layer
     //are made subtensors of the output of the concat layer.
-    m_OutputHandlers[0].CreateTensorHandles(factory);
+    m_OutputHandlers[0].CreateTensorHandles(factory, isMemoryManaged);
 
     if (factory.SupportsSubTensors())
     {
+        // check if concat is along the x or y (2 innermost dimensions)
+        uint32_t concatAxis = m_Param.GetConcatAxis();
+        auto numberOfDimensions = m_Param.GetNumDimensions();
+        bool isConcatOnXorY = m_Param.GetNumDimensions() >= 3
+                                && ((concatAxis == numberOfDimensions - 1) || (concatAxis == numberOfDimensions - 2));
+
         ITensorHandleFactory::FactoryId factoryId = GetOutputSlot(0).GetTensorHandleFactoryId();
 
         std::queue<ConcatLayer*> m_ConcatLayers;
@@ -57,6 +67,43 @@ void ConcatLayer::CreateTensors(const FactoryType& factory)
             m_ConcatLayers.pop();
 
             const unsigned int numInputSlots = currentLayer->GetNumInputSlots();
+
+            // if concat along x or y (2 innermost dimensions) and the previous layers do not require padding
+            bool canUseSubTensorOnXorY = true;
+            bool isTensorHandleFactory = std::is_same<armnn::ITensorHandleFactory, FactoryType>::value;
+            if (isTensorHandleFactory)
+            {
+                for (unsigned int i = 0; i < numInputSlots; ++i)
+                {
+                    OutputSlot* slot = currentLayer->GetInputSlot(i).GetConnectedOutputSlot();
+                    ITensorHandleFactory* handleFactory  = registry.GetFactory(factoryId);
+                    std::vector<Capability> capabilities =
+                        handleFactory->GetCapabilities(&(slot->GetOwningLayer()),
+                                                       currentLayer,
+                                                       CapabilityClass::PaddingRequired);
+                    if (isConcatOnXorY)
+                    {
+                        canUseSubTensorOnXorY = false;
+                        if (capabilities.empty())
+                        {
+                            canUseSubTensorOnXorY = true;
+                        }
+                    }
+
+                    // Splitter layer outputs are subtensors on the inputs whereas concat inputs are subtensors on
+                    // the output. If the parent is a Splitter layer we cannot use subtensors.
+                    if ((PolymorphicDowncast<const Layer*>(&(slot->GetOwningLayer())))->GetType() == LayerType::Splitter
+                        && (PolymorphicDowncast<const Layer*>(currentLayer))->GetType() == LayerType::Concat)
+                    {
+                        canUseSubTensorOnXorY = false;
+                    }
+
+                    if (!canUseSubTensorOnXorY)
+                    {
+                        break;
+                    }
+                }
+            }
 
             // First go through all the input slots and verify that we can sub-tensor all the inputs.
             std::vector<std::unique_ptr<ITensorHandle>> subTensors(0);
@@ -73,16 +120,20 @@ void ConcatLayer::CreateTensors(const FactoryType& factory)
                     // 2) the same TensorHandleFactory is used for input and Concat layer output
                     // 3) the input does not come from a Constant layer or input layer
                     // 4) the input is only read by this concat layer
+                    // 5) if concat along x or y (2 innermost dimensions) and the previous layers do not require padding
                     if (slot &&
                         parentInfo.IsTypeSpaceMatch(info) && //(1)
                         factoryId == slot->GetTensorHandleFactoryId() && //(2)
                         slot->GetOwningLayer().GetType() != LayerType::Constant && //(3)
                         slot->GetOwningLayer().GetType() != LayerType::Input && //(3)
-                        slot->GetNumConnections() == 1) //(4)
+                        slot->GetNumConnections() == 1 &&
+                        canUseSubTensorOnXorY) //(5)
                     {
+                        ARMNN_NO_DEPRECATE_WARN_BEGIN
                         return factory.CreateSubTensorHandle(*parentTensor,
                                                              info.GetShape(),
                                                              currentLayer->m_Param.GetViewOrigin(i));
+                        ARMNN_NO_DEPRECATE_WARN_END
                     }
                     return std::unique_ptr<ITensorHandle>();
                 };
@@ -111,14 +162,14 @@ void ConcatLayer::CreateTensors(const FactoryType& factory)
                 OutputSlot* slot = currentLayer->GetInputSlot(i).GetConnectedOutputSlot();
                 OutputHandler& outputHandler = slot->GetOutputHandler();
 
-                BOOST_ASSERT_MSG(subTensor, "ConcatLayer: Expected a valid sub-tensor for substitution.");
+                ARMNN_ASSERT_MSG(subTensor, "ConcatLayer: Expected a valid sub-tensor for substitution.");
                 outputHandler.SetData(std::move(subTensor));
 
                 Layer& inputLayer = slot->GetOwningLayer();
                 if (inputLayer.GetType() == LayerType::Concat)
                 {
                     // Continue with the substitution if the connected inputs are also concat layers
-                    m_ConcatLayers.push(boost::polymorphic_downcast<ConcatLayer*>(&inputLayer));
+                    m_ConcatLayers.push(PolymorphicDowncast<ConcatLayer*>(&inputLayer));
                 }
                 ++i;
             }
@@ -128,21 +179,20 @@ void ConcatLayer::CreateTensors(const FactoryType& factory)
 
 void ConcatLayer::CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
                                       const IWorkloadFactory& workloadFactory,
-                                      const bool IsMemoryManaged)
+                                      const bool isMemoryManaged)
 {
-    boost::ignore_unused(IsMemoryManaged);
     OutputSlot& slot = GetOutputSlot(0);
     ITensorHandleFactory::FactoryId factoryId = slot.GetTensorHandleFactoryId();
 
     if (factoryId == ITensorHandleFactory::LegacyFactoryId)
     {
-        CreateTensors(workloadFactory);
+        CreateTensors(registry, workloadFactory, isMemoryManaged);
     }
     else
     {
         ITensorHandleFactory* handleFactory = registry.GetFactory(factoryId);
-        BOOST_ASSERT(handleFactory);
-        CreateTensors(*handleFactory);
+        ARMNN_ASSERT(handleFactory);
+        CreateTensors(registry, *handleFactory, isMemoryManaged);
     }
 }
 
@@ -153,7 +203,7 @@ ConcatLayer* ConcatLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> ConcatLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == m_Param.GetNumViews());
+    ARMNN_ASSERT(inputShapes.size() == m_Param.GetNumViews());
 
     unsigned int numDims = m_Param.GetNumDimensions();
     for (unsigned int i=0; i< inputShapes.size(); i++)
@@ -251,6 +301,10 @@ void ConcatLayer::ValidateTensorShapesFromInputs()
 
     VerifyLayerConnections(m_Param.GetNumViews(), CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     std::vector<TensorShape> inputShapes;
     for (unsigned int i = 0; i < GetNumInputSlots(); ++i)
     {
@@ -259,12 +313,9 @@ void ConcatLayer::ValidateTensorShapesFromInputs()
 
     auto inferredShapes = InferOutputShapes(inputShapes);
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "ConcatLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ConcatLayer");
 }
 
 void ConcatLayer::Accept(ILayerVisitor& visitor) const

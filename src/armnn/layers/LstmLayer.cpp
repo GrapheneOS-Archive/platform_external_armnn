@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "LstmLayer.hpp"
@@ -39,7 +39,6 @@ std::unique_ptr<IWorkload> LstmLayer::CreateWorkload(const IWorkloadFactory& fac
     {
         descriptor.m_InputToInputWeights = m_CifgParameters.m_InputToInputWeights.get();
         descriptor.m_RecurrentToInputWeights = m_CifgParameters.m_RecurrentToInputWeights.get();
-        descriptor.m_CellToInputWeights = m_CifgParameters.m_CellToInputWeights.get();
         descriptor.m_InputGateBias = m_CifgParameters.m_InputGateBias.get();
     }
 
@@ -53,6 +52,10 @@ std::unique_ptr<IWorkload> LstmLayer::CreateWorkload(const IWorkloadFactory& fac
     // Peephole parameters
     if (m_Param.m_PeepholeEnabled)
     {
+        if (!m_Param.m_CifgEnabled)
+        {
+            descriptor.m_CellToInputWeights = m_PeepholeParameters.m_CellToInputWeights.get();
+        }
         descriptor.m_CellToForgetWeights = m_PeepholeParameters.m_CellToForgetWeights.get();
         descriptor.m_CellToOutputWeights = m_PeepholeParameters.m_CellToOutputWeights.get();
     }
@@ -68,6 +71,8 @@ std::unique_ptr<IWorkload> LstmLayer::CreateWorkload(const IWorkloadFactory& fac
         descriptor.m_CellLayerNormWeights = m_LayerNormParameters.m_CellLayerNormWeights.get();
         descriptor.m_OutputLayerNormWeights = m_LayerNormParameters.m_OutputLayerNormWeights.get();
     }
+
+    SetAdditionalInfo(descriptor);
 
     return factory.CreateLstm(descriptor, PrepInfoAndDesc(descriptor));
 }
@@ -102,8 +107,6 @@ LstmLayer* LstmLayer::Clone(Graph& graph) const
                 std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_InputToInputWeights) : nullptr;
         layer->m_CifgParameters.m_RecurrentToInputWeights = m_CifgParameters.m_RecurrentToInputWeights ?
                 std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_RecurrentToInputWeights) : nullptr;
-        layer->m_CifgParameters.m_CellToInputWeights = m_CifgParameters.m_CellToInputWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_CellToInputWeights) : nullptr;
         layer->m_CifgParameters.m_InputGateBias = m_CifgParameters.m_InputGateBias ?
                 std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_InputGateBias) : nullptr;
     }
@@ -118,6 +121,11 @@ LstmLayer* LstmLayer::Clone(Graph& graph) const
 
     if (m_Param.m_PeepholeEnabled)
     {
+        if (!m_Param.m_CifgEnabled)
+        {
+            layer->m_PeepholeParameters.m_CellToInputWeights = m_PeepholeParameters.m_CellToInputWeights ?
+                std::make_unique<ScopedCpuTensorHandle>(*m_PeepholeParameters.m_CellToInputWeights) : nullptr;
+        }
         layer->m_PeepholeParameters.m_CellToForgetWeights = m_PeepholeParameters.m_CellToForgetWeights ?
                std::make_unique<ScopedCpuTensorHandle>(*m_PeepholeParameters.m_CellToForgetWeights) : nullptr;
         layer->m_PeepholeParameters.m_CellToOutputWeights = m_PeepholeParameters.m_CellToOutputWeights ?
@@ -141,7 +149,7 @@ LstmLayer* LstmLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> LstmLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 3);
+    ARMNN_ASSERT(inputShapes.size() == 3);
 
     // Get input values for validation
     unsigned int batchSize = inputShapes[0][0];
@@ -161,104 +169,100 @@ void LstmLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(3, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     auto inferredShapes = InferOutputShapes( {
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
         GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape(),
-        GetInputSlot(2).GetConnection()->GetTensorInfo().GetShape()}
-    );
+        GetInputSlot(2).GetConnection()->GetTensorInfo().GetShape()
+    });
 
-    BOOST_ASSERT(inferredShapes.size() == 4);
+    ARMNN_ASSERT(inferredShapes.size() == 4);
 
     // Check if the weights are nullptr
-    BOOST_ASSERT_MSG(m_BasicParameters.m_InputToForgetWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_InputToForgetWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_InputToForgetWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_InputToCellWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_InputToCellWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_InputToCellWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_InputToOutputWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_InputToOutputWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_InputToOutputWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_RecurrentToForgetWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_RecurrentToForgetWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_RecurrentToForgetWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_RecurrentToCellWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_RecurrentToCellWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_RecurrentToCellWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_RecurrentToOutputWeights != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_RecurrentToOutputWeights != nullptr,
                      "LstmLayer: m_BasicParameters.m_RecurrentToOutputWeights should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_ForgetGateBias != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_ForgetGateBias != nullptr,
                      "LstmLayer: m_BasicParameters.m_ForgetGateBias should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_CellBias != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_CellBias != nullptr,
                      "LstmLayer: m_BasicParameters.m_CellBias should not be null.");
-    BOOST_ASSERT_MSG(m_BasicParameters.m_OutputGateBias != nullptr,
+    ARMNN_ASSERT_MSG(m_BasicParameters.m_OutputGateBias != nullptr,
                      "LstmLayer: m_BasicParameters.m_OutputGateBias should not be null.");
 
     if (!m_Param.m_CifgEnabled)
     {
-        BOOST_ASSERT_MSG(m_CifgParameters.m_InputToInputWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_InputToInputWeights != nullptr,
                          "LstmLayer: m_CifgParameters.m_InputToInputWeights should not be null.");
-        BOOST_ASSERT_MSG(m_CifgParameters.m_RecurrentToInputWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_RecurrentToInputWeights != nullptr,
                          "LstmLayer: m_CifgParameters.m_RecurrentToInputWeights should not be null.");
-        BOOST_ASSERT_MSG(m_CifgParameters.m_InputGateBias != nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_InputGateBias != nullptr,
                          "LstmLayer: m_CifgParameters.m_InputGateBias should not be null.");
 
-        ConditionalThrowIfNotEqual<LayerValidationException>(
-                "LstmLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-                GetOutputSlot(0).GetTensorInfo().GetShape(),
-                inferredShapes[0]);
+        ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LstmLayer");
     }
     else
     {
-        BOOST_ASSERT_MSG(m_CifgParameters.m_InputToInputWeights == nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_InputToInputWeights == nullptr,
             "LstmLayer: m_CifgParameters.m_InputToInputWeights should not have a value when CIFG is enabled.");
-        BOOST_ASSERT_MSG(m_CifgParameters.m_RecurrentToInputWeights == nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_RecurrentToInputWeights == nullptr,
             "LstmLayer: m_CifgParameters.m_RecurrentToInputWeights should not have a value when CIFG is enabled.");
-        BOOST_ASSERT_MSG(m_CifgParameters.m_CellToInputWeights == nullptr,
-             "LstmLayer: m_CifgParameters.m_CellToInputWeights should not have a value when CIFG is enabled.");
-        BOOST_ASSERT_MSG(m_CifgParameters.m_InputGateBias == nullptr,
+        ARMNN_ASSERT_MSG(m_CifgParameters.m_InputGateBias == nullptr,
             "LstmLayer: m_CifgParameters.m_InputGateBias should not have a value when CIFG is enabled.");
 
-        ConditionalThrowIfNotEqual<LayerValidationException>(
-                "LstmLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-                GetOutputSlot(0).GetTensorInfo().GetShape(),
-                inferredShapes[0]);
+        ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LstmLayer");
     }
 
     if (m_Param.m_ProjectionEnabled)
     {
-        BOOST_ASSERT_MSG(m_ProjectionParameters.m_ProjectionWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_ProjectionParameters.m_ProjectionWeights != nullptr,
                          "LstmLayer: m_ProjectionParameters.m_ProjectionWeights should not be null.");
     }
 
     if (m_Param.m_PeepholeEnabled)
     {
-        BOOST_ASSERT_MSG(m_PeepholeParameters.m_CellToForgetWeights != nullptr,
+        if (!m_Param.m_CifgEnabled)
+        {
+            ARMNN_ASSERT_MSG(m_PeepholeParameters.m_CellToInputWeights != nullptr,
+                             "LstmLayer: m_PeepholeParameters.m_CellToInputWeights should not be null "
+                             "when Peephole is enabled and CIFG is disabled.");
+        }
+        ARMNN_ASSERT_MSG(m_PeepholeParameters.m_CellToForgetWeights != nullptr,
                          "LstmLayer: m_PeepholeParameters.m_CellToForgetWeights should not be null.");
-        BOOST_ASSERT_MSG(m_PeepholeParameters.m_CellToOutputWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_PeepholeParameters.m_CellToOutputWeights != nullptr,
                          "LstmLayer: m_PeepholeParameters.m_CellToOutputWeights should not be null.");
     }
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "LstmLayer: TensorShape set on OutputSlot[1] does not match the inferred shape.",
-            GetOutputSlot(1).GetTensorInfo().GetShape(),
-            inferredShapes[1]);
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "LstmLayer: TensorShape set on OutputSlot[2] does not match the inferred shape.",
-            GetOutputSlot(2).GetTensorInfo().GetShape(),
-            inferredShapes[2]);
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "LstmLayer: TensorShape set on OutputSlot[3] does not match the inferred shape.",
-            GetOutputSlot(3).GetTensorInfo().GetShape(),
-            inferredShapes[3]);
+    ValidateAndCopyShape(
+            GetOutputSlot(1).GetTensorInfo().GetShape(), inferredShapes[1], m_ShapeInferenceMethod, "LstmLayer", 1);
+    ValidateAndCopyShape(
+            GetOutputSlot(2).GetTensorInfo().GetShape(), inferredShapes[2], m_ShapeInferenceMethod, "LstmLayer", 2);
+    ValidateAndCopyShape(
+            GetOutputSlot(3).GetTensorInfo().GetShape(), inferredShapes[3], m_ShapeInferenceMethod, "LstmLayer", 3);
 
     if (m_Param.m_LayerNormEnabled)
     {
         if(!m_Param.m_CifgEnabled)
         {
-            BOOST_ASSERT_MSG(m_LayerNormParameters.m_InputLayerNormWeights != nullptr,
+            ARMNN_ASSERT_MSG(m_LayerNormParameters.m_InputLayerNormWeights != nullptr,
                              "LstmLayer: m_LayerNormParameters.m_inputLayerNormWeights should not be null.");
         }
-        BOOST_ASSERT_MSG(m_LayerNormParameters.m_ForgetLayerNormWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_LayerNormParameters.m_ForgetLayerNormWeights != nullptr,
                          "LstmLayer: m_LayerNormParameters.m_forgetLayerNormWeights should not be null.");
-        BOOST_ASSERT_MSG(m_LayerNormParameters.m_CellLayerNormWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_LayerNormParameters.m_CellLayerNormWeights != nullptr,
                          "LstmLayer: m_LayerNormParameters.m_cellLayerNormWeights should not be null.");
-        BOOST_ASSERT_MSG(m_LayerNormParameters.m_OutputLayerNormWeights != nullptr,
+        ARMNN_ASSERT_MSG(m_LayerNormParameters.m_OutputLayerNormWeights != nullptr,
                          "LstmLayer: m_LayerNormParameters.m_outputLayerNormWeights should not be null.");
     }
 }
@@ -278,7 +282,6 @@ Layer::ConstantTensors LstmLayer::GetConstantTensorsByRef()
             // Cifg parameters
             m_CifgParameters.m_InputToInputWeights,
             m_CifgParameters.m_RecurrentToInputWeights,
-            m_CifgParameters.m_CellToInputWeights,
             m_CifgParameters.m_InputGateBias,
 
             // Projection parameters
@@ -286,6 +289,7 @@ Layer::ConstantTensors LstmLayer::GetConstantTensorsByRef()
             m_ProjectionParameters.m_ProjectionBias,
 
             // Peephole parameters
+            m_PeepholeParameters.m_CellToInputWeights,
             m_PeepholeParameters.m_CellToForgetWeights,
             m_PeepholeParameters.m_CellToOutputWeights,
 
@@ -368,10 +372,10 @@ void LstmLayer::Accept(ILayerVisitor& visitor) const
         inputParams.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
     }
     ConstTensor cellToInputWeightsTensor;
-    if (m_CifgParameters.m_CellToInputWeights != nullptr)
+    if (m_PeepholeParameters.m_CellToInputWeights != nullptr)
     {
-        ConstTensor cellToInputWeightsTensorCopy(m_CifgParameters.m_CellToInputWeights->GetTensorInfo(),
-                                                 m_CifgParameters.m_CellToInputWeights->Map(true));
+        ConstTensor cellToInputWeightsTensorCopy(m_PeepholeParameters.m_CellToInputWeights->GetTensorInfo(),
+                                                 m_PeepholeParameters.m_CellToInputWeights->Map(true));
         cellToInputWeightsTensor = cellToInputWeightsTensorCopy;
         inputParams.m_CellToInputWeights = &cellToInputWeightsTensor;
     }

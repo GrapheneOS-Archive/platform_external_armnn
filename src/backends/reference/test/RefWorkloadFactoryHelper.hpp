@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,6 +9,7 @@
 
 #include <reference/RefBackend.hpp>
 #include <reference/RefWorkloadFactory.hpp>
+#include "reference/RefTensorHandleFactory.hpp"
 
 namespace
 {
@@ -25,8 +26,15 @@ struct WorkloadFactoryHelper<armnn::RefWorkloadFactory>
     static armnn::RefWorkloadFactory GetFactory(
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager = nullptr)
     {
-        boost::ignore_unused(memoryManager);
+        IgnoreUnused(memoryManager);
         return armnn::RefWorkloadFactory();
+    }
+
+    static armnn::RefTensorHandleFactory GetTensorHandleFactory(
+            const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager = nullptr)
+    {
+
+        return armnn::RefTensorHandleFactory(std::static_pointer_cast<armnn::RefMemoryManager>(memoryManager));
     }
 };
 

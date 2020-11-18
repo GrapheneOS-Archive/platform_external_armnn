@@ -6,10 +6,10 @@
 #include <armnnUtils/TensorUtils.hpp>
 
 #include <armnn/backends/ITensorHandle.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <fmt/format.h>
 
 using namespace armnn;
 
@@ -86,21 +86,21 @@ TensorShape ExpandDims(const TensorShape& tensorShape, int axis)
 {
     unsigned int outputDim = tensorShape.GetNumDimensions() + 1;
 
-    if (axis < -boost::numeric_cast<int>(outputDim) || axis > boost::numeric_cast<int>(tensorShape.GetNumDimensions()))
+    if (axis < -armnn::numeric_cast<int>(outputDim) || axis > armnn::numeric_cast<int>(tensorShape.GetNumDimensions()))
     {
-        throw InvalidArgumentException(
-            boost::str(boost::format("Invalid expansion axis %1% for %2%D input tensor. %3%") %
-                       axis %
-                       tensorShape.GetNumDimensions() %
-                       CHECK_LOCATION().AsString()));
+        throw InvalidArgumentException(fmt::format("Invalid expansion axis {} for {}D input tensor. {}",
+                                                   axis,
+                                                   tensorShape.GetNumDimensions(),
+                                                   CHECK_LOCATION().AsString()));
     }
 
     if (axis < 0)
     {
-        axis = boost::numeric_cast<int>(outputDim) + axis;
+        axis = armnn::numeric_cast<int>(outputDim) + axis;
     }
 
     std::vector<unsigned int> outputShape;
+    outputShape.reserve(tensorShape.GetNumDimensions());
     for (unsigned int i = 0; i < tensorShape.GetNumDimensions(); ++i)
     {
         outputShape.push_back(tensorShape[i]);
@@ -114,8 +114,8 @@ unsigned int GetNumElementsBetween(const TensorShape& shape,
                                    const unsigned int firstAxisInclusive,
                                    const unsigned int lastAxisExclusive)
 {
-    BOOST_ASSERT(firstAxisInclusive <= lastAxisExclusive);
-    BOOST_ASSERT(lastAxisExclusive <= shape.GetNumDimensions());
+    ARMNN_ASSERT(firstAxisInclusive <= lastAxisExclusive);
+    ARMNN_ASSERT(lastAxisExclusive <= shape.GetNumDimensions());
     unsigned int count = 1;
     for (unsigned int i = firstAxisInclusive; i < lastAxisExclusive; i++)
     {
@@ -126,21 +126,21 @@ unsigned int GetNumElementsBetween(const TensorShape& shape,
 
 unsigned int GetUnsignedAxis(const unsigned int inputDimension, const int axis)
 {
-    BOOST_ASSERT_MSG(axis < boost::numeric_cast<int>(inputDimension),
+    ARMNN_ASSERT_MSG(axis < armnn::numeric_cast<int>(inputDimension),
                      "Required axis index greater than number of dimensions.");
-    BOOST_ASSERT_MSG(axis >= -boost::numeric_cast<int>(inputDimension),
+    ARMNN_ASSERT_MSG(axis >= -armnn::numeric_cast<int>(inputDimension),
                      "Required axis index lower than negative of the number of dimensions");
 
     unsigned int uAxis = axis < 0  ?
-                         inputDimension - boost::numeric_cast<unsigned int>(abs(axis))
-                         : boost::numeric_cast<unsigned int>(axis);
+                         inputDimension - armnn::numeric_cast<unsigned int>(abs(axis))
+                         : armnn::numeric_cast<unsigned int>(axis);
     return uAxis;
 }
 
 unsigned int GetNumElementsAfter(const armnn::TensorShape& shape, unsigned int axis)
 {
     unsigned int numDim = shape.GetNumDimensions();
-    BOOST_ASSERT(axis <= numDim - 1);
+    ARMNN_ASSERT(axis <= numDim - 1);
     unsigned int count = 1;
     for (unsigned int i = axis; i < numDim; i++)
     {

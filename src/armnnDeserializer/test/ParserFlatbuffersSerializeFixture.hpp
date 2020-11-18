@@ -6,21 +6,20 @@
 #pragma once
 
 #include "SchemaSerialize.hpp"
-
-#include <armnn/IRuntime.hpp>
-#include <armnnDeserializer/IDeserializer.hpp>
-
-#include <boost/core/ignore_unused.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
-
-#include <ResolveType.hpp>
 #include "test/TensorHelpers.hpp"
 
 #include "flatbuffers/idl.h"
 #include "flatbuffers/util.h"
 
 #include <ArmnnSchema_generated.h>
+#include <armnn/IRuntime.hpp>
+#include <armnnDeserializer/IDeserializer.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <ResolveType.hpp>
+
+#include <fmt/format.h>
+
 
 using armnnDeserializer::IDeserializer;
 using TensorRawPtr = armnnSerializer::TensorInfo*;
@@ -69,14 +68,12 @@ struct ParserFlatbuffersSerializeFixture
 
         if (ret != armnn::Status::Success)
         {
-            throw armnn::Exception(
-                    boost::str(
-                            boost::format("The runtime failed to load the network. "
-                                          "Error was: %1%. in %2% [%3%:%4%]") %
-                            errorMessage %
-                            __func__ %
-                            __FILE__ %
-                            __LINE__));
+            throw armnn::Exception(fmt::format("The runtime failed to load the network. "
+                                               "Error was: {0}. in {1} [{2}:{3}]",
+                                               errorMessage,
+                                               __func__,
+                                               __FILE__,
+                                               __LINE__));
         }
 
     }
@@ -97,10 +94,10 @@ struct ParserFlatbuffersSerializeFixture
         flatbuffers::Parser parser;
 
         bool ok = parser.Parse(schemafile.c_str());
-        BOOST_ASSERT_MSG(ok, "Failed to parse schema file");
+        ARMNN_ASSERT_MSG(ok, "Failed to parse schema file");
 
         ok &= parser.Parse(m_JsonString.c_str());
-        BOOST_ASSERT_MSG(ok, "Failed to parse json input");
+        ARMNN_ASSERT_MSG(ok, "Failed to parse json input");
 
         if (!ok)
         {
@@ -155,7 +152,7 @@ struct ParserFlatbuffersSerializeFixture
                       armnnSerializer::TensorInfo tensorType, const std::string& name,
                       const float scale, const int64_t zeroPoint)
     {
-        boost::ignore_unused(name);
+        armnn::IgnoreUnused(name);
         BOOST_CHECK_EQUAL(shapeSize, tensors->dimensions()->size());
         BOOST_CHECK_EQUAL_COLLECTIONS(shape.begin(), shape.end(),
                                       tensors->dimensions()->begin(), tensors->dimensions()->end());

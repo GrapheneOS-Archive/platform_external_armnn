@@ -1,11 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "PreluLayer.hpp"
 
 #include "LayerCloneBase.hpp"
+
+#include <armnn/utility/NumericCast.hpp>
 
 #include <backendsCommon/WorkloadData.hpp>
 #include <backendsCommon/WorkloadFactory.hpp>
@@ -21,6 +23,7 @@ PreluLayer::PreluLayer(const char* name)
 std::unique_ptr<IWorkload> PreluLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     PreluQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
 
     return factory.CreatePrelu(descriptor, PrepInfoAndDesc(descriptor));
 }
@@ -34,7 +37,7 @@ PreluLayer* PreluLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> PreluLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 2);
+    ARMNN_ASSERT(inputShapes.size() == 2);
 
     const TensorShape& inputShape = inputShapes[0];
     const TensorShape& alphaShape = inputShapes[1];
@@ -42,8 +45,8 @@ std::vector<TensorShape> PreluLayer::InferOutputShapes(const std::vector<TensorS
     const unsigned int inputShapeDimensions = inputShape.GetNumDimensions();
     const unsigned int alphaShapeDimensions = alphaShape.GetNumDimensions();
 
-    BOOST_ASSERT(inputShapeDimensions > 0);
-    BOOST_ASSERT(alphaShapeDimensions > 0);
+    ARMNN_ASSERT(inputShapeDimensions > 0);
+    ARMNN_ASSERT(alphaShapeDimensions > 0);
 
     // The size of the output is the maximum size along each dimension of the input operands,
     // it starts with the trailing dimensions, and works its way forward
@@ -52,18 +55,18 @@ std::vector<TensorShape> PreluLayer::InferOutputShapes(const std::vector<TensorS
 
     TensorShape outputShape(outputDimensions);
 
-    int inputShapeIndex = boost::numeric_cast<int>(inputShapeDimensions) - 1;
-    int alphaShapeIndex = boost::numeric_cast<int>(alphaShapeDimensions) - 1;
+    int inputShapeIndex = armnn::numeric_cast<int>(inputShapeDimensions) - 1;
+    int alphaShapeIndex = armnn::numeric_cast<int>(alphaShapeDimensions) - 1;
     unsigned int outputShapeIndex = outputDimensions - 1;
 
     // Loop backwards through the common part of the shapes
     while (inputShapeIndex >= 0 && alphaShapeIndex >= 0)
     {
-        unsigned int inputDimension = inputShape[boost::numeric_cast<unsigned int>(inputShapeIndex)];
-        unsigned int alphaDimension = alphaShape[boost::numeric_cast<unsigned int>(alphaShapeIndex)];
+        unsigned int inputDimension = inputShape[armnn::numeric_cast<unsigned int>(inputShapeIndex)];
+        unsigned int alphaDimension = alphaShape[armnn::numeric_cast<unsigned int>(alphaShapeIndex)];
 
         // Check that the inputs are broadcast compatible
-        BOOST_ASSERT_MSG(inputDimension == alphaDimension || inputDimension == 1 || alphaDimension == 1,
+        ARMNN_ASSERT_MSG(inputDimension == alphaDimension || inputDimension == 1 || alphaDimension == 1,
                          "PreluLayer: Dimensions should either match or one should be of size 1");
 
         outputShape[outputShapeIndex] = std::max(inputDimension, alphaDimension);
@@ -76,7 +79,7 @@ std::vector<TensorShape> PreluLayer::InferOutputShapes(const std::vector<TensorS
     // Loop backwards through the remaing part of the input shape (if any)
     while (inputShapeIndex >= 0)
     {
-        outputShape[outputShapeIndex] = inputShape[boost::numeric_cast<unsigned int>(inputShapeIndex)];
+        outputShape[outputShapeIndex] = inputShape[armnn::numeric_cast<unsigned int>(inputShapeIndex)];
 
         inputShapeIndex--;
         outputShapeIndex--;
@@ -85,7 +88,7 @@ std::vector<TensorShape> PreluLayer::InferOutputShapes(const std::vector<TensorS
     // Loop backwards through the remaing part of the alpha shape (if any)
     while (alphaShapeIndex >= 0)
     {
-        outputShape[outputShapeIndex] = alphaShape[boost::numeric_cast<unsigned int>(alphaShapeIndex)];
+        outputShape[outputShapeIndex] = alphaShape[armnn::numeric_cast<unsigned int>(alphaShapeIndex)];
 
         alphaShapeIndex--;
         outputShapeIndex--;
@@ -98,18 +101,19 @@ void PreluLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(2, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     std::vector<TensorShape> inferredShapes = InferOutputShapes(
     {
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
         GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape()
     });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "PreluLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "PreluLayer");
 }
 
 void PreluLayer::Accept(ILayerVisitor& visitor) const

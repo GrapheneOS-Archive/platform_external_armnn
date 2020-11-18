@@ -24,7 +24,9 @@ arm_compute::Status ClConvolution2dWorkloadValidate(const TensorInfo& input,
                                                     const TensorInfo& output,
                                                     const Convolution2dDescriptor& descriptor,
                                                     const TensorInfo& weights,
-                                                    const Optional<TensorInfo>& biases)
+                                                    const Optional<TensorInfo>& biases,
+                                                    bool isFastMathEnabled,
+                                                    const ActivationDescriptor* activationDescriptor)
 {
     const arm_compute::TensorInfo aclInputInfo = BuildArmComputeTensorInfo(input, descriptor.m_DataLayout);
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output, descriptor.m_DataLayout);
@@ -38,7 +40,7 @@ arm_compute::Status ClConvolution2dWorkloadValidate(const TensorInfo& input,
 
     if (descriptor.m_BiasEnabled)
     {
-        BOOST_ASSERT(biases.has_value());
+        ARMNN_ASSERT(biases.has_value());
 
         aclBiasesInfo = BuildArmComputeTensorInfo(biases.value(), descriptor.m_DataLayout);
         optionalAclBiasesInfo = &aclBiasesInfo;
@@ -46,17 +48,24 @@ arm_compute::Status ClConvolution2dWorkloadValidate(const TensorInfo& input,
 
     arm_compute::PadStrideInfo layerInfo = BuildArmComputePadStrideInfo(descriptor);
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertActivationDescriptorToAclActivationLayerInfo(
+            activationDescriptor);
+
     return arm_compute::CLConvolutionLayer::validate(&aclInputInfo,
                                                      &aclWeightsInfo,
                                                      optionalAclBiasesInfo,
                                                      &aclOutputInfo,
                                                      layerInfo,
                                                      arm_compute::WeightsInfo(),
-                                                     aclDilationInfo);
+                                                     aclDilationInfo,
+                                                     activationInfo,
+                                                     isFastMathEnabled);
 }
 
 ClConvolution2dWorkload::ClConvolution2dWorkload(const Convolution2dQueueDescriptor& descriptor,
-    const WorkloadInfo& info, std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager)
+                                                 const WorkloadInfo& info,
+                                                 std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager,
+                                                 const bool isFastMathEnabled)
     : BaseWorkload<Convolution2dQueueDescriptor>(descriptor, info)
     , m_ConvolutionLayer(memoryManager)
 {
@@ -86,13 +95,28 @@ ClConvolution2dWorkload::ClConvolution2dWorkload(const Convolution2dQueueDescrip
 
     arm_compute::PadStrideInfo padStrideInfo = BuildArmComputePadStrideInfo(m_Data.m_Parameters);
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
+
     m_ConvolutionLayer.configure(&input,
                                  m_KernelTensor.get(),
                                  m_BiasTensor.get(),
                                  &output,
                                  padStrideInfo,
                                  arm_compute::WeightsInfo(),
-                                 aclDilationInfo);
+                                 aclDilationInfo,
+                                 activationInfo,
+                                 isFastMathEnabled);
+
+    m_ConvolutionMethod =
+        m_ConvolutionLayer.get_convolution_method(input.info(),
+                                                  m_KernelTensor->info(),
+                                                  output.info(),
+                                                  padStrideInfo,
+                                                  arm_compute::WeightsInfo(),
+                                                  activationInfo,
+                                                  arm_compute::CLScheduler::get().target(),
+                                                  aclDilationInfo,
+                                                  isFastMathEnabled);
 
     InitializeArmComputeClTensorData(*m_KernelTensor, m_Data.m_Weight);
 
@@ -111,6 +135,11 @@ void ClConvolution2dWorkload::Execute() const
 {
     ARMNN_SCOPED_PROFILING_EVENT_CL("ClConvolution2dWorkload_Execute");
     RunClFunction(m_ConvolutionLayer, CHECK_LOCATION());
+}
+
+arm_compute::ConvolutionMethod ClConvolution2dWorkload::GetConvolutionMethod() const
+{
+    return m_ConvolutionMethod;
 }
 
 void ClConvolution2dWorkload::FreeUnusedTensors()

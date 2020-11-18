@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -26,22 +26,23 @@ SpaceToBatchNdLayer::SpaceToBatchNdLayer(const SpaceToBatchNdDescriptor param, c
 
 std::unique_ptr<IWorkload> SpaceToBatchNdLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-   SpaceToBatchNdQueueDescriptor descriptor;
+    SpaceToBatchNdQueueDescriptor descriptor;
     descriptor.m_Parameters.m_BlockShape = m_Param.m_BlockShape;
-    descriptor.m_Parameters.m_PadList = m_Param.m_PadList;
+    descriptor.m_Parameters.m_PadList    = m_Param.m_PadList;
+    SetAdditionalInfo(descriptor);
 
     return factory.CreateSpaceToBatchNd(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SpaceToBatchNdLayer* SpaceToBatchNdLayer::Clone(Graph& graph) const
 {
-    boost::ignore_unused(graph);
+    IgnoreUnused(graph);
     return CloneBase<SpaceToBatchNdLayer>(graph, m_Param, GetName());
 }
 
 std::vector<TensorShape> SpaceToBatchNdLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 1);
+    ARMNN_ASSERT(inputShapes.size() == 1);
 
     TensorShape inputShape = inputShapes[0];
     TensorShape outputShape(inputShape);
@@ -70,15 +71,16 @@ void SpaceToBatchNdLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     std::vector<TensorShape> inferredShapes = InferOutputShapes({
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "SpaceToBatchNdLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SpaceToBatchNdLayer");
 }
 
 void SpaceToBatchNdLayer::Accept(ILayerVisitor& visitor) const

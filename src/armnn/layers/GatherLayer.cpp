@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -13,25 +13,31 @@
 namespace armnn
 {
 
-GatherLayer::GatherLayer(const char* name)
-    : Layer(2, 1, LayerType::Gather, name)
+GatherLayer::GatherLayer(const GatherDescriptor& param, const char* name)
+    : LayerWithParameters(2, 1, LayerType::Gather, param, name)
 {
 }
 
 std::unique_ptr<IWorkload> GatherLayer::CreateWorkload(const armnn::IWorkloadFactory& factory) const
 {
     GatherQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateGather(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 GatherLayer* GatherLayer::Clone(Graph& graph) const
 {
-    return CloneBase<GatherLayer>(graph, GetName());
+    return CloneBase<GatherLayer>(graph, m_Param, GetName());
 }
 
 void GatherLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(2, CHECK_LOCATION());
+
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
     const TensorInfo& params = GetInputSlot(0).GetConnection()->GetTensorInfo();
     const TensorInfo& indices = GetInputSlot(1).GetConnection()->GetTensorInfo();
@@ -42,26 +48,34 @@ void GatherLayer::ValidateTensorShapesFromInputs()
 
     std::vector<unsigned int> dimSizes;
 
-    for (unsigned int i = 0; i < indicesDim; ++i)
+    unsigned int axis = static_cast<unsigned int>(m_Param.m_Axis);
+    if (m_Param.m_Axis < 0)
     {
-        dimSizes.push_back(indices.GetShape()[i]);
+        int32_t  axis_aux = static_cast<int32_t>(paramsDim) + m_Param.m_Axis;
+        axis = static_cast<unsigned int> (axis_aux);
     }
-    for (unsigned int i = 1; i < paramsDim; ++i)
+
+    for (unsigned int i = 0; i < axis; ++i)
+    {
+        dimSizes.push_back(params.GetShape()[i]);
+    }
+    for (unsigned int i = axis; i < indicesDim + axis; ++i)
+    {
+        dimSizes.push_back(indices.GetShape()[i - axis]);
+    }
+    for (unsigned int i = 1 + axis; i < paramsDim; ++i)
     {
         dimSizes.push_back(params.GetShape()[i]);
     }
 
     const TensorShape& inferredShape = TensorShape(outputDim, dimSizes.data());
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "GatherLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShape);
+    ValidateAndCopyShape(outputShape, inferredShape, m_ShapeInferenceMethod, "GatherLayer");
 }
 
 void GatherLayer::Accept(ILayerVisitor& visitor) const
 {
-    visitor.VisitGatherLayer(this, GetName());
+    visitor.VisitGatherLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

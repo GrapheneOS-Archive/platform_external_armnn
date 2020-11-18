@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -6,6 +6,7 @@
 
 #include "Optimization.hpp"
 
+#include <armnn/utility/PolymorphicDowncast.hpp>
 #include <armnnUtils/Permute.hpp>
 
 namespace armnn
@@ -29,7 +30,7 @@ public:
 
             if (CanMovePermuteToInputs(base))
             {
-                auto permute = boost::polymorphic_downcast<PermuteLayer*>(&connection.GetOwningLayer());
+                auto permute = PolymorphicDowncast<PermuteLayer*>(&connection.GetOwningLayer());
                 const PermutationVector& perm = permute->GetPermutation();
 
                 // Inserts an equivalent permute before every input of the base layer.
@@ -44,10 +45,6 @@ public:
                     const TensorInfo permOutInfo = armnnUtils::Permuted(parentOutput.GetTensorInfo(), perm);
                     permLayer.GetOutputHandler().SetTensorInfo(permOutInfo);
                 }
-
-                // Sets permuted output tensor info
-                const TensorInfo& childOutInfo = permute->GetOutputHandler().GetTensorInfo();
-                base.GetOutputHandler().SetTensorInfo(childOutInfo);
 
                 // Bypasses permute. It will be removed as it's left unconnected.
                 permute->GetOutputSlot().MoveAllConnections(base.GetOutputSlot());

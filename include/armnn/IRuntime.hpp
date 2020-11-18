@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -10,6 +10,7 @@
 #include "Tensor.hpp"
 #include "Types.hpp"
 #include "TypesUtils.hpp"
+#include "profiling/ILocalPacketHandler.hpp"
 
 #include <memory>
 
@@ -50,34 +51,41 @@ public:
         /// It will also be updated with new tuned parameters if it is configured to do so.
         std::shared_ptr<IGpuAccTunedParameters> m_GpuAccTunedParameters;
 
-        // Setting this flag will allow the user to obtain GPU profiling information from the runtime.
+        /// Setting this flag will allow the user to obtain GPU profiling information from the runtime.
         bool m_EnableGpuProfiling;
 
-        // Setting this value will override the paths set by the DYNAMIC_BACKEND_PATHS compiler directive
-        // Only a single path is allowed for the override
+        /// Setting this value will override the paths set by the DYNAMIC_BACKEND_PATHS compiler directive
+        /// Only a single path is allowed for the override
         std::string m_DynamicBackendsPath;
 
         struct ExternalProfilingOptions
         {
             ExternalProfilingOptions()
                 : m_EnableProfiling(false)
+                , m_TimelineEnabled(false)
                 , m_OutgoingCaptureFile("")
                 , m_IncomingCaptureFile("")
                 , m_FileOnly(false)
                 , m_CapturePeriod(LOWEST_CAPTURE_PERIOD)
+                , m_FileFormat("binary")
+                , m_LocalPacketHandlers()
             {}
 
             bool        m_EnableProfiling;
+            bool        m_TimelineEnabled;
             std::string m_OutgoingCaptureFile;
             std::string m_IncomingCaptureFile;
             bool        m_FileOnly;
             uint32_t    m_CapturePeriod;
+            std::string m_FileFormat;
+            std::vector<armnn::profiling::ILocalPacketHandlerSharedPtr> m_LocalPacketHandlers;
         };
         ExternalProfilingOptions m_ProfilingOptions;
 
         /// Pass backend specific options.
         ///
         /// For example, to enable GpuAcc tuning add the following
+        /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~.cpp
         /// m_BackendOption.emplace_back(
         ///     BackendOptions{"GpuAcc",
         ///       {
@@ -85,16 +93,19 @@ public:
         ///         {"TuningFile", filename}
         ///       }
         ///     });
+        /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         /// Execute representative workloads through the runtime to generate tuning data.
         /// The tuning file is written once the runtime is destroyed
 
         /// To execute with the tuning data, start up with just the tuning file specified.
+        /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~.cpp
         /// m_BackendOption.emplace_back(
         ///     BackendOptions{"GpuAcc",
         ///       {
         ///         {"TuningFile", filename}
         ///       }
         ///     });
+        /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         /// The following backend options are available:
         /// GpuAcc:

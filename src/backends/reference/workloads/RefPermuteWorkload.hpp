@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -27,9 +27,11 @@ public:
     void Execute() const override;
 };
 
-using RefPermuteFloat16Workload = RefPermuteWorkload<DataType::Float16>;
-using RefPermuteFloat32Workload = RefPermuteWorkload<DataType::Float32>;
-using RefPermuteQAsymm8Workload = RefPermuteWorkload<DataType::QAsymmU8>;
-using RefPermuteQSymm16Workload = RefPermuteWorkload<DataType::QSymmS16>;
+using RefPermuteBFloat16Workload = RefPermuteWorkload<DataType::BFloat16>;
+using RefPermuteFloat16Workload  = RefPermuteWorkload<DataType::Float16>;
+using RefPermuteFloat32Workload  = RefPermuteWorkload<DataType::Float32>;
+using RefPermuteQAsymmS8Workload = RefPermuteWorkload<DataType::QAsymmS8>;
+using RefPermuteQAsymm8Workload  = RefPermuteWorkload<DataType::QAsymmU8>;
+using RefPermuteQSymm16Workload  = RefPermuteWorkload<DataType::QSymmS16>;
 
 } //namespace armnn

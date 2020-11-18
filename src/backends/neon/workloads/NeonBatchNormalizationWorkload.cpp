@@ -7,8 +7,12 @@
 
 #include "NeonWorkloadUtils.hpp"
 
-#include <backendsCommon/CpuTensorHandle.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
+#include <aclCommon/ArmComputeUtils.hpp>
+
+#include <armnn/utility/PolymorphicDowncast.hpp>
+
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h>
 
@@ -23,7 +27,8 @@ arm_compute::Status NeonBatchNormalizationValidate(const TensorInfo& input,
                                                    const TensorInfo& var,
                                                    const TensorInfo& beta,
                                                    const TensorInfo& gamma,
-                                                   const BatchNormalizationDescriptor& descriptor)
+                                                   const BatchNormalizationDescriptor& descriptor,
+                                                   const ActivationDescriptor* activationDescriptor)
 {
     const arm_compute::TensorInfo aclInputInfo =
           armcomputetensorutils::BuildArmComputeTensorInfo(input, descriptor.m_DataLayout);
@@ -38,13 +43,17 @@ arm_compute::Status NeonBatchNormalizationValidate(const TensorInfo& input,
     const arm_compute::TensorInfo aclGammaInfo =
           armcomputetensorutils::BuildArmComputeTensorInfo(gamma, descriptor.m_DataLayout);
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertActivationDescriptorToAclActivationLayerInfo(
+            activationDescriptor);
+
     return arm_compute::NEBatchNormalizationLayer::validate(&aclInputInfo,
                                                             &aclOutputInfo,
                                                             &aclMeanInfo,
                                                             &aclVarInfo,
                                                             &aclBetaInfo,
                                                             &aclGammaInfo,
-                                                            descriptor.m_Eps);
+                                                            descriptor.m_Eps,
+                                                            activationInfo);
 }
 
 NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
@@ -53,8 +62,8 @@ NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
 {
     m_Data.ValidateInputsOutputs("NeonBatchNormalizationWorkload", 1, 1);
 
-    arm_compute::ITensor& input = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
-    arm_compute::ITensor& output = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
+    arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
     input.info()->set_data_layout(aclDataLayout);
@@ -72,6 +81,8 @@ NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
     m_Beta = std::make_unique<arm_compute::Tensor>();
     BuildArmComputeTensor(*m_Beta, m_Data.m_Beta->GetTensorInfo());
 
+    const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
+
     auto layer = std::make_unique<arm_compute::NEBatchNormalizationLayer>();
     layer->configure(&input,
                      &output,
@@ -79,7 +90,8 @@ NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
                      m_Variance.get(),
                      m_Beta.get(),
                      m_Gamma.get(),
-                     m_Data.m_Parameters.m_Eps);
+                     m_Data.m_Parameters.m_Eps,
+                     activationInfo);
     m_Layer.reset(layer.release());
 
     InitializeArmComputeTensorData(*m_Mean, m_Data.m_Mean);

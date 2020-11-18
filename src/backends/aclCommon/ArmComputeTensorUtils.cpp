@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -17,6 +17,8 @@ arm_compute::DataType GetArmComputeDataType(armnn::DataType dataType, bool multi
 {
     switch(dataType)
     {
+        case armnn::DataType::BFloat16:
+            return arm_compute::DataType::BFLOAT16;
         case armnn::DataType::Boolean:
             return arm_compute::DataType::U8;
         case armnn::DataType::Float16:
@@ -29,6 +31,8 @@ arm_compute::DataType GetArmComputeDataType(armnn::DataType dataType, bool multi
             return arm_compute::DataType::QASYMM8;
         case armnn::DataType::QSymmS16:
             return arm_compute::DataType::QSYMM16;
+        case armnn::DataType::Signed64:
+            return arm_compute::DataType::S64;
         case armnn::DataType::QSymmS8:
         {
             return multiScales ? arm_compute::DataType::QSYMM8_PER_CHANNEL : arm_compute::DataType::QSYMM8;
@@ -40,7 +44,7 @@ arm_compute::DataType GetArmComputeDataType(armnn::DataType dataType, bool multi
         case armnn::DataType::Signed32:
             return arm_compute::DataType::S32;
         default:
-            BOOST_ASSERT_MSG(false, "Unknown data type");
+            ARMNN_ASSERT_MSG(false, "Unknown data type");
             return arm_compute::DataType::UNKNOWN;
     }
 }
@@ -214,7 +218,34 @@ arm_compute::PermutationVector BuildArmComputePermutationVector(const armnn::Per
     {
         aclPerm.set(i - start, perm[i] - start);
     }
+    return aclPerm;
+}
 
+arm_compute::PermutationVector BuildArmComputeTransposeVector(const armnn::PermutationVector& perm)
+{
+    arm_compute::PermutationVector aclPerm;
+    std::map<unsigned int, unsigned int> permuteMappings;
+    for (unsigned int i = 0; i < perm.GetSize(); ++i)
+    {
+        permuteMappings[perm[i]] = i;
+    }
+
+    std::vector<unsigned int> permuteVector;
+    for (unsigned int i = 0; i < perm.GetSize(); ++i)
+    {
+        permuteVector.push_back(permuteMappings.at(i));
+    }
+
+    unsigned int start = 0;
+    while ((start < perm.GetSize()) && (start == permuteVector[start]))
+    {
+        ++start;
+    }
+
+    for (unsigned int i = start; i < perm.GetSize(); ++i)
+    {
+        aclPerm.set(i - start, permuteVector[i] - start);
+    }
     return aclPerm;
 }
 
@@ -235,8 +266,11 @@ arm_compute::PixelValue GetPixelValue(arm_compute::ITensor& input, float pixelVa
             return arm_compute::PixelValue(static_cast<uint8_t>(pixelValue));
         case arm_compute::DataType::QSYMM16:
             return arm_compute::PixelValue(static_cast<int16_t>(pixelValue));
+        case arm_compute::DataType::QASYMM8_SIGNED:
         case arm_compute::DataType::QSYMM8_PER_CHANNEL:
             return arm_compute::PixelValue(static_cast<int8_t>(pixelValue));
+        case arm_compute::DataType::S32:
+            return arm_compute::PixelValue(static_cast<int32_t>(pixelValue));
         default:
             throw InvalidArgumentException("Unsupported DataType: [" +
                                            std::to_string(static_cast<int>(input.info()->data_type())) + "]");

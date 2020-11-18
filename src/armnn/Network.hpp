@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 
+#include "Graph.hpp"
 #include "Layer.hpp"
 
 namespace armnn
@@ -27,14 +28,12 @@ class Graph;
 class Network final : public INetwork
 {
 public:
-    Network();
+    Network(NetworkOptions networkOptions = {});
     ~Network();
 
     const Graph& GetGraph() const { return *m_Graph; }
 
     Status PrintGraph() override;
-
-    profiling::ProfilingGuid GetGuid() const final { return m_Guid; };
 
     IConnectableLayer* AddInputLayer(LayerBindingId id, const char* name=nullptr) override;
 
@@ -98,6 +97,9 @@ public:
     IConnectableLayer* AddElementwiseUnaryLayer(const ElementwiseUnaryDescriptor& elementwiseUnaryDescriptor,
                                                 const char* name = nullptr) override;
 
+    IConnectableLayer* AddFillLayer(const FillDescriptor& fillDescriptor,
+                                    const char* name = nullptr) override;
+
     IConnectableLayer* AddFullyConnectedLayer(const FullyConnectedDescriptor& fullyConnectedDescriptor,
                                               const ConstTensor& weights,
                                               const Optional<ConstTensor>& biases,
@@ -114,7 +116,11 @@ public:
                                               const ConstTensor& biases,
                                               const char* name = nullptr) override;
 
+    ARMNN_DEPRECATED_MSG("This AddGatherLayer overload is deprecated")
     IConnectableLayer* AddGatherLayer(const char* name = nullptr) override;
+
+    IConnectableLayer* AddGatherLayer(const GatherDescriptor& gatherDescriptor,
+                                      const char* name = nullptr) override;
 
     IConnectableLayer* AddPermuteLayer(const PermuteDescriptor& permuteDescriptor,
                                        const char* name = nullptr) override;
@@ -153,6 +159,8 @@ public:
                                                   const ConstTensor&                  beta,
                                                   const ConstTensor&                  gamma,
                                                   const char*                         name = nullptr) override;
+
+    IConnectableLayer* AddRankLayer(const char* name = nullptr) override;
 
     ARMNN_DEPRECATED_MSG("Use AddResizeLayer instead")
     IConnectableLayer* AddResizeBilinearLayer(const ResizeBilinearDescriptor& resizeDesc,
@@ -226,13 +234,23 @@ public:
                                                       const Optional<ConstTensor>& biases,
                                                       const char* name = nullptr) override;
 
+    IConnectableLayer* AddTransposeLayer(const TransposeDescriptor& transposeDescriptor,
+                                         const char* name = nullptr) override;
+
     IConnectableLayer* AddStackLayer(const StackDescriptor& stackDescriptor,
                                      const char* name = nullptr) override;
 
     IConnectableLayer* AddStandInLayer(const StandInDescriptor& descriptor,
                                        const char* name = nullptr) override;
 
+    IConnectableLayer* AddQLstmLayer(const QLstmDescriptor& descriptor,
+                                     const LstmInputParams& params,
+                                     const char* name = nullptr) override;
+
     IConnectableLayer* AddQuantizedLstmLayer(const QuantizedLstmInputParams& params,
+                                             const char* name = nullptr) override;
+
+    IConnectableLayer* AddLogicalBinaryLayer(const LogicalBinaryDescriptor& logicalBinaryDescriptor,
                                              const char* name = nullptr) override;
 
     void Accept(ILayerVisitor& visitor) const override;
@@ -254,14 +272,18 @@ private:
         const Optional<ConstTensor>& biases,
         const char* name);
 
+    bool GetShapeInferenceMethod();
+    NetworkOptions m_NetworkOptions;
+
     std::unique_ptr<Graph> m_Graph;
-    profiling::ProfilingGuid m_Guid;
+    ModelOptions m_ModelOptions;
 };
 
 class OptimizedNetwork final : public IOptimizedNetwork
 {
 public:
     OptimizedNetwork(std::unique_ptr<Graph> graph);
+    OptimizedNetwork(std::unique_ptr<Graph> graph, const ModelOptions& modelOptions);
     ~OptimizedNetwork();
 
     Status PrintGraph() override;
@@ -270,10 +292,12 @@ public:
     profiling::ProfilingGuid GetGuid() const final { return m_Guid; };
 
     Graph& GetGraph() { return *m_Graph; }
+    ModelOptions& GetModelOptions() { return m_ModelOptions; }
 
 private:
     std::unique_ptr<Graph> m_Graph;
     profiling::ProfilingGuid m_Guid;
+    ModelOptions m_ModelOptions;
 };
 
 
@@ -283,10 +307,19 @@ struct OptimizationResult
     bool m_Warning;
     bool m_Error;
 
-    OptimizationResult()
-        : m_Warning(false)
-        , m_Error(false)
+    OptimizationResult(bool warning, bool error)
+        : m_Warning(warning)
+        , m_Error(error)
     {}
+
+    OptimizationResult()
+        : OptimizationResult(false, false)
+    {}
+
+    bool IsOk() const { return !m_Warning && !m_Error; }
+    bool IsWarningOnly() const { return m_Warning && !m_Error; }
+    bool IsError() const { return m_Error; }
+
 };
 
 using BackendsMap = std::map<BackendId, std::unique_ptr<class IBackendInternal>>;
@@ -297,6 +330,13 @@ BackendsMap CreateSupportedBackends(TensorHandleFactoryRegistry& handleFactoryRe
 OptimizationResult SelectTensorHandleStrategy(Graph& optGraph,
                                               BackendsMap& backends,
                                               TensorHandleFactoryRegistry& registry,
+                                              bool importEnabled,
                                               Optional<std::vector<std::string>&> errMessages);
+
+OptimizationResult AssignBackends(OptimizedNetwork* optNetObjPtr,
+                                  BackendSettings& backendSettings,
+                                  Graph::Iterator& firstLayer,
+                                  Graph::Iterator& lastLayer,
+                                  Optional<std::vector<std::string>&> errMessages);
 
 } // namespace armnn

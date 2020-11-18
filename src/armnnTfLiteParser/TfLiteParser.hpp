@@ -102,7 +102,10 @@ private:
     void ParseDepthwiseConv2D(size_t subgraphIndex, size_t operatorIndex);
     void ParseDequantize(size_t subgraphIndex, size_t operatorIndex);
     void ParseDetectionPostProcess(size_t subgraphIndex, size_t operatorIndex);
+    void ParseExp(size_t subgraphIndex, size_t operatorIndex);
     void ParseFullyConnected(size_t subgraphIndex, size_t operatorIndex);
+    void ParseHardSwish(size_t subgraphIndex, size_t operatorIndex);
+    void ParseLeakyRelu(size_t subgraphIndex, size_t operatorIndex);
     void ParseLogistic(size_t subgraphIndex, size_t operatorIndex);
     void ParseL2Normalization(size_t subgraphIndex, size_t operatorIndex);
     void ParseMaxPool2D(size_t subgraphIndex, size_t operatorIndex);
@@ -110,6 +113,7 @@ private:
     void ParseMean(size_t subgraphIndex, size_t operatorIndex);
     void ParseMinimum(size_t subgraphIndex, size_t operatorIndex);
     void ParseMul(size_t subgraphIndex, size_t operatorIndex);
+    void ParseNeg(size_t subgraphIndex, size_t operatorIndex);
     void ParsePack(size_t subgraphIndex, size_t operatorIndex);
     void ParsePad(size_t subgraphIndex, size_t operatorIndex);
     void ParsePool(size_t subgraphIndex, size_t operatorIndex, armnn::PoolingAlgorithm algorithm);
@@ -124,13 +128,16 @@ private:
     void ParseSoftmax(size_t subgraphIndex, size_t operatorIndex);
     void ParseSpaceToBatchND(size_t subgraphIndex, size_t operatorIndex);
     void ParseSplit(size_t subgraphIndex, size_t operatorIndex);
+    void ParseSplitV(size_t subgraphIndex, size_t operatorIndex);
     void ParseSqueeze(size_t subgraphIndex, size_t operatorIndex);
     void ParseStridedSlice(size_t subgraphIndex, size_t operatorIndex);
     void ParseSub(size_t subgraphIndex, size_t operatorIndex);
+    void ParseDiv(size_t subgraphIndex, size_t operatorIndex);
     void ParseTanH(size_t subgraphIndex, size_t operatorIndex);
     void ParseTranspose(size_t subgraphIndex, size_t operatorIndex);
     void ParseTransposeConv(size_t subgraphIndex, size_t operatorIndex);
     void ParseUnpack(size_t subgraphIndex, size_t operatorIndex);
+    void ParseArgMax(size_t subgraphIndex, size_t operatorIndex);
 
     void RegisterProducerOfTensor(size_t subgraphIndex, size_t tensorIndex, armnn::IOutputSlot* slot);
     void RegisterConsumerOfTensor(size_t subgraphIndex, size_t tensorIndex, armnn::IInputSlot* slot);

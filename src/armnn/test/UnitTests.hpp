@@ -1,5 +1,5 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -7,6 +7,8 @@
 #include <armnn/Logging.hpp>
 #include <armnn/Utils.hpp>
 #include <reference/RefWorkloadFactory.hpp>
+#include <reference/test/RefWorkloadFactoryHelper.hpp>
+
 #include <backendsCommon/test/LayerTests.hpp>
 #include <backendsCommon/test/WorkloadFactoryHelper.hpp>
 #include "TensorHelpers.hpp"
@@ -70,6 +72,26 @@ void RunTestFunction(const char* testName, TFuncPtr testFunction, Args... args)
 
     auto testResult = (*testFunction)(workloadFactory, memoryManager, args...);
     CompareTestResultIfSupported(testName, testResult);
+
+    armnn::ProfilerManager::GetInstance().RegisterProfiler(nullptr);
+}
+
+
+template<typename FactoryType, typename TFuncPtr, typename... Args>
+void RunTestFunctionUsingTensorHandleFactory(const char* testName, TFuncPtr testFunction, Args... args)
+{
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
+    armnn::ProfilerManager::GetInstance().RegisterProfiler(profiler.get());
+
+    auto memoryManager = WorkloadFactoryHelper<FactoryType>::GetMemoryManager();
+    FactoryType workloadFactory = WorkloadFactoryHelper<FactoryType>::GetFactory(memoryManager);
+
+    auto tensorHandleFactory = WorkloadFactoryHelper<FactoryType>::GetTensorHandleFactory(memoryManager);
+
+    auto testResult = (*testFunction)(workloadFactory, memoryManager, tensorHandleFactory, args...);
+    CompareTestResultIfSupported(testName, testResult);
+
+    armnn::ProfilerManager::GetInstance().RegisterProfiler(nullptr);
 }
 
 #define ARMNN_SIMPLE_TEST_CASE(TestName, TestFunction) \
@@ -84,6 +106,12 @@ void RunTestFunction(const char* testName, TFuncPtr testFunction, Args... args)
         RunTestFunction<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
     }
 
+#define ARMNN_AUTO_TEST_CASE_WITH_THF(TestName, TestFunction, ...) \
+    BOOST_AUTO_TEST_CASE(TestName) \
+    { \
+        RunTestFunctionUsingTensorHandleFactory<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
+    }
+
 template<typename FactoryType, typename TFuncPtr, typename... Args>
 void CompareRefTestFunction(const char* testName, TFuncPtr testFunction, Args... args)
 {
@@ -96,14 +124,42 @@ void CompareRefTestFunction(const char* testName, TFuncPtr testFunction, Args...
     CompareTestResultIfSupported(testName, testResult);
 }
 
+template<typename FactoryType, typename TFuncPtr, typename... Args>
+void CompareRefTestFunctionUsingTensorHandleFactory(const char* testName, TFuncPtr testFunction, Args... args)
+{
+    auto memoryManager = WorkloadFactoryHelper<FactoryType>::GetMemoryManager();
+    FactoryType workloadFactory = WorkloadFactoryHelper<FactoryType>::GetFactory(memoryManager);
+
+    armnn::RefWorkloadFactory refWorkloadFactory;
+    auto tensorHandleFactory = WorkloadFactoryHelper<FactoryType>::GetTensorHandleFactory(memoryManager);
+    auto refTensorHandleFactory =
+        RefWorkloadFactoryHelper::GetTensorHandleFactory(memoryManager);
+
+    auto testResult = (*testFunction)(
+        workloadFactory, memoryManager, refWorkloadFactory, tensorHandleFactory, refTensorHandleFactory, args...);
+    CompareTestResultIfSupported(testName, testResult);
+}
+
 #define ARMNN_COMPARE_REF_AUTO_TEST_CASE(TestName, TestFunction, ...) \
     BOOST_AUTO_TEST_CASE(TestName) \
     { \
         CompareRefTestFunction<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
     }
 
+#define ARMNN_COMPARE_REF_AUTO_TEST_CASE_WITH_THF(TestName, TestFunction, ...) \
+    BOOST_AUTO_TEST_CASE(TestName) \
+    { \
+        CompareRefTestFunctionUsingTensorHandleFactory<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
+    }
+
 #define ARMNN_COMPARE_REF_FIXTURE_TEST_CASE(TestName, Fixture, TestFunction, ...) \
     BOOST_FIXTURE_TEST_CASE(TestName, Fixture) \
     { \
         CompareRefTestFunction<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
+    }
+
+#define ARMNN_COMPARE_REF_FIXTURE_TEST_CASE_WITH_THF(TestName, Fixture, TestFunction, ...) \
+    BOOST_FIXTURE_TEST_CASE(TestName, Fixture) \
+    { \
+        CompareRefTestFunctionUsingTensorHandleFactory<FactoryType>(#TestName, &TestFunction, ##__VA_ARGS__); \
     }

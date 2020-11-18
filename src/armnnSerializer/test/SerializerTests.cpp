@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -212,6 +212,10 @@ void CompareConstTensor(const armnn::ConstTensor& tensor1, const armnn::ConstTen
         case armnn::DataType::QAsymmU8:
         case armnn::DataType::Boolean:
             CompareConstTensorData<const uint8_t*>(
+                tensor1.GetMemoryArea(), tensor2.GetMemoryArea(), tensor1.GetNumElements());
+            break;
+        case armnn::DataType::QSymmS8:
+            CompareConstTensorData<const int8_t*>(
                 tensor1.GetMemoryArea(), tensor2.GetMemoryArea(), tensor1.GetNumElements());
             break;
         case armnn::DataType::Signed32:
@@ -621,6 +625,100 @@ BOOST_AUTO_TEST_CASE(SerializeConvolution2d)
     deserializedNetwork->Accept(verifier);
 }
 
+BOOST_AUTO_TEST_CASE(SerializeConvolution2dWithPerAxisParams)
+{
+    using Descriptor = armnn::Convolution2dDescriptor;
+    class Convolution2dLayerVerifier : public LayerVerifierBaseWithDescriptor<Descriptor>
+    {
+    public:
+        Convolution2dLayerVerifier(const std::string& layerName,
+                                   const std::vector<armnn::TensorInfo>& inputInfos,
+                                   const std::vector<armnn::TensorInfo>& outputInfos,
+                                   const Descriptor& descriptor,
+                                   const armnn::ConstTensor& weights,
+                                   const armnn::Optional<armnn::ConstTensor>& biases)
+            : LayerVerifierBaseWithDescriptor<Descriptor>(layerName, inputInfos, outputInfos, descriptor)
+            , m_Weights(weights)
+            , m_Biases(biases) {}
+
+        void VisitConvolution2dLayer(const armnn::IConnectableLayer* layer,
+                                     const Descriptor& descriptor,
+                                     const armnn::ConstTensor& weights,
+                                     const armnn::Optional<armnn::ConstTensor>& biases,
+                                     const char* name) override
+        {
+            VerifyNameAndConnections(layer, name);
+            VerifyDescriptor(descriptor);
+
+            // check weights
+            CompareConstTensor(weights, m_Weights);
+
+            // check biases
+            BOOST_CHECK(biases.has_value() == descriptor.m_BiasEnabled);
+            BOOST_CHECK(biases.has_value() == m_Biases.has_value());
+
+            if (biases.has_value() && m_Biases.has_value())
+            {
+                CompareConstTensor(biases.value(), m_Biases.value());
+            }
+        }
+
+    private:
+        armnn::ConstTensor                  m_Weights;
+        armnn::Optional<armnn::ConstTensor> m_Biases;
+    };
+
+    using namespace armnn;
+
+    const std::string layerName("convolution2dWithPerAxis");
+    const TensorInfo inputInfo ({ 1, 3, 1, 2 }, DataType::QAsymmU8, 0.55f, 128);
+    const TensorInfo outputInfo({ 1, 3, 1, 3 }, DataType::QAsymmU8, 0.75f, 128);
+
+    const std::vector<float> quantScales{ 0.75f, 0.65f, 0.85f };
+    constexpr unsigned int quantDimension = 0;
+
+    const TensorInfo kernelInfo({ 3, 1, 1, 2 }, DataType::QSymmS8, quantScales, quantDimension);
+
+    const std::vector<float> biasQuantScales{ 0.25f, 0.50f, 0.75f };
+    const TensorInfo biasInfo({ 3 }, DataType::Signed32, biasQuantScales, quantDimension);
+
+    std::vector<int8_t> kernelData = GenerateRandomData<int8_t>(kernelInfo.GetNumElements());
+    armnn::ConstTensor weights(kernelInfo, kernelData);
+    std::vector<int32_t> biasData = GenerateRandomData<int32_t>(biasInfo.GetNumElements());
+    armnn::ConstTensor biases(biasInfo, biasData);
+
+    Convolution2dDescriptor descriptor;
+    descriptor.m_StrideX     = 1;
+    descriptor.m_StrideY     = 1;
+    descriptor.m_PadLeft     = 0;
+    descriptor.m_PadRight    = 0;
+    descriptor.m_PadTop      = 0;
+    descriptor.m_PadBottom   = 0;
+    descriptor.m_BiasEnabled = true;
+    descriptor.m_DataLayout  = armnn::DataLayout::NHWC;
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer  = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const convLayer   =
+        network->AddConvolution2dLayer(descriptor,
+                                       weights,
+                                       armnn::Optional<armnn::ConstTensor>(biases),
+                                       layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(convLayer->GetInputSlot(0));
+    convLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    convLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    Convolution2dLayerVerifier verifier(layerName, {inputInfo}, {outputInfo}, descriptor, weights, biases);
+    deserializedNetwork->Accept(verifier);
+}
+
 BOOST_AUTO_TEST_CASE(SerializeDepthToSpace)
 {
     DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(DepthToSpace)
@@ -717,6 +815,102 @@ BOOST_AUTO_TEST_CASE(SerializeDepthwiseConvolution2d)
     descriptor.m_StrideY     = 2;
     descriptor.m_DilationX   = 2;
     descriptor.m_DilationY   = 2;
+    descriptor.m_BiasEnabled = true;
+    descriptor.m_DataLayout  = armnn::DataLayout::NHWC;
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const depthwiseConvLayer =
+        network->AddDepthwiseConvolution2dLayer(descriptor,
+                                                weights,
+                                                armnn::Optional<armnn::ConstTensor>(biases),
+                                                layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(depthwiseConvLayer->GetInputSlot(0));
+    depthwiseConvLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    depthwiseConvLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    DepthwiseConvolution2dLayerVerifier verifier(layerName, {inputInfo}, {outputInfo}, descriptor, weights, biases);
+    deserializedNetwork->Accept(verifier);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeDepthwiseConvolution2dWithPerAxisParams)
+{
+    using Descriptor = armnn::DepthwiseConvolution2dDescriptor;
+    class DepthwiseConvolution2dLayerVerifier : public LayerVerifierBaseWithDescriptor<Descriptor>
+    {
+    public:
+        DepthwiseConvolution2dLayerVerifier(const std::string& layerName,
+                                            const std::vector<armnn::TensorInfo>& inputInfos,
+                                            const std::vector<armnn::TensorInfo>& outputInfos,
+                                            const Descriptor& descriptor,
+                                            const armnn::ConstTensor& weights,
+                                            const armnn::Optional<armnn::ConstTensor>& biases) :
+            LayerVerifierBaseWithDescriptor<Descriptor>(layerName, inputInfos, outputInfos, descriptor),
+            m_Weights(weights),
+            m_Biases(biases) {}
+
+        void VisitDepthwiseConvolution2dLayer(const armnn::IConnectableLayer* layer,
+                                              const Descriptor& descriptor,
+                                              const armnn::ConstTensor& weights,
+                                              const armnn::Optional<armnn::ConstTensor>& biases,
+                                              const char* name) override
+        {
+            VerifyNameAndConnections(layer, name);
+            VerifyDescriptor(descriptor);
+
+            // check weights
+            CompareConstTensor(weights, m_Weights);
+
+            // check biases
+            BOOST_CHECK(biases.has_value() == descriptor.m_BiasEnabled);
+            BOOST_CHECK(biases.has_value() == m_Biases.has_value());
+
+            if (biases.has_value() && m_Biases.has_value())
+            {
+                CompareConstTensor(biases.value(), m_Biases.value());
+            }
+        }
+
+    private:
+        armnn::ConstTensor                      m_Weights;
+        armnn::Optional<armnn::ConstTensor>     m_Biases;
+    };
+
+    using namespace armnn;
+
+    const std::string layerName("depwiseConvolution2dWithPerAxis");
+    const TensorInfo inputInfo ({ 1, 3, 3, 2 }, DataType::QAsymmU8, 0.55f, 128);
+    const TensorInfo outputInfo({ 1, 2, 2, 4 }, DataType::QAsymmU8, 0.75f, 128);
+
+    const std::vector<float> quantScales{ 0.75f, 0.80f, 0.90f, 0.95f };
+    const unsigned int quantDimension = 0;
+    TensorInfo kernelInfo({ 2, 2, 2, 2 }, DataType::QSymmS8, quantScales, quantDimension);
+
+    const std::vector<float> biasQuantScales{ 0.25f, 0.35f, 0.45f, 0.55f };
+    constexpr unsigned int biasQuantDimension = 0;
+    TensorInfo biasInfo({ 4 }, DataType::Signed32, biasQuantScales, biasQuantDimension);
+
+    std::vector<int8_t> kernelData = GenerateRandomData<int8_t>(kernelInfo.GetNumElements());
+    armnn::ConstTensor weights(kernelInfo, kernelData);
+    std::vector<int32_t> biasData = GenerateRandomData<int32_t>(biasInfo.GetNumElements());
+    armnn::ConstTensor biases(biasInfo, biasData);
+
+    DepthwiseConvolution2dDescriptor descriptor;
+    descriptor.m_StrideX     = 1;
+    descriptor.m_StrideY     = 1;
+    descriptor.m_PadLeft     = 0;
+    descriptor.m_PadRight    = 0;
+    descriptor.m_PadTop      = 0;
+    descriptor.m_PadBottom   = 0;
+    descriptor.m_DilationX   = 1;
+    descriptor.m_DilationY   = 1;
     descriptor.m_BiasEnabled = true;
     descriptor.m_DataLayout  = armnn::DataLayout::NHWC;
 
@@ -1005,6 +1199,35 @@ BOOST_AUTO_TEST_CASE(EnsureEqualBackwardCompatibility)
     deserializedNetwork->Accept(verifier);
 }
 
+BOOST_AUTO_TEST_CASE(SerializeFill)
+{
+    DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(Fill)
+
+    const std::string layerName("fill");
+    const armnn::TensorInfo inputInfo({4}, armnn::DataType::Signed32);
+    const armnn::TensorInfo outputInfo({1, 3, 3, 1}, armnn::DataType::Float32);
+
+    armnn::FillDescriptor descriptor(1.0f);
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const fillLayer = network->AddFillLayer(descriptor, layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(fillLayer->GetInputSlot(0));
+    fillLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    fillLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    FillLayerVerifier verifier(layerName, {inputInfo}, {outputInfo}, descriptor);
+
+    deserializedNetwork->Accept(verifier);
+}
+
 BOOST_AUTO_TEST_CASE(SerializeFloor)
 {
     DECLARE_LAYER_VERIFIER_CLASS(Floor)
@@ -1110,17 +1333,22 @@ BOOST_AUTO_TEST_CASE(SerializeFullyConnected)
 
 BOOST_AUTO_TEST_CASE(SerializeGather)
 {
-    class GatherLayerVerifier : public LayerVerifierBase
+    using GatherDescriptor = armnn::GatherDescriptor;
+    class GatherLayerVerifier : public LayerVerifierBaseWithDescriptor<GatherDescriptor>
     {
     public:
         GatherLayerVerifier(const std::string& layerName,
                             const std::vector<armnn::TensorInfo>& inputInfos,
-                            const std::vector<armnn::TensorInfo>& outputInfos)
-            : LayerVerifierBase(layerName, inputInfos, outputInfos) {}
+                            const std::vector<armnn::TensorInfo>& outputInfos,
+                            const GatherDescriptor& descriptor)
+            : LayerVerifierBaseWithDescriptor<GatherDescriptor>(layerName, inputInfos, outputInfos, descriptor) {}
 
-        void VisitGatherLayer(const armnn::IConnectableLayer* layer, const char *name) override
+        void VisitGatherLayer(const armnn::IConnectableLayer* layer,
+                              const GatherDescriptor& descriptor,
+                              const char *name) override
         {
             VerifyNameAndConnections(layer, name);
+            BOOST_CHECK(descriptor.m_Axis == m_Descriptor.m_Axis);
         }
 
         void VisitConstantLayer(const armnn::IConnectableLayer*,
@@ -1132,6 +1360,8 @@ BOOST_AUTO_TEST_CASE(SerializeGather)
     armnn::TensorInfo paramsInfo({ 8 }, armnn::DataType::QAsymmU8);
     armnn::TensorInfo outputInfo({ 3 }, armnn::DataType::QAsymmU8);
     const armnn::TensorInfo indicesInfo({ 3 }, armnn::DataType::Signed32);
+    GatherDescriptor descriptor;
+    descriptor.m_Axis = 1;
 
     paramsInfo.SetQuantizationScale(1.0f);
     paramsInfo.SetQuantizationOffset(0);
@@ -1144,7 +1374,7 @@ BOOST_AUTO_TEST_CASE(SerializeGather)
     armnn::IConnectableLayer *const inputLayer = network->AddInputLayer(0);
     armnn::IConnectableLayer *const constantLayer =
             network->AddConstantLayer(armnn::ConstTensor(indicesInfo, indicesData));
-    armnn::IConnectableLayer *const gatherLayer = network->AddGatherLayer(layerName.c_str());
+    armnn::IConnectableLayer *const gatherLayer = network->AddGatherLayer(descriptor, layerName.c_str());
     armnn::IConnectableLayer *const outputLayer = network->AddOutputLayer(0);
 
     inputLayer->GetOutputSlot(0).Connect(gatherLayer->GetInputSlot(0));
@@ -1158,7 +1388,7 @@ BOOST_AUTO_TEST_CASE(SerializeGather)
     armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
     BOOST_CHECK(deserializedNetwork);
 
-    GatherLayerVerifier verifier(layerName, {paramsInfo, indicesInfo}, {outputInfo});
+    GatherLayerVerifier verifier(layerName, {paramsInfo, indicesInfo}, {outputInfo}, descriptor);
     deserializedNetwork->Accept(verifier);
 }
 
@@ -1393,6 +1623,74 @@ BOOST_AUTO_TEST_CASE(EnsureL2NormalizationBackwardCompatibility)
     desc.m_Eps = 1e-12f;
 
     L2NormalizationLayerVerifier verifier(layerName, {inputInfo}, {inputInfo}, desc);
+    deserializedNetwork->Accept(verifier);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeLogicalBinary)
+{
+    DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(LogicalBinary)
+
+    const std::string layerName("logicalBinaryAnd");
+
+    const armnn::TensorShape shape{2, 1, 2, 2};
+
+    const armnn::TensorInfo inputInfo  = armnn::TensorInfo(shape, armnn::DataType::Boolean);
+    const armnn::TensorInfo outputInfo = armnn::TensorInfo(shape, armnn::DataType::Boolean);
+
+    armnn::LogicalBinaryDescriptor descriptor(armnn::LogicalBinaryOperation::LogicalAnd);
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer0        = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const inputLayer1        = network->AddInputLayer(1);
+    armnn::IConnectableLayer* const logicalBinaryLayer = network->AddLogicalBinaryLayer(descriptor, layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer        = network->AddOutputLayer(0);
+
+    inputLayer0->GetOutputSlot(0).Connect(logicalBinaryLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).Connect(logicalBinaryLayer->GetInputSlot(1));
+    logicalBinaryLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer0->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    logicalBinaryLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    LogicalBinaryLayerVerifier verifier(layerName, { inputInfo, inputInfo }, { outputInfo }, descriptor);
+    deserializedNetwork->Accept(verifier);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeLogicalUnary)
+{
+    DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(ElementwiseUnary)
+
+    const std::string layerName("elementwiseUnaryLogicalNot");
+
+    const armnn::TensorShape shape{2, 1, 2, 2};
+
+    const armnn::TensorInfo inputInfo  = armnn::TensorInfo(shape, armnn::DataType::Boolean);
+    const armnn::TensorInfo outputInfo = armnn::TensorInfo(shape, armnn::DataType::Boolean);
+
+    armnn::ElementwiseUnaryDescriptor descriptor(armnn::UnaryOperation::LogicalNot);
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const elementwiseUnaryLayer =
+        network->AddElementwiseUnaryLayer(descriptor, layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(elementwiseUnaryLayer->GetInputSlot(0));
+    elementwiseUnaryLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    elementwiseUnaryLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+
+    BOOST_CHECK(deserializedNetwork);
+
+    ElementwiseUnaryLayerVerifier verifier(layerName, { inputInfo }, { outputInfo }, descriptor);
+
     deserializedNetwork->Accept(verifier);
 }
 
@@ -1972,6 +2270,32 @@ BOOST_AUTO_TEST_CASE(SerializeQuantize)
     deserializedNetwork->Accept(verifier);
 }
 
+BOOST_AUTO_TEST_CASE(SerializeRank)
+{
+    DECLARE_LAYER_VERIFIER_CLASS(Rank)
+
+    const std::string layerName("rank");
+    const armnn::TensorInfo inputInfo({1, 9}, armnn::DataType::Float32);
+    const armnn::TensorInfo outputInfo({1}, armnn::DataType::Signed32);
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const rankLayer = network->AddRankLayer(layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(rankLayer->GetInputSlot(0));
+    rankLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
+    rankLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    RankLayerVerifier verifier(layerName, {inputInfo}, {outputInfo});
+    deserializedNetwork->Accept(verifier);
+}
+
 BOOST_AUTO_TEST_CASE(SerializeReshape)
 {
     DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(Reshape)
@@ -2012,6 +2336,8 @@ BOOST_AUTO_TEST_CASE(SerializeResize)
     desc.m_TargetWidth  = 4;
     desc.m_TargetHeight = 2;
     desc.m_Method       = armnn::ResizeMethod::NearestNeighbor;
+    desc.m_AlignCorners = true;
+    desc.m_HalfPixelCenters = true;
 
     armnn::INetworkPtr network = armnn::INetwork::Create();
     armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
@@ -2047,10 +2373,12 @@ public:
     {
         VerifyNameAndConnections(layer, name);
 
-        BOOST_CHECK(descriptor.m_Method       == armnn::ResizeMethod::Bilinear);
-        BOOST_CHECK(descriptor.m_TargetWidth  == m_Descriptor.m_TargetWidth);
-        BOOST_CHECK(descriptor.m_TargetHeight == m_Descriptor.m_TargetHeight);
-        BOOST_CHECK(descriptor.m_DataLayout   == m_Descriptor.m_DataLayout);
+        BOOST_CHECK(descriptor.m_Method             == armnn::ResizeMethod::Bilinear);
+        BOOST_CHECK(descriptor.m_TargetWidth        == m_Descriptor.m_TargetWidth);
+        BOOST_CHECK(descriptor.m_TargetHeight       == m_Descriptor.m_TargetHeight);
+        BOOST_CHECK(descriptor.m_DataLayout         == m_Descriptor.m_DataLayout);
+        BOOST_CHECK(descriptor.m_AlignCorners       == m_Descriptor.m_AlignCorners);
+        BOOST_CHECK(descriptor.m_HalfPixelCenters   == m_Descriptor.m_HalfPixelCenters);
     }
 
     void VisitResizeBilinearLayer(const armnn::IConnectableLayer*,
@@ -2073,6 +2401,8 @@ BOOST_AUTO_TEST_CASE(SerializeResizeBilinear)
     armnn::ResizeBilinearDescriptor desc;
     desc.m_TargetWidth  = 4u;
     desc.m_TargetHeight = 2u;
+    desc.m_AlignCorners = true;
+    desc.m_HalfPixelCenters = true;
 
     armnn::INetworkPtr network = armnn::INetwork::Create();
     armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
@@ -2498,6 +2828,34 @@ BOOST_AUTO_TEST_CASE(SerializeSwitch)
     BOOST_CHECK(deserializedNetwork);
 
     SwitchLayerVerifier verifier(layerName, {info, info}, {info, info});
+    deserializedNetwork->Accept(verifier);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeTranspose)
+{
+    DECLARE_LAYER_VERIFIER_CLASS_WITH_DESCRIPTOR(Transpose)
+
+    const std::string layerName("transpose");
+    const armnn::TensorInfo inputTensorInfo({4, 3, 2, 1}, armnn::DataType::Float32);
+    const armnn::TensorInfo outputTensorInfo({1, 2, 3, 4}, armnn::DataType::Float32);
+
+    armnn::TransposeDescriptor descriptor(armnn::PermutationVector({3, 2, 1, 0}));
+
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    armnn::IConnectableLayer* const inputLayer = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const transposeLayer = network->AddTransposeLayer(descriptor, layerName.c_str());
+    armnn::IConnectableLayer* const outputLayer = network->AddOutputLayer(0);
+
+    inputLayer->GetOutputSlot(0).Connect(transposeLayer->GetInputSlot(0));
+    transposeLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+
+    inputLayer->GetOutputSlot(0).SetTensorInfo(inputTensorInfo);
+    transposeLayer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    TransposeLayerVerifier verifier(layerName, {inputTensorInfo}, {outputTensorInfo}, descriptor);
     deserializedNetwork->Accept(verifier);
 }
 
@@ -4100,6 +4458,663 @@ BOOST_AUTO_TEST_CASE(SerializeDeserializeQuantizedLstm)
                                      {inputTensorInfo, cellStateTensorInfo, outputStateTensorInfo},
                                      {cellStateTensorInfo, outputStateTensorInfo},
                                      params);
+
+    deserializedNetwork->Accept(checker);
+}
+
+class VerifyQLstmLayer : public LayerVerifierBaseWithDescriptor<armnn::QLstmDescriptor>
+{
+public:
+    VerifyQLstmLayer(const std::string& layerName,
+                     const std::vector<armnn::TensorInfo>& inputInfos,
+                     const std::vector<armnn::TensorInfo>& outputInfos,
+                     const armnn::QLstmDescriptor& descriptor,
+                     const armnn::LstmInputParams& inputParams)
+        : LayerVerifierBaseWithDescriptor<armnn::QLstmDescriptor>(layerName, inputInfos, outputInfos, descriptor)
+        , m_InputParams(inputParams) {}
+
+    void VisitQLstmLayer(const armnn::IConnectableLayer* layer,
+                         const armnn::QLstmDescriptor& descriptor,
+                         const armnn::LstmInputParams& params,
+                         const char* name)
+    {
+        VerifyNameAndConnections(layer, name);
+        VerifyDescriptor(descriptor);
+        VerifyInputParameters(params);
+    }
+
+protected:
+    void VerifyInputParameters(const armnn::LstmInputParams& params)
+    {
+        VerifyConstTensors(
+            "m_InputToInputWeights", m_InputParams.m_InputToInputWeights, params.m_InputToInputWeights);
+        VerifyConstTensors(
+            "m_InputToForgetWeights", m_InputParams.m_InputToForgetWeights, params.m_InputToForgetWeights);
+        VerifyConstTensors(
+            "m_InputToCellWeights", m_InputParams.m_InputToCellWeights, params.m_InputToCellWeights);
+        VerifyConstTensors(
+            "m_InputToOutputWeights", m_InputParams.m_InputToOutputWeights, params.m_InputToOutputWeights);
+        VerifyConstTensors(
+            "m_RecurrentToInputWeights", m_InputParams.m_RecurrentToInputWeights, params.m_RecurrentToInputWeights);
+        VerifyConstTensors(
+            "m_RecurrentToForgetWeights", m_InputParams.m_RecurrentToForgetWeights, params.m_RecurrentToForgetWeights);
+        VerifyConstTensors(
+            "m_RecurrentToCellWeights", m_InputParams.m_RecurrentToCellWeights, params.m_RecurrentToCellWeights);
+        VerifyConstTensors(
+            "m_RecurrentToOutputWeights", m_InputParams.m_RecurrentToOutputWeights, params.m_RecurrentToOutputWeights);
+        VerifyConstTensors(
+            "m_CellToInputWeights", m_InputParams.m_CellToInputWeights, params.m_CellToInputWeights);
+        VerifyConstTensors(
+            "m_CellToForgetWeights", m_InputParams.m_CellToForgetWeights, params.m_CellToForgetWeights);
+        VerifyConstTensors(
+            "m_CellToOutputWeights", m_InputParams.m_CellToOutputWeights, params.m_CellToOutputWeights);
+        VerifyConstTensors(
+            "m_InputGateBias", m_InputParams.m_InputGateBias, params.m_InputGateBias);
+        VerifyConstTensors(
+            "m_ForgetGateBias", m_InputParams.m_ForgetGateBias, params.m_ForgetGateBias);
+        VerifyConstTensors(
+            "m_CellBias", m_InputParams.m_CellBias, params.m_CellBias);
+        VerifyConstTensors(
+            "m_OutputGateBias", m_InputParams.m_OutputGateBias, params.m_OutputGateBias);
+        VerifyConstTensors(
+            "m_ProjectionWeights", m_InputParams.m_ProjectionWeights, params.m_ProjectionWeights);
+        VerifyConstTensors(
+            "m_ProjectionBias", m_InputParams.m_ProjectionBias, params.m_ProjectionBias);
+        VerifyConstTensors(
+            "m_InputLayerNormWeights", m_InputParams.m_InputLayerNormWeights, params.m_InputLayerNormWeights);
+        VerifyConstTensors(
+            "m_ForgetLayerNormWeights", m_InputParams.m_ForgetLayerNormWeights, params.m_ForgetLayerNormWeights);
+        VerifyConstTensors(
+            "m_CellLayerNormWeights", m_InputParams.m_CellLayerNormWeights, params.m_CellLayerNormWeights);
+        VerifyConstTensors(
+            "m_OutputLayerNormWeights", m_InputParams.m_OutputLayerNormWeights, params.m_OutputLayerNormWeights);
+    }
+
+private:
+    armnn::LstmInputParams m_InputParams;
+};
+
+BOOST_AUTO_TEST_CASE(SerializeDeserializeQLstmBasic)
+{
+    armnn::QLstmDescriptor descriptor;
+
+    descriptor.m_CifgEnabled       = true;
+    descriptor.m_ProjectionEnabled = false;
+    descriptor.m_PeepholeEnabled   = false;
+    descriptor.m_LayerNormEnabled  = false;
+
+    descriptor.m_CellClip       = 0.0f;
+    descriptor.m_ProjectionClip = 0.0f;
+
+    descriptor.m_InputIntermediateScale  = 0.00001f;
+    descriptor.m_ForgetIntermediateScale = 0.00001f;
+    descriptor.m_CellIntermediateScale   = 0.00001f;
+    descriptor.m_OutputIntermediateScale = 0.00001f;
+
+    descriptor.m_HiddenStateScale     = 0.07f;
+    descriptor.m_HiddenStateZeroPoint = 0;
+
+    const unsigned int numBatches = 2;
+    const unsigned int inputSize  = 5;
+    const unsigned int outputSize = 4;
+    const unsigned int numUnits   = 4;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078f;
+    int32_t inputOffset = 0;
+
+    float outputScale    = 0.0078f;
+    int32_t outputOffset = 0;
+
+    float cellStateScale    = 3.5002e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.007f;
+    int32_t weightsOffset = 0;
+
+    float biasScale    = 3.5002e-05f / 1024;
+    int32_t biasOffset = 0;
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({numUnits, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({numUnits, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({numUnits}, armnn::DataType::Signed32, biasScale, biasOffset);
+
+    std::vector<int8_t> inputToForgetWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToCellWeightsData   = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToOutputWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor inputToForgetWeights(inputWeightsInfo, inputToForgetWeightsData);
+    armnn::ConstTensor inputToCellWeights(inputWeightsInfo, inputToCellWeightsData);
+    armnn::ConstTensor inputToOutputWeights(inputWeightsInfo, inputToOutputWeightsData);
+
+    std::vector<int8_t> recurrentToForgetWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToCellWeightsData   =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToOutputWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor recurrentToForgetWeights(recurrentWeightsInfo, recurrentToForgetWeightsData);
+    armnn::ConstTensor recurrentToCellWeights(recurrentWeightsInfo, recurrentToCellWeightsData);
+    armnn::ConstTensor recurrentToOutputWeights(recurrentWeightsInfo, recurrentToOutputWeightsData);
+
+    std::vector<int32_t> forgetGateBiasData(numUnits, 1);
+    std::vector<int32_t> cellBiasData(numUnits, 0);
+    std::vector<int32_t> outputGateBiasData(numUnits, 0);
+
+    armnn::ConstTensor forgetGateBias(biasInfo, forgetGateBiasData);
+    armnn::ConstTensor cellBias(biasInfo, cellBiasData);
+    armnn::ConstTensor outputGateBias(biasInfo, outputGateBiasData);
+
+    // Set up params
+    armnn::LstmInputParams params;
+    params.m_InputToForgetWeights = &inputToForgetWeights;
+    params.m_InputToCellWeights   = &inputToCellWeights;
+    params.m_InputToOutputWeights = &inputToOutputWeights;
+
+    params.m_RecurrentToForgetWeights = &recurrentToForgetWeights;
+    params.m_RecurrentToCellWeights   = &recurrentToCellWeights;
+    params.m_RecurrentToOutputWeights = &recurrentToOutputWeights;
+
+    params.m_ForgetGateBias = &forgetGateBias;
+    params.m_CellBias       = &cellBias;
+    params.m_OutputGateBias = &outputGateBias;
+
+    // Create network
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    const std::string layerName("qLstm");
+
+    armnn::IConnectableLayer* const input         = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const outputStateIn = network->AddInputLayer(1);
+    armnn::IConnectableLayer* const cellStateIn   = network->AddInputLayer(2);
+
+    armnn::IConnectableLayer* const qLstmLayer = network->AddQLstmLayer(descriptor, params, layerName.c_str());
+
+    armnn::IConnectableLayer* const outputStateOut = network->AddOutputLayer(0);
+    armnn::IConnectableLayer* const cellStateOut   = network->AddOutputLayer(1);
+    armnn::IConnectableLayer* const outputLayer    = network->AddOutputLayer(2);
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    // Connect input/output slots
+    input->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(0));
+    input->GetOutputSlot(0).SetTensorInfo(inputInfo);
+
+    outputStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(1));
+    outputStateIn->GetOutputSlot(0).SetTensorInfo(cellStateInfo);
+
+    cellStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(2));
+    cellStateIn->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(0).Connect(outputStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(1).Connect(cellStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(1).SetTensorInfo(cellStateInfo);
+
+    qLstmLayer->GetOutputSlot(2).Connect(outputLayer->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(2).SetTensorInfo(outputStateInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    VerifyQLstmLayer checker(layerName,
+                             {inputInfo, cellStateInfo, outputStateInfo},
+                             {outputStateInfo, cellStateInfo, outputStateInfo},
+                             descriptor,
+                             params);
+
+    deserializedNetwork->Accept(checker);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeDeserializeQLstmCifgLayerNorm)
+{
+    armnn::QLstmDescriptor descriptor;
+
+    // CIFG params are used when CIFG is disabled
+    descriptor.m_CifgEnabled       = true;
+    descriptor.m_ProjectionEnabled = false;
+    descriptor.m_PeepholeEnabled   = false;
+    descriptor.m_LayerNormEnabled  = true;
+
+    descriptor.m_CellClip       = 0.0f;
+    descriptor.m_ProjectionClip = 0.0f;
+
+    descriptor.m_InputIntermediateScale  = 0.00001f;
+    descriptor.m_ForgetIntermediateScale = 0.00001f;
+    descriptor.m_CellIntermediateScale   = 0.00001f;
+    descriptor.m_OutputIntermediateScale = 0.00001f;
+
+    descriptor.m_HiddenStateScale     = 0.07f;
+    descriptor.m_HiddenStateZeroPoint = 0;
+
+    const unsigned int numBatches = 2;
+    const unsigned int inputSize  = 5;
+    const unsigned int outputSize = 4;
+    const unsigned int numUnits   = 4;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078f;
+    int32_t inputOffset = 0;
+
+    float outputScale    = 0.0078f;
+    int32_t outputOffset = 0;
+
+    float cellStateScale    = 3.5002e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.007f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.5002e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({numUnits, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({numUnits, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({numUnits},
+                               armnn::DataType::Signed32,
+                               biasScale,
+                               biasOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits},
+                                           armnn::DataType::QSymmS16,
+                                           layerNormScale,
+                                           layerNormOffset);
+
+    // Mandatory params
+    std::vector<int8_t> inputToForgetWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToCellWeightsData   = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToOutputWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor inputToForgetWeights(inputWeightsInfo, inputToForgetWeightsData);
+    armnn::ConstTensor inputToCellWeights(inputWeightsInfo, inputToCellWeightsData);
+    armnn::ConstTensor inputToOutputWeights(inputWeightsInfo, inputToOutputWeightsData);
+
+    std::vector<int8_t> recurrentToForgetWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToCellWeightsData   =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToOutputWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor recurrentToForgetWeights(recurrentWeightsInfo, recurrentToForgetWeightsData);
+    armnn::ConstTensor recurrentToCellWeights(recurrentWeightsInfo, recurrentToCellWeightsData);
+    armnn::ConstTensor recurrentToOutputWeights(recurrentWeightsInfo, recurrentToOutputWeightsData);
+
+    std::vector<int32_t> forgetGateBiasData(numUnits, 1);
+    std::vector<int32_t> cellBiasData(numUnits, 0);
+    std::vector<int32_t> outputGateBiasData(numUnits, 0);
+
+    armnn::ConstTensor forgetGateBias(biasInfo, forgetGateBiasData);
+    armnn::ConstTensor cellBias(biasInfo, cellBiasData);
+    armnn::ConstTensor outputGateBias(biasInfo, outputGateBiasData);
+
+    // Layer Norm
+    std::vector<int16_t> forgetLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+    std::vector<int16_t> cellLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+    std::vector<int16_t> outputLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor forgetLayerNormWeights(layerNormWeightsInfo, forgetLayerNormWeightsData);
+    armnn::ConstTensor cellLayerNormWeights(layerNormWeightsInfo, cellLayerNormWeightsData);
+    armnn::ConstTensor outputLayerNormWeights(layerNormWeightsInfo, outputLayerNormWeightsData);
+
+    // Set up params
+    armnn::LstmInputParams params;
+
+    // Mandatory params
+    params.m_InputToForgetWeights = &inputToForgetWeights;
+    params.m_InputToCellWeights   = &inputToCellWeights;
+    params.m_InputToOutputWeights = &inputToOutputWeights;
+
+    params.m_RecurrentToForgetWeights = &recurrentToForgetWeights;
+    params.m_RecurrentToCellWeights   = &recurrentToCellWeights;
+    params.m_RecurrentToOutputWeights = &recurrentToOutputWeights;
+
+    params.m_ForgetGateBias = &forgetGateBias;
+    params.m_CellBias       = &cellBias;
+    params.m_OutputGateBias = &outputGateBias;
+
+    // Layer Norm
+    params.m_ForgetLayerNormWeights = &forgetLayerNormWeights;
+    params.m_CellLayerNormWeights   = &cellLayerNormWeights;
+    params.m_OutputLayerNormWeights = &outputLayerNormWeights;
+
+    // Create network
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    const std::string layerName("qLstm");
+
+    armnn::IConnectableLayer* const input         = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const outputStateIn = network->AddInputLayer(1);
+    armnn::IConnectableLayer* const cellStateIn   = network->AddInputLayer(2);
+
+    armnn::IConnectableLayer* const qLstmLayer = network->AddQLstmLayer(descriptor, params, layerName.c_str());
+
+    armnn::IConnectableLayer* const outputStateOut  = network->AddOutputLayer(0);
+    armnn::IConnectableLayer* const cellStateOut  = network->AddOutputLayer(1);
+    armnn::IConnectableLayer* const outputLayer  = network->AddOutputLayer(2);
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    // Connect input/output slots
+    input->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(0));
+    input->GetOutputSlot(0).SetTensorInfo(inputInfo);
+
+    outputStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(1));
+    outputStateIn->GetOutputSlot(0).SetTensorInfo(cellStateInfo);
+
+    cellStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(2));
+    cellStateIn->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(0).Connect(outputStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(1).Connect(cellStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(1).SetTensorInfo(cellStateInfo);
+
+    qLstmLayer->GetOutputSlot(2).Connect(outputLayer->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(2).SetTensorInfo(outputStateInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    VerifyQLstmLayer checker(layerName,
+                             {inputInfo, cellStateInfo, outputStateInfo},
+                             {outputStateInfo, cellStateInfo, outputStateInfo},
+                             descriptor,
+                             params);
+
+    deserializedNetwork->Accept(checker);
+}
+
+BOOST_AUTO_TEST_CASE(SerializeDeserializeQLstmAdvanced)
+{
+    armnn::QLstmDescriptor descriptor;
+
+    descriptor.m_CifgEnabled       = false;
+    descriptor.m_ProjectionEnabled = true;
+    descriptor.m_PeepholeEnabled   = true;
+    descriptor.m_LayerNormEnabled  = true;
+
+    descriptor.m_CellClip       = 0.1f;
+    descriptor.m_ProjectionClip = 0.1f;
+
+    descriptor.m_InputIntermediateScale  = 0.00001f;
+    descriptor.m_ForgetIntermediateScale = 0.00001f;
+    descriptor.m_CellIntermediateScale   = 0.00001f;
+    descriptor.m_OutputIntermediateScale = 0.00001f;
+
+    descriptor.m_HiddenStateScale     = 0.07f;
+    descriptor.m_HiddenStateZeroPoint = 0;
+
+    const unsigned int numBatches = 2;
+    const unsigned int inputSize  = 5;
+    const unsigned int outputSize = 4;
+    const unsigned int numUnits   = 4;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078f;
+    int32_t inputOffset = 0;
+
+    float outputScale    = 0.0078f;
+    int32_t outputOffset = 0;
+
+    float cellStateScale    = 3.5002e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.007f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.5002e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({numUnits, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({numUnits, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({numUnits},
+                               armnn::DataType::Signed32,
+                               biasScale,
+                               biasOffset);
+
+    armnn::TensorInfo peepholeWeightsInfo({numUnits},
+                                          armnn::DataType::QSymmS16,
+                                          weightsScale,
+                                          weightsOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits},
+                                           armnn::DataType::QSymmS16,
+                                           layerNormScale,
+                                           layerNormOffset);
+
+    armnn::TensorInfo projectionWeightsInfo({outputSize, numUnits},
+                                             armnn::DataType::QSymmS8,
+                                             weightsScale,
+                                             weightsOffset);
+
+    // Mandatory params
+    std::vector<int8_t> inputToForgetWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToCellWeightsData   = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> inputToOutputWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor inputToForgetWeights(inputWeightsInfo, inputToForgetWeightsData);
+    armnn::ConstTensor inputToCellWeights(inputWeightsInfo, inputToCellWeightsData);
+    armnn::ConstTensor inputToOutputWeights(inputWeightsInfo, inputToOutputWeightsData);
+
+    std::vector<int8_t> recurrentToForgetWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToCellWeightsData   =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToOutputWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor recurrentToForgetWeights(recurrentWeightsInfo, recurrentToForgetWeightsData);
+    armnn::ConstTensor recurrentToCellWeights(recurrentWeightsInfo, recurrentToCellWeightsData);
+    armnn::ConstTensor recurrentToOutputWeights(recurrentWeightsInfo, recurrentToOutputWeightsData);
+
+    std::vector<int32_t> forgetGateBiasData(numUnits, 1);
+    std::vector<int32_t> cellBiasData(numUnits, 0);
+    std::vector<int32_t> outputGateBiasData(numUnits, 0);
+
+    armnn::ConstTensor forgetGateBias(biasInfo, forgetGateBiasData);
+    armnn::ConstTensor cellBias(biasInfo, cellBiasData);
+    armnn::ConstTensor outputGateBias(biasInfo, outputGateBiasData);
+
+    // CIFG
+    std::vector<int8_t> inputToInputWeightsData = GenerateRandomData<int8_t>(inputWeightsInfo.GetNumElements());
+    std::vector<int8_t> recurrentToInputWeightsData =
+            GenerateRandomData<int8_t>(recurrentWeightsInfo.GetNumElements());
+    std::vector<int32_t> inputGateBiasData(numUnits, 1);
+
+    armnn::ConstTensor inputToInputWeights(inputWeightsInfo, inputToInputWeightsData);
+    armnn::ConstTensor recurrentToInputWeights(recurrentWeightsInfo, recurrentToInputWeightsData);
+    armnn::ConstTensor inputGateBias(biasInfo, inputGateBiasData);
+
+    // Peephole
+    std::vector<int16_t> cellToInputWeightsData  = GenerateRandomData<int16_t>(peepholeWeightsInfo.GetNumElements());
+    std::vector<int16_t> cellToForgetWeightsData = GenerateRandomData<int16_t>(peepholeWeightsInfo.GetNumElements());
+    std::vector<int16_t> cellToOutputWeightsData = GenerateRandomData<int16_t>(peepholeWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor cellToInputWeights(peepholeWeightsInfo, cellToInputWeightsData);
+    armnn::ConstTensor cellToForgetWeights(peepholeWeightsInfo, cellToForgetWeightsData);
+    armnn::ConstTensor cellToOutputWeights(peepholeWeightsInfo, cellToOutputWeightsData);
+
+    // Projection
+    std::vector<int8_t> projectionWeightsData = GenerateRandomData<int8_t>(projectionWeightsInfo.GetNumElements());
+    std::vector<int32_t> projectionBiasData(outputSize, 1);
+
+    armnn::ConstTensor projectionWeights(projectionWeightsInfo, projectionWeightsData);
+    armnn::ConstTensor projectionBias(biasInfo, projectionBiasData);
+
+    // Layer Norm
+    std::vector<int16_t> inputLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+    std::vector<int16_t> forgetLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+    std::vector<int16_t> cellLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+    std::vector<int16_t> outputLayerNormWeightsData =
+            GenerateRandomData<int16_t>(layerNormWeightsInfo.GetNumElements());
+
+    armnn::ConstTensor inputLayerNormWeights(layerNormWeightsInfo, inputLayerNormWeightsData);
+    armnn::ConstTensor forgetLayerNormWeights(layerNormWeightsInfo, forgetLayerNormWeightsData);
+    armnn::ConstTensor cellLayerNormWeights(layerNormWeightsInfo, cellLayerNormWeightsData);
+    armnn::ConstTensor outputLayerNormWeights(layerNormWeightsInfo, outputLayerNormWeightsData);
+
+    // Set up params
+    armnn::LstmInputParams params;
+
+    // Mandatory params
+    params.m_InputToForgetWeights = &inputToForgetWeights;
+    params.m_InputToCellWeights   = &inputToCellWeights;
+    params.m_InputToOutputWeights = &inputToOutputWeights;
+
+    params.m_RecurrentToForgetWeights = &recurrentToForgetWeights;
+    params.m_RecurrentToCellWeights   = &recurrentToCellWeights;
+    params.m_RecurrentToOutputWeights = &recurrentToOutputWeights;
+
+    params.m_ForgetGateBias = &forgetGateBias;
+    params.m_CellBias       = &cellBias;
+    params.m_OutputGateBias = &outputGateBias;
+
+    // CIFG
+    params.m_InputToInputWeights     = &inputToInputWeights;
+    params.m_RecurrentToInputWeights = &recurrentToInputWeights;
+    params.m_InputGateBias           = &inputGateBias;
+
+    // Peephole
+    params.m_CellToInputWeights  = &cellToInputWeights;
+    params.m_CellToForgetWeights = &cellToForgetWeights;
+    params.m_CellToOutputWeights = &cellToOutputWeights;
+
+    // Projection
+    params.m_ProjectionWeights = &projectionWeights;
+    params.m_ProjectionBias    = &projectionBias;
+
+    // Layer Norm
+    params.m_InputLayerNormWeights  = &inputLayerNormWeights;
+    params.m_ForgetLayerNormWeights = &forgetLayerNormWeights;
+    params.m_CellLayerNormWeights   = &cellLayerNormWeights;
+    params.m_OutputLayerNormWeights = &outputLayerNormWeights;
+
+    // Create network
+    armnn::INetworkPtr network = armnn::INetwork::Create();
+    const std::string layerName("qLstm");
+
+    armnn::IConnectableLayer* const input         = network->AddInputLayer(0);
+    armnn::IConnectableLayer* const outputStateIn = network->AddInputLayer(1);
+    armnn::IConnectableLayer* const cellStateIn   = network->AddInputLayer(2);
+
+    armnn::IConnectableLayer* const qLstmLayer = network->AddQLstmLayer(descriptor, params, layerName.c_str());
+
+    armnn::IConnectableLayer* const outputStateOut = network->AddOutputLayer(0);
+    armnn::IConnectableLayer* const cellStateOut   = network->AddOutputLayer(1);
+    armnn::IConnectableLayer* const outputLayer    = network->AddOutputLayer(2);
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    // Connect input/output slots
+    input->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(0));
+    input->GetOutputSlot(0).SetTensorInfo(inputInfo);
+
+    outputStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(1));
+    outputStateIn->GetOutputSlot(0).SetTensorInfo(cellStateInfo);
+
+    cellStateIn->GetOutputSlot(0).Connect(qLstmLayer->GetInputSlot(2));
+    cellStateIn->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(0).Connect(outputStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(0).SetTensorInfo(outputStateInfo);
+
+    qLstmLayer->GetOutputSlot(1).Connect(cellStateOut->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(1).SetTensorInfo(cellStateInfo);
+
+    qLstmLayer->GetOutputSlot(2).Connect(outputLayer->GetInputSlot(0));
+    qLstmLayer->GetOutputSlot(2).SetTensorInfo(outputStateInfo);
+
+    armnn::INetworkPtr deserializedNetwork = DeserializeNetwork(SerializeNetwork(*network));
+    BOOST_CHECK(deserializedNetwork);
+
+    VerifyQLstmLayer checker(layerName,
+                             {inputInfo, cellStateInfo, outputStateInfo},
+                             {outputStateInfo, cellStateInfo, outputStateInfo},
+                             descriptor,
+                             params);
 
     deserializedNetwork->Accept(checker);
 }

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -49,7 +49,7 @@ void Convolution2dLayer::SerializeLayerParameters(ParameterStringifyFunction& fn
 std::unique_ptr<IWorkload> Convolution2dLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     // on this level constant data should not be released..
-    BOOST_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
+    ARMNN_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
 
     Convolution2dQueueDescriptor descriptor;
 
@@ -57,9 +57,12 @@ std::unique_ptr<IWorkload> Convolution2dLayer::CreateWorkload(const IWorkloadFac
 
     if (m_Param.m_BiasEnabled)
     {
-        BOOST_ASSERT_MSG(m_Bias != nullptr, "Convolution2dLayer: Bias data should not be null.");
+        ARMNN_ASSERT_MSG(m_Bias != nullptr, "Convolution2dLayer: Bias data should not be null.");
         descriptor.m_Bias = m_Bias.get();
     }
+
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateConvolution2d(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -79,12 +82,12 @@ Convolution2dLayer* Convolution2dLayer::Clone(Graph& graph) const
 
 std::vector<TensorShape> Convolution2dLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
 {
-    BOOST_ASSERT(inputShapes.size() == 2);
+    ARMNN_ASSERT(inputShapes.size() == 2);
     const TensorShape& inputShape = inputShapes[0];
     const TensorShape filterShape = inputShapes[1];
 
     // If we support multiple batch dimensions in the future, then this assert will need to change.
-    BOOST_ASSERT_MSG(inputShape.GetNumDimensions() == 4, "Convolutions will always have 4D input.");
+    ARMNN_ASSERT_MSG(inputShape.GetNumDimensions() == 4, "Convolutions will always have 4D input.");
 
     DataLayoutIndexed dataLayoutIndex(m_Param.m_DataLayout);
 
@@ -116,19 +119,20 @@ void Convolution2dLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
 
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
     // check if we m_Weight data is not nullptr
-    BOOST_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
+    ARMNN_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
 
     auto inferredShapes = InferOutputShapes({
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
         m_Weight->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-        "Convolution2dLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-        GetOutputSlot(0).GetTensorInfo().GetShape(),
-        inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "Convolution2dLayer");
 }
 
 Layer::ConstantTensors Convolution2dLayer::GetConstantTensorsByRef()

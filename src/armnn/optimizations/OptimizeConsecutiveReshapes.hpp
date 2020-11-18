@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -21,8 +21,8 @@ public:
         Layer& base = connection.GetConnectedOutputSlot()->GetOwningLayer();
         Layer& child = connection.GetOwningLayer();
 
-        BOOST_ASSERT(base.GetType() == LayerType::Reshape);
-        BOOST_ASSERT(child.GetType() == LayerType::Reshape);
+        ARMNN_ASSERT(base.GetType() == LayerType::Reshape);
+        ARMNN_ASSERT(child.GetType() == LayerType::Reshape);
 
         OutputSlot* parentOut = base.GetInputSlot(0).GetConnectedOutputSlot();
 
@@ -43,8 +43,6 @@ public:
             const ReshapeDescriptor descriptor{outInfo.GetShape()};
             auto& newReshape = *graph.InsertNewLayer<ReshapeLayer>(base.GetInputSlot(0), descriptor, name.c_str());
 
-            // Sets tensor info for new layer.
-            newReshape.GetOutputHandler().SetTensorInfo(outInfo);
             // Parent is now the new layer.
             parentOut = &newReshape.GetOutputSlot();
         }

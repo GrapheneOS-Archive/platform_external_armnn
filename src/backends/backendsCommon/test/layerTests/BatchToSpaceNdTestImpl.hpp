@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,6 +29,7 @@ template<armnn::DataType ArmnnType,
 LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
         armnn::IWorkloadFactory &workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         const armnn::DataLayout& dataLayout,
         const unsigned int *inputShape,
         const std::vector<float> &inputData,
@@ -39,7 +40,7 @@ LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
         float scale = 1.0f,
         int32_t offset = 0)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
 
     armnn::TensorInfo inputTensorInfo(InputDim, inputShape, ArmnnType);
     armnn::TensorInfo outputTensorInfo(OutputDim, outputShape, ArmnnType);
@@ -56,8 +57,8 @@ LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
     result.outputExpected = MakeTensor<T, OutputDim>(outputTensorInfo,
                                                      ConvertToDataType<ArmnnType>(outputData, outputTensorInfo));
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::BatchToSpaceNdQueueDescriptor data;
     data.m_Parameters.m_DataLayout = dataLayout;
@@ -87,7 +88,8 @@ LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest1(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 2, 2, 1};
     const unsigned int outputShape[] = {1, 4, 4, 1};
@@ -126,7 +128,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest1(
     std::vector<unsigned int> blockShape {2, 2};
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -134,7 +136,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest1(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest2(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 1};
     const unsigned int outputShape[] = {1, 2, 2, 1};
@@ -149,7 +152,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest2(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -157,7 +160,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest2(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest3(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 3};
     const unsigned int outputShape[] = {1, 2, 2, 3};
@@ -169,7 +173,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest3(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -177,7 +181,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest3(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest4(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {8, 1, 3, 1};
     const unsigned int outputShape[] = {2, 2, 4, 1};
@@ -203,7 +208,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest4(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {2, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -211,7 +216,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest4(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest5(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 2, 2, 1};
     const unsigned int outputShape[] = {1, 4, 4, 1};
@@ -222,14 +228,16 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest5(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, armnn::DataLayout::NHWC, inputShape,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
+                                                 armnn::DataLayout::NHWC, inputShape,
                                                  input, blockShape, crops, outputShape, expectedOutput);
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest6(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 1};
     const unsigned int outputShape[] = {1, 2, 2, 1};
@@ -244,7 +252,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest6(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }
@@ -252,7 +260,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest6(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNhwcTest7(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 3};
     const unsigned int outputShape[] = {1, 2, 2, 3};
@@ -264,7 +273,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest7(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NHWC, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }
@@ -272,7 +281,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNhwcTest7(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest1(
         armnn::IWorkloadFactory &workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 3, 1, 1};
     const unsigned int outputShape[] = {1, 3, 2, 2};
@@ -296,7 +306,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest1(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -304,7 +314,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest1(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest2(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 1};
     const unsigned int outputShape[] = {1, 1, 2, 2};
@@ -319,7 +330,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest2(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -327,7 +338,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest2(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest3(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 3, 1, 1};
     const unsigned int outputShape[] = {1, 3, 2, 2};
@@ -351,7 +363,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest3(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                                 armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                                 crops, outputShape, expectedOutput);
 }
@@ -359,7 +371,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest3(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest4(
         armnn::IWorkloadFactory &workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 3, 1, 1};
     const unsigned int outputShape[] = {1, 3, 2, 2};
@@ -383,7 +396,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest4(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }
@@ -391,7 +404,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest4(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest5(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 1, 1, 1};
     const unsigned int outputShape[] = {1, 1, 2, 2};
@@ -406,7 +420,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest5(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }
@@ -414,7 +428,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest5(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest6(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {4, 3, 1, 1};
     const unsigned int outputShape[] = {1, 3, 2, 2};
@@ -438,7 +453,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest6(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {0, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }
@@ -446,7 +461,8 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest6(
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> BatchToSpaceNdNchwTest7(
         armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const unsigned int inputShape[] = {8, 1, 1, 3};
     const unsigned int outputShape[] = {2, 1, 2, 4};
@@ -468,7 +484,7 @@ LayerTestResult<T, 4> BatchToSpaceNdNchwTest7(
     std::vector<unsigned int> blockShape({2, 2});
     std::vector<std::pair<unsigned int, unsigned int>> crops = {{0, 0}, {2, 0}};
 
-    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager,
+    return BatchToSpaceNdHelper<ArmnnType, 4, 4>(workloadFactory, memoryManager, tensorHandleFactory,
                                                  armnn::DataLayout::NCHW, inputShape, input, blockShape,
                                                  crops, outputShape, expectedOutput);
 }

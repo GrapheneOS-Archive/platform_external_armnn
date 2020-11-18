@@ -68,23 +68,25 @@ inline std::ostream& operator<<(std::ostream& os, const BackendVersion& backendV
 class IBackendInternal : public IBackend
 {
 protected:
-    // Creation must be done through a specific
-    // backend interface.
+    /// Creation must be done through a specific
+    /// backend interface.
     IBackendInternal() = default;
 
 public:
-    // Allow backends created by the factory function
-    // to be destroyed through IBackendInternal.
+    /// Allow backends created by the factory function
+    /// to be destroyed through IBackendInternal.
     ~IBackendInternal() override = default;
 
     using IWorkloadFactoryPtr = std::unique_ptr<IWorkloadFactory>;
     using IBackendContextPtr = std::unique_ptr<IBackendContext>;
-    // This is the bridge between backend and backend profiling we'll keep it in the backend namespace.
+    /// This is the bridge between backend and backend profiling we'll keep it in the backend namespace.
     using IBackendProfilingContextPtr = std::shared_ptr<armnn::profiling::IBackendProfilingContext>;
     using IBackendProfilingPtr = std::unique_ptr<armnn::profiling::IBackendProfiling>;
     using OptimizationPtr = std::unique_ptr<Optimization>;
     using Optimizations = std::vector<OptimizationPtr>;
     using ILayerSupportSharedPtr = std::shared_ptr<ILayerSupport>;
+
+    using IBackendSpecificModelContextPtr = std::shared_ptr<IBackendModelContext>;
 
     using IMemoryManagerUniquePtr = std::unique_ptr<IMemoryManager>;
     using IMemoryManagerSharedPtr = std::shared_ptr<IMemoryManager>;
@@ -116,6 +118,14 @@ public:
     virtual IWorkloadFactoryPtr CreateWorkloadFactory(
         class TensorHandleFactoryRegistry& tensorHandleFactoryRegistry) const;
 
+    virtual IWorkloadFactoryPtr CreateWorkloadFactory(
+        const IMemoryManagerSharedPtr& memoryManager,
+        const ModelOptions& modelOptions) const;
+
+    virtual IWorkloadFactoryPtr CreateWorkloadFactory(
+        class TensorHandleFactoryRegistry& tensorHandleFactoryRegistry,
+        const ModelOptions& modelOptions) const;
+
     /// Create the runtime context of the backend
     ///
     /// Implementations may return a default-constructed IBackendContextPtr if
@@ -125,13 +135,20 @@ public:
     /// The default implementation always returns a default-constructed pointer.
     virtual IBackendContextPtr CreateBackendContext(const IRuntime::CreationOptions&) const;
 
+    virtual IBackendSpecificModelContextPtr CreateBackendSpecificModelContext(const ModelOptions& modelOptions) const;
+
     /// Create context specifically used for profiling interaction from backends.
     virtual IBackendProfilingContextPtr CreateBackendProfilingContext(const IRuntime::CreationOptions& creationOptions,
                                                                       IBackendProfilingPtr& backendProfiling);
 
     virtual ILayerSupportSharedPtr GetLayerSupport() const = 0;
 
+    virtual ILayerSupportSharedPtr GetLayerSupport(const ModelOptions& modelOptions) const;
+
     virtual OptimizationViews OptimizeSubgraphView(const SubgraphView& subgraph) const;
+
+    virtual OptimizationViews OptimizeSubgraphView(const SubgraphView& subgraph,
+                                                   const ModelOptions& modelOptions) const;
 
     bool SupportsTensorAllocatorAPI() const;
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,6 +22,8 @@ AbsLayer::AbsLayer(const char* name)
 std::unique_ptr<IWorkload> AbsLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     AbsQueueDescriptor descriptor;
+    SetAdditionalInfo(descriptor);
+
     return factory.CreateAbs(descriptor, PrepInfoAndDesc(descriptor));
 }
 
@@ -33,15 +35,15 @@ AbsLayer* AbsLayer::Clone(Graph& graph) const
 void AbsLayer::ValidateTensorShapesFromInputs()
 {
     VerifyLayerConnections(1, CHECK_LOCATION());
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
-    BOOST_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes.size() == 1);
 
-    ConditionalThrowIfNotEqual<LayerValidationException>(
-            "AbsLayer: TensorShape set on OutputSlot[0] does not match the inferred shape.",
-            GetOutputSlot(0).GetTensorInfo().GetShape(),
-            inferredShapes[0]);
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "AbsLayer");
 }
 
 void AbsLayer::Accept(ILayerVisitor& visitor) const

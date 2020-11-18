@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -42,6 +42,7 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
     int quantOffset,
     const unsigned int outShape[NumDims],
     std::vector<float> outValues,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float outQuantScale,
     int outQuantOffset)
 {
@@ -58,8 +59,8 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
 
     LayerTestResult<T, NumDims> ret(outputTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::ElementwiseUnaryDescriptor desc(op);
     armnn::ElementwiseUnaryQueueDescriptor qDesc;
@@ -95,6 +96,7 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
     std::vector<float> values,
     const unsigned int outShape[NumDims],
     std::vector<float> outValues,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     float quantScale = 1.0f,
     int quantOffset = 0)
 {
@@ -108,6 +110,7 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
         quantOffset,
         outShape,
         outValues,
+        tensorHandleFactory,
         quantScale,
         quantOffset);
 }

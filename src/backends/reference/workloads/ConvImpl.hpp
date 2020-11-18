@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -14,9 +14,6 @@
 #include <armnn/Tensor.hpp>
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
-
-#include <boost/assert.hpp>
-#include <boost/numeric/conversion/cast.hpp>
 
 #include <cmath>
 #include <limits>

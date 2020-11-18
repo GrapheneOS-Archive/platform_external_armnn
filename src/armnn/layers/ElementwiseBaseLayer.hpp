@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -18,6 +18,7 @@ class ElementwiseBaseLayer : public Layer
 public:
     /// Check if the input tensor shape(s)
     /// will lead to a valid configuration of the element wise operation.
+    /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
     /// By default returns inputShapes if the number of inputs are equal to number of outputs,

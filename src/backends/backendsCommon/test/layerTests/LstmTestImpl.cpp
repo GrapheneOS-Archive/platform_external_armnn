@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,6 +7,7 @@
 
 #include <QuantizeHelper.hpp>
 
+#include <armnn/utility/NumericCast.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 
@@ -136,16 +137,17 @@ LayerTestResult<T, 2>
 LstmNoCifgNoPeepholeNoProjectionTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         const boost::multi_array<T, 2>& input,
         const boost::multi_array<T, 2>& outputExpected,
         float qScale = 0.0f,
         int32_t qOffset = 0,
         armnn::DataType constantDataType = armnn::DataType::Float32)
 {
-    boost::ignore_unused(memoryManager);
-    unsigned int batchSize = boost::numeric_cast<unsigned int>(input.shape()[0]);
-    unsigned int inputSize = boost::numeric_cast<unsigned int>(input.shape()[1]);
-    unsigned int outputSize = boost::numeric_cast<unsigned int>(outputExpected.shape()[1]);
+    IgnoreUnused(memoryManager);
+    unsigned int batchSize = armnn::numeric_cast<unsigned int>(input.shape()[0]);
+    unsigned int inputSize = armnn::numeric_cast<unsigned int>(input.shape()[1]);
+    unsigned int outputSize = armnn::numeric_cast<unsigned int>(outputExpected.shape()[1]);
     // cellSize and outputSize have the same size when there is no projection.
     unsigned numUnits = outputSize;
 
@@ -160,42 +162,42 @@ LstmNoCifgNoPeepholeNoProjectionTestImpl(
 
     LayerTestResult<T, 2> ret(outputTensorInfo);
 
-    std::vector<float> inputVector;
+    std::vector<T> inputVector;
     inputVector.assign(input.data(), input.data() + (batchSize * inputSize));
-    auto inputTensor = MakeTensor<float,2>(inputTensorInfo, inputVector);
+    auto inputTensor = MakeTensor<T,2>(inputTensorInfo, inputVector);
 
-    std::vector<float> cellStateInVector(batchSize * numUnits, 0.f);
-    auto cellStateInTensor = MakeTensor<float,2>(cellStateInTensorInfo, cellStateInVector);
+    std::vector<T> cellStateInVector(batchSize * numUnits, T());
+    auto cellStateInTensor = MakeTensor<T,2>(cellStateInTensorInfo, cellStateInVector);
 
-    std::vector<float> outputStateInVector(batchSize * outputSize, 0.f);
-    auto outputStateInTensor = MakeTensor<float,2>(outputStateInTensorInfo, outputStateInVector);
+    std::vector<T> outputStateInVector(batchSize * outputSize, T());
+    auto outputStateInTensor = MakeTensor<T,2>(outputStateInTensorInfo, outputStateInVector);
 
-    std::vector<float> scratchBufferVector(batchSize * numUnits * 4, 0.f);
-    auto scratchBufferTensor = MakeTensor<float,2>(scratchBufferTensorInfo, scratchBufferVector);
+    std::vector<T> scratchBufferVector(batchSize * numUnits * 4, T());
+    auto scratchBufferTensor = MakeTensor<T,2>(scratchBufferTensorInfo, scratchBufferVector);
 
-    std::vector<float> outputStateOutVector(batchSize * outputSize, 0.f);
-    auto outputStateOutTensor = MakeTensor<float,2>(outputStateOutTensorInfo, outputStateOutVector);
+    std::vector<T> outputStateOutVector(batchSize * outputSize, T());
+    auto outputStateOutTensor = MakeTensor<T,2>(outputStateOutTensorInfo, outputStateOutVector);
 
-    std::vector<float> cellStateOutVector(batchSize * numUnits, 0.f);
-    auto cellStateOutTensor = MakeTensor<float,2>(cellStateOutTensorInfo, cellStateOutVector);
+    std::vector<T> cellStateOutVector(batchSize * numUnits, T());
+    auto cellStateOutTensor = MakeTensor<T,2>(cellStateOutTensorInfo, cellStateOutVector);
 
-    std::vector<float> outputVector;
+    std::vector<T> outputVector;
     outputVector.assign(outputExpected.data(), outputExpected.data() + (batchSize * outputSize));
-    ret.outputExpected = MakeTensor<float, 2>(outputTensorInfo, outputVector);
+    ret.outputExpected = MakeTensor<T, 2>(outputTensorInfo, outputVector);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
-            workloadFactory.CreateTensorHandle(cellStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
-            workloadFactory.CreateTensorHandle(outputStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateInTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> scratchHandle = workloadFactory.CreateTensorHandle(scratchBufferTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> scratchHandle =
+            tensorHandleFactory.CreateTensorHandle(scratchBufferTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
-            workloadFactory.CreateTensorHandle(outputStateOutTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateOutTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
-            workloadFactory.CreateTensorHandle(cellStateOutTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
-
+            tensorHandleFactory.CreateTensorHandle(cellStateOutTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::LstmQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -339,13 +341,14 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 2>
 LstmLayerNoCifgWithPeepholeWithProjectionTestImpl(armnn::IWorkloadFactory& workloadFactory,
                                                   const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+                                                  const armnn::ITensorHandleFactory& tensorHandleFactory,
                                                   const boost::multi_array<T, 2>& input,
                                                   const boost::multi_array<T, 2>& outputExpected,
                                                   float qScale = 0.0f,
                                                   int32_t qOffset = 0,
                                                   armnn::DataType constantDataType = armnn::DataType::Float32)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     unsigned int batchSize = 2;
     unsigned int outputSize = 16;
     unsigned int inputSize = 5;
@@ -363,41 +366,42 @@ LstmLayerNoCifgWithPeepholeWithProjectionTestImpl(armnn::IWorkloadFactory& workl
 
     LayerTestResult<T, 2> ret(outputTensorInfo);
 
-    std::vector<float> inputVector;
+    std::vector<T> inputVector;
     inputVector.assign(input.data(), input.data() + (batchSize * inputSize));
-    auto inputTensor = MakeTensor<float,2>(inputTensorInfo, inputVector);
+    auto inputTensor = MakeTensor<T,2>(inputTensorInfo, inputVector);
 
-    std::vector<float> cellStateInVector(batchSize * numUnits, 0.f);
-    auto cellStateInTensor = MakeTensor<float,2>(cellStateInTensorInfo, cellStateInVector);
+    std::vector<T> cellStateInVector(batchSize * numUnits, T());
+    auto cellStateInTensor = MakeTensor<T,2>(cellStateInTensorInfo, cellStateInVector);
 
-    std::vector<float> outputStateInVector(batchSize * outputSize, 0.f);
-    auto outputStateInTensor = MakeTensor<float,2>(outputStateInTensorInfo, outputStateInVector);
+    std::vector<T> outputStateInVector(batchSize * outputSize, T());
+    auto outputStateInTensor = MakeTensor<T,2>(outputStateInTensorInfo, outputStateInVector);
 
-    std::vector<float> scratchBufferVector(batchSize * numUnits * 4, 0.f);
-    auto scratchBufferTensor = MakeTensor<float,2>(scratchBufferTensorInfo, scratchBufferVector);
+    std::vector<T> scratchBufferVector(batchSize * numUnits * 4, T());
+    auto scratchBufferTensor = MakeTensor<T,2>(scratchBufferTensorInfo, scratchBufferVector);
 
-    std::vector<float> outputStateOutVector(batchSize * outputSize, 0.f);
-    auto outputStateOutTensor = MakeTensor<float,2>(outputStateOutTensorInfo, outputStateOutVector);
+    std::vector<T> outputStateOutVector(batchSize * outputSize, T());
+    auto outputStateOutTensor = MakeTensor<T,2>(outputStateOutTensorInfo, outputStateOutVector);
 
-    std::vector<float> cellStateOutVector(batchSize * numUnits, 0.f);
-    auto cellStateOutTensor = MakeTensor<float,2>(cellStateOutTensorInfo, cellStateOutVector);
+    std::vector<T> cellStateOutVector(batchSize * numUnits, T());
+    auto cellStateOutTensor = MakeTensor<T,2>(cellStateOutTensorInfo, cellStateOutVector);
 
-    std::vector<float> outputVector;
+    std::vector<T> outputVector;
     outputVector.assign(outputExpected.data(), outputExpected.data() + (batchSize * outputSize));
-    ret.outputExpected = MakeTensor<float, 2>(outputTensorInfo, outputVector);
+    ret.outputExpected = MakeTensor<T, 2>(outputTensorInfo, outputVector);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
-            workloadFactory.CreateTensorHandle(cellStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
-            workloadFactory.CreateTensorHandle(outputStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateInTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> scratchHandle = workloadFactory.CreateTensorHandle(scratchBufferTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> scratchHandle =
+            tensorHandleFactory.CreateTensorHandle(scratchBufferTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
-            workloadFactory.CreateTensorHandle(outputStateOutTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateOutTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
-            workloadFactory.CreateTensorHandle(cellStateOutTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateOutTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::LstmQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -1054,21 +1058,22 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 2> LstmLayerWithCifgWithPeepholeNoProjectionTestImpl(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
         const boost::multi_array<T, 2>& input,
         const boost::multi_array<T, 2>& outputExpected,
         float qScale = 0.0f,
         int32_t qOffset = 0,
         armnn::DataType constantDataType = armnn::DataType::Float32)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     bool cifgEnabled = true;
     bool peepholeEnabled = true;
     bool projectionEnabled = false;
     // These are not the input and the output of Lstm yet
-    unsigned int batchSize = boost::numeric_cast<unsigned int>(input.shape()[0]);
-    unsigned int inputSize = boost::numeric_cast<unsigned int>(input.shape()[1]);
+    unsigned int batchSize = armnn::numeric_cast<unsigned int>(input.shape()[0]);
+    unsigned int inputSize = armnn::numeric_cast<unsigned int>(input.shape()[1]);
 
-    unsigned int outputSize = boost::numeric_cast<unsigned int>(outputExpected.shape()[1]);
+    unsigned int outputSize = armnn::numeric_cast<unsigned int>(outputExpected.shape()[1]);
 
     const unsigned int cellSize = outputSize;
 
@@ -1195,44 +1200,44 @@ LayerTestResult<T, 2> LstmLayerWithCifgWithPeepholeNoProjectionTestImpl(
 
 
     // List of outputs
-    std::vector<float> scratchBufferVector(batchSize * scratchBufferSize, 0.f);
-    auto scratchBufferTensor = MakeTensor<float,2>(scratchBufferTensorInfo, scratchBufferVector);
+    std::vector<T> scratchBufferVector(batchSize * scratchBufferSize, T());
+    auto scratchBufferTensor = MakeTensor<T,2>(scratchBufferTensorInfo, scratchBufferVector);
     LayerTestResult<T, 2> ret0(scratchBufferTensorInfo);
 
     // Output state for a certain time step
-    std::vector<float> outputStateOutVector(batchSize * outputSize, 0.f);
-    auto outputStateOutTensor = MakeTensor<float,2>(outputStateOutTensorInfo, outputStateOutVector);
+    std::vector<T> outputStateOutVector(batchSize * outputSize, T());
+    auto outputStateOutTensor = MakeTensor<T,2>(outputStateOutTensorInfo, outputStateOutVector);
     LayerTestResult<T, 2> ret1(outputStateOutTensorInfo);
 
     // Cell state for a certain time step
-    std::vector<float> cellStateOutVector(batchSize * cellSize, 0.f);
-    auto cellStateOutTensor = MakeTensor<float,2>(cellStateOutTensorInfo, cellStateOutVector);
+    std::vector<T> cellStateOutVector(batchSize * cellSize, T());
+    auto cellStateOutTensor = MakeTensor<T,2>(cellStateOutTensorInfo, cellStateOutVector);
     LayerTestResult<T, 2> ret2(cellStateOutTensorInfo);
 
     // Output for a certain time step
-    std::vector<float> outputVector(batchSize * outputSize, 0.f);
-    auto outputTensor = MakeTensor<float, 2>(outputTensorInfo, outputVector);
-    std::vector<float> outputData;
+    std::vector<T> outputVector(batchSize * outputSize, T());
+    auto outputTensor = MakeTensor<T, 2>(outputTensorInfo, outputVector);
+    std::vector<T> outputData;
     outputData.assign(outputExpected.data(), outputExpected.data() + batchSize*outputSize);
     LayerTestResult<T, 2> ret3(outputTensorInfo);
-    ret3.outputExpected = MakeTensor<float, 2>(outputTensorInfo, outputData);
+    ret3.outputExpected = MakeTensor<T, 2>(outputTensorInfo, outputData);
 
     // Prepare the inputs and outputs for the workload
     std::unique_ptr<armnn::ITensorHandle> inputHandle =
-            workloadFactory.CreateTensorHandle(inputTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
-            workloadFactory.CreateTensorHandle(outputStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateInTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
-            workloadFactory.CreateTensorHandle(cellStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInTensorInfo);
 
     std::unique_ptr<armnn::ITensorHandle> scratchBufferHandle =
-            workloadFactory.CreateTensorHandle(scratchBufferTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(scratchBufferTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
-            workloadFactory.CreateTensorHandle(outputStateOutTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateOutTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
-            workloadFactory.CreateTensorHandle(cellStateOutTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateOutTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle =
-            workloadFactory.CreateTensorHandle(outputTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::WorkloadInfo info;
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
@@ -1279,13 +1284,14 @@ template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 2>
 LstmLayerNoCifgWithPeepholeWithProjectionWithLayerNormTestImpl(armnn::IWorkloadFactory& workloadFactory,
                                                   const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+                                                  const armnn::ITensorHandleFactory& tensorHandleFactory,
                                                   const boost::multi_array<T, 2>& input,
                                                   const boost::multi_array<T, 2>& outputExpected,
                                                   float qScale = 0.0f,
                                                   int32_t qOffset = 0,
                                                   armnn::DataType constantDataType = armnn::DataType::Float32)
 {
-    boost::ignore_unused(memoryManager);
+    IgnoreUnused(memoryManager);
     unsigned int batchSize = 2;
     unsigned int outputSize = 3;
     unsigned int inputSize = 5;
@@ -1326,18 +1332,19 @@ LstmLayerNoCifgWithPeepholeWithProjectionWithLayerNormTestImpl(armnn::IWorkloadF
     outputVector.assign(outputExpected.data(), outputExpected.data() + (batchSize * outputSize));
     ret.outputExpected = MakeTensor<float, 2>(outputTensorInfo, outputVector);
 
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
-            workloadFactory.CreateTensorHandle(cellStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
-            workloadFactory.CreateTensorHandle(outputStateInTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateInTensorInfo);
 
-    std::unique_ptr<armnn::ITensorHandle> scratchHandle = workloadFactory.CreateTensorHandle(scratchBufferTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> scratchHandle =
+            tensorHandleFactory.CreateTensorHandle(scratchBufferTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
-            workloadFactory.CreateTensorHandle(outputStateOutTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateOutTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
-            workloadFactory.CreateTensorHandle(cellStateOutTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateOutTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::LstmQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -1549,13 +1556,14 @@ LstmLayerNoCifgWithPeepholeWithProjectionWithLayerNormTestImpl(armnn::IWorkloadF
 LayerTestResult<uint8_t, 2> QuantizedLstmTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory,
     const boost::multi_array<uint8_t, 2>& input,
     const boost::multi_array<uint8_t, 2>& outputExpected)
 {
-    boost::ignore_unused(memoryManager);
-    auto numBatches = boost::numeric_cast<unsigned int>(input.shape()[0]);
-    auto inputSize = boost::numeric_cast<unsigned int>(input.shape()[1]);
-    auto outputSize = boost::numeric_cast<unsigned int>(outputExpected.shape()[1]);
+    IgnoreUnused(memoryManager);
+    auto numBatches = armnn::numeric_cast<unsigned int>(input.shape()[0]);
+    auto inputSize = armnn::numeric_cast<unsigned int>(input.shape()[1]);
+    auto outputSize = armnn::numeric_cast<unsigned int>(outputExpected.shape()[1]);
 
     // Scale/Offset for input/output, cellState In/Out, weights, bias
     float inputOutputScale = 0.0078125f;
@@ -1611,15 +1619,15 @@ LayerTestResult<uint8_t, 2> QuantizedLstmTestImpl(
     ret.outputExpected = MakeTensor<uint8_t, 2>(outputStateInfo, outputVector);
 
     // Create tensor handles
-    std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputInfo);
     std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
-            workloadFactory.CreateTensorHandle(cellStateInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
     std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
-            workloadFactory.CreateTensorHandle(outputStateInfo);
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
 
     std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
-            workloadFactory.CreateTensorHandle(cellStateInfo);
-    std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputStateInfo);
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputStateInfo);
 
     armnn::QuantizedLstmQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -1732,6 +1740,771 @@ LayerTestResult<uint8_t, 2> QuantizedLstmTestImpl(
 
     return ret;
 }
+
+// QLSTM: CIFG, LayerNorm
+LayerTestResult<int8_t, 2> QLstmTestImpl(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const boost::multi_array<int8_t, 2>& input,
+        const boost::multi_array<int8_t, 2>& outputExpected)
+{
+    IgnoreUnused(memoryManager);
+    unsigned int numBatches = 2;
+    unsigned int inputSize  = 5;
+    unsigned int outputSize = 4;
+    unsigned int numUnits   = 4;
+
+    bool cifgEnabled       = true;
+    bool peepholeEnabled   = false;
+    bool projectionEnabled = false;
+    bool layerNormEnabled  = true;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078125f;
+    int32_t inputOffset = 0;
+
+    int32_t hiddenStateZeroPoint = 0;
+    float hiddenStateScale       = 0.007f;
+
+    // if (!projectionEnabled) outputScale == hiddenStateScale
+    float outputScale    = hiddenStateScale;
+    int32_t outputOffset = hiddenStateZeroPoint;
+
+    float cellStateScale    = 3.05176e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.00784314f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.05182e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    float inputIntermediateScale  = 0.007059f;
+    float forgetIntermediateScale = 0.007812f;
+    float cellIntermediateScale   = inputIntermediateScale;
+    float outputIntermediateScale = forgetIntermediateScale;
+
+    float cellClip       = 0.0f;
+    float projectionClip = 0.0f;
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    LayerTestResult<int8_t, 2> ret(outputStateInfo);
+
+    // Input tensors
+    std::vector<int8_t> inputVector;
+    inputVector.assign(input.data(), input.data() + (numBatches * inputSize));
+    auto inputTensor = MakeTensor<int8_t, 2>(inputInfo, inputVector);
+
+    std::vector<int16_t> cellStateInVector = {0, 0, 0, 0, 0, 0, 0, 0};
+    auto cellStateInTensor = MakeTensor<int16_t, 2>(cellStateInfo, cellStateInVector);
+
+    std::vector<int8_t> outputStateInVector = {0, 0, 0, 0, 0, 0, 0, 0};
+    auto outputStateInTensor = MakeTensor<int8_t, 2>(outputStateInfo, outputStateInVector);
+
+    // Output tensors
+    std::vector<int16_t> cellStateOutVector  = {-11692, 9960, 5491, 8861, -9422, 7726, 2056, 13149};
+    auto cellStateOutTensor  = MakeTensor<int16_t, 2>(cellStateInfo, cellStateOutVector);
+
+    std::vector<int8_t> outputVector;
+    outputVector.assign(outputExpected.data(), outputExpected.data() + (numBatches * outputSize));
+    ret.outputExpected = MakeTensor<int8_t, 2>(outputStateInfo, outputVector);
+
+    // Create tensor handles
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    armnn::QLstmQueueDescriptor data;
+    armnn::WorkloadInfo info;
+
+    // Add inputs and outputs to workload
+    AddInputToWorkload(data, info, inputInfo, inputHandle.get());
+    AddInputToWorkload(data, info, outputStateInfo, outputStateInHandle.get());
+    AddInputToWorkload(data, info, cellStateInfo, cellStateInHandle.get());
+
+    AddOutputToWorkload(data, info, outputStateInfo, outputStateOutHandle.get());
+    AddOutputToWorkload(data, info, cellStateInfo, cellStateOutHandle.get());
+    AddOutputToWorkload(data, info, outputStateInfo, outputHandle.get());
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({outputSize, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({outputSize, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({outputSize}, armnn::DataType::Signed32, biasScale, biasOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits}, armnn::DataType::QSymmS16, layerNormScale, layerNormOffset);
+
+    // Weights and bias tensor data
+    auto inputToForgetWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-77, -13, 38, 25, 115, -64, -25, -51, 38, -102, -51, 38, -64, -51, -77, 38, -51, -77, -64, -64});
+    auto inputToCellWeights   = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-51, -38, -25, -13, -64, 64, -25, -38, -25, -77, 77, -13, -51, -38, -89, 89, -115, -64, 102, 77});
+    auto inputToOutputWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-102, -51, -25, -115, -13, -89, 38, -38, -102, -25, 77, -25, 51, -89, -38, -64, 13, 64, -77, -51});
+
+    auto recurrentToForgetWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-64, -38, -64, -25, 77, 51, 115, 38, -13, 25, 64, 25, 25, 38, -13, 51});
+    auto recurrentToCellWeights   = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-38, 25, 13, -38, 102, -10, -25, 38, 102, -77, -13, 25, 38, -13, 25, 64});
+    auto recurrentToOutputWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {38, -13, 13, -25, -64, -89, -25, -77, -13, -51, -89, -25, 13, 64, 25, -38});
+
+    auto forgetGateBias = MakeTensor<int32_t, 1>(biasInfo, {2147484, -6442451, -4294968, 2147484});
+    auto cellBias       = MakeTensor<int32_t, 1>(biasInfo, {-1073742, 15461883, 5368709, 1717987});
+    auto outputGateBias = MakeTensor<int32_t, 1>(biasInfo, {1073742, -214748, 4294968, 2147484});
+
+    auto forgetLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {6553, 6553, 13107, 9830});
+    auto cellLayerNormWeights   = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {22937, 6553, 9830, 26214});
+    auto outputLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {19660, 6553, 6553, 16384});
+
+    // ScopedCpuTensorHandles
+    armnn::ScopedCpuTensorHandle inputToForgetWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToCellWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToOutputWeightsTensor(inputWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle recurrentToForgetWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToCellWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToOutputWeightsTensor(recurrentWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle forgetGateBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle cellBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle outputGateBiasTensor(biasInfo);
+
+    armnn::ScopedCpuTensorHandle forgetLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle cellLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle outputLayerNormWeightsTensor(layerNormWeightsInfo);
+
+    // Allocate and copy data
+    AllocateAndCopyDataToITensorHandle(&inputToForgetWeightsTensor, &inputToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToCellWeightsTensor, &inputToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToOutputWeightsTensor, &inputToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&recurrentToForgetWeightsTensor, &recurrentToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToCellWeightsTensor, &recurrentToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToOutputWeightsTensor, &recurrentToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&forgetGateBiasTensor, &forgetGateBias[0]);
+    AllocateAndCopyDataToITensorHandle(&cellBiasTensor, &cellBias[0]);
+    AllocateAndCopyDataToITensorHandle(&outputGateBiasTensor, &outputGateBias[0]);
+
+    AllocateAndCopyDataToITensorHandle(&forgetLayerNormWeightsTensor, &forgetLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&cellLayerNormWeightsTensor, &cellLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&outputLayerNormWeightsTensor, &outputLayerNormWeights[0]);
+
+    // Setup queue descriptor
+    data.m_InputToForgetWeights = &inputToForgetWeightsTensor;
+    data.m_InputToCellWeights = &inputToCellWeightsTensor;
+    data.m_InputToOutputWeights = &inputToOutputWeightsTensor;
+
+    data.m_RecurrentToForgetWeights = &recurrentToForgetWeightsTensor;
+    data.m_RecurrentToCellWeights = &recurrentToCellWeightsTensor;
+    data.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
+
+    data.m_ForgetGateBias = &forgetGateBiasTensor;
+    data.m_CellBias = &cellBiasTensor;
+    data.m_OutputGateBias = &outputGateBiasTensor;
+
+    data.m_ForgetLayerNormWeights = &forgetLayerNormWeightsTensor;
+    data.m_CellLayerNormWeights = &cellLayerNormWeightsTensor;
+    data.m_OutputLayerNormWeights = &outputLayerNormWeightsTensor;
+
+    data.m_Parameters.m_CifgEnabled = cifgEnabled;
+    data.m_Parameters.m_PeepholeEnabled = peepholeEnabled;
+    data.m_Parameters.m_ProjectionEnabled = projectionEnabled;
+    data.m_Parameters.m_LayerNormEnabled = layerNormEnabled;
+
+    data.m_Parameters.m_InputIntermediateScale = inputIntermediateScale;
+    data.m_Parameters.m_ForgetIntermediateScale = forgetIntermediateScale;
+    data.m_Parameters.m_CellIntermediateScale = cellIntermediateScale;
+    data.m_Parameters.m_OutputIntermediateScale = outputIntermediateScale;
+
+    data.m_Parameters.m_HiddenStateZeroPoint = hiddenStateZeroPoint;
+    data.m_Parameters.m_HiddenStateScale = hiddenStateScale;
+
+    data.m_Parameters.m_CellClip = cellClip;
+    data.m_Parameters.m_ProjectionClip = projectionClip;
+
+    // Create workload and allocate tensor handles
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateQLstm(data, info);
+    inputHandle->Allocate();
+    outputStateInHandle->Allocate();
+    cellStateInHandle->Allocate();
+
+    outputStateOutHandle->Allocate();
+    cellStateOutHandle->Allocate();
+    outputHandle->Allocate();
+
+    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0]);
+    CopyDataToITensorHandle(outputStateInHandle.get(), &outputStateInTensor[0][0]);
+    CopyDataToITensorHandle(cellStateInHandle.get(), &cellStateInTensor[0][0]);
+
+    workload->Execute();
+
+    CopyDataFromITensorHandle(&ret.output[0][0], outputHandle.get());
+
+    return ret;
+}
+
+// QLSTM: Projection, LayerNorm
+LayerTestResult<int8_t, 2> QLstmTestImpl1(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const boost::multi_array<int8_t, 2>& input,
+        const boost::multi_array<int8_t, 2>& outputExpected)
+{
+    IgnoreUnused(memoryManager);
+    unsigned int numBatches = 2;
+    unsigned int inputSize  = 5;
+    unsigned int outputSize = 3;
+    unsigned int numUnits   = 4;
+
+    bool cifgEnabled       = false;
+    bool peepholeEnabled   = false;
+    bool projectionEnabled = true;
+    bool layerNormEnabled  = true;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078125f;
+    int32_t inputOffset = 0;
+
+    int32_t hiddenStateZeroPoint = 0;
+    float hiddenStateScale       = 0.007f;
+
+    // if (!projectionEnabled) outputScale == hiddenStateScale
+    float outputScale    = 3.05176e-05f;
+    int32_t outputOffset = 0;
+
+    float cellStateScale    = 3.05176e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.00784314f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.05182e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    float projectionWeightsScale = 0.00392157f;
+
+    float inputIntermediateScale  = 0.007059f;
+    float forgetIntermediateScale = 0.007812f;
+    float cellIntermediateScale   = inputIntermediateScale;
+    float outputIntermediateScale = forgetIntermediateScale;
+
+    float cellClip       = 0.0f;
+    float projectionClip = 0.0f;
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    LayerTestResult<int8_t, 2> ret(outputStateInfo);
+
+    // Input tensors
+    std::vector<int8_t> inputVector;
+    inputVector.assign(input.data(), input.data() + (numBatches * inputSize));
+    auto inputTensor = MakeTensor<int8_t, 2>(inputInfo, inputVector);
+
+    std::vector<int16_t> cellStateInVector = {0, 0, 0, 0, 0, 0, 0, 0};
+    auto cellStateInTensor = MakeTensor<int16_t, 2>(cellStateInfo, cellStateInVector);
+
+    std::vector<int8_t> outputStateInVector = {0, 0, 0, 0, 0, 0};
+    auto outputStateInTensor = MakeTensor<int8_t, 2>(outputStateInfo, outputStateInVector);
+
+    // Output tensors
+    std::vector<int16_t> cellStateOutVector  = {-14650, 8939, 5771, 6715, -11843, 7847, 1508, 12939};
+    auto cellStateOutTensor  = MakeTensor<int16_t, 2>(cellStateInfo, cellStateOutVector);
+
+    std::vector<int8_t> outputVector;
+    outputVector.assign(outputExpected.data(), outputExpected.data() + (numBatches * outputSize));
+    ret.outputExpected = MakeTensor<int8_t, 2>(outputStateInfo, outputVector);
+
+    // Create tensor handles
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    armnn::QLstmQueueDescriptor data;
+    armnn::WorkloadInfo info;
+
+    // Add inputs and outputs to workload
+    AddInputToWorkload(data, info, inputInfo, inputHandle.get());
+    AddInputToWorkload(data, info, outputStateInfo, outputStateInHandle.get());
+    AddInputToWorkload(data, info, cellStateInfo, cellStateInHandle.get());
+
+    AddOutputToWorkload(data, info, outputStateInfo, outputStateOutHandle.get());
+    AddOutputToWorkload(data, info, cellStateInfo, cellStateOutHandle.get());
+    AddOutputToWorkload(data, info, outputStateInfo, outputHandle.get());
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({numUnits, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({numUnits, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({numUnits}, armnn::DataType::Signed32, biasScale, biasOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits}, armnn::DataType::QSymmS16, layerNormScale, layerNormOffset);
+
+    armnn::TensorInfo projectionWeightsInfo({outputSize, numUnits},
+                                            armnn::DataType::QSymmS8,
+                                            projectionWeightsScale,
+                                            0);
+
+    // Weights and bias tensor data
+    auto inputToInputWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {64, 77, 89, -102, -115, 13, 25, 38, -51, 64, -102, 89, -77, 64, -51, -64, -51, -38, -25, -13});
+    auto inputToForgetWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-77, -13, 38, 25, 115, -64, -25, -51, 38, -102, -51, 38, -64, -51, -77, 38, -51, -77, -64, -64});
+    auto inputToCellWeights   = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-51, -38, -25, -13, -64, 64, -25, -38, -25, -77, 77, -13, -51, -38, -89, 89, -115, -64, 102, 77});
+    auto inputToOutputWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-102, -51, -25, -115, -13, -89, 38, -38, -102, -25, 77, -25, 51, -89, -38, -64, 13, 64, -77, -51});
+
+    auto recurrentToInputWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-25, -38, 51, 13, -64, 115, -25, -38, -89, 6, -25, -77});
+    auto recurrentToForgetWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-64, -38, -64, -25, 77, 51, 115, 38, -13, 25, 64, 25});
+    auto recurrentToCellWeights   = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-38, 25, 13, -38, 102, -10, -25, 38, 102, -77, -13, 25});
+    auto recurrentToOutputWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {38, -13, 13, -25, -64, -89, -25, -77, -13, -51, -89, -25});
+
+    auto inputGateBias  = MakeTensor<int32_t, 1>(biasInfo, {644245, 3221226, 4724464, 8160438});
+    auto forgetGateBias = MakeTensor<int32_t, 1>(biasInfo, {2147484, -6442451, -4294968, 2147484});
+    auto cellBias       = MakeTensor<int32_t, 1>(biasInfo, {-1073742, 15461883, 5368709, 1717987});
+    auto outputGateBias = MakeTensor<int32_t, 1>(biasInfo, {1073742, -214748, 4294968, 2147484});
+
+    auto inputLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {3277, 6553, 9830, 16384});
+    auto forgetLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {6553, 6553, 13107, 9830});
+    auto cellLayerNormWeights   = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {22937, 6553, 9830, 26214});
+    auto outputLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {19660, 6553, 6553, 16384});
+
+    auto projectionWeights = MakeTensor<int8_t, 2>(projectionWeightsInfo,
+            {-25, 51, 3, -51, 25, 127, 77, 20, 18, 51, -102, 51});
+
+    // ScopedCpuTensorHandles
+    armnn::ScopedCpuTensorHandle inputToInputWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToForgetWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToCellWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToOutputWeightsTensor(inputWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle recurrentToInputWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToForgetWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToCellWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToOutputWeightsTensor(recurrentWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle inputGateBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle forgetGateBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle cellBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle outputGateBiasTensor(biasInfo);
+
+    armnn::ScopedCpuTensorHandle inputLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle forgetLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle cellLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle outputLayerNormWeightsTensor(layerNormWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle projectionWeightsTensor(projectionWeightsInfo);
+
+    // Allocate and copy data
+    AllocateAndCopyDataToITensorHandle(&inputToInputWeightsTensor, &inputToInputWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToForgetWeightsTensor, &inputToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToCellWeightsTensor, &inputToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToOutputWeightsTensor, &inputToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&recurrentToInputWeightsTensor, &recurrentToInputWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToForgetWeightsTensor, &recurrentToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToCellWeightsTensor, &recurrentToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToOutputWeightsTensor, &recurrentToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&inputGateBiasTensor, &inputGateBias[0]);
+    AllocateAndCopyDataToITensorHandle(&forgetGateBiasTensor, &forgetGateBias[0]);
+    AllocateAndCopyDataToITensorHandle(&cellBiasTensor, &cellBias[0]);
+    AllocateAndCopyDataToITensorHandle(&outputGateBiasTensor, &outputGateBias[0]);
+
+    AllocateAndCopyDataToITensorHandle(&inputLayerNormWeightsTensor, &inputLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&forgetLayerNormWeightsTensor, &forgetLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&cellLayerNormWeightsTensor, &cellLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&outputLayerNormWeightsTensor, &outputLayerNormWeights[0]);
+
+    AllocateAndCopyDataToITensorHandle(&projectionWeightsTensor, &projectionWeights[0][0]);
+
+    // Setup queue descriptor
+    data.m_InputToInputWeights = &inputToInputWeightsTensor;
+    data.m_InputToForgetWeights = &inputToForgetWeightsTensor;
+    data.m_InputToCellWeights = &inputToCellWeightsTensor;
+    data.m_InputToOutputWeights = &inputToOutputWeightsTensor;
+
+    data.m_RecurrentToInputWeights = &recurrentToInputWeightsTensor;
+    data.m_RecurrentToForgetWeights = &recurrentToForgetWeightsTensor;
+    data.m_RecurrentToCellWeights = &recurrentToCellWeightsTensor;
+    data.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
+
+    data.m_InputGateBias = &inputGateBiasTensor;
+    data.m_ForgetGateBias = &forgetGateBiasTensor;
+    data.m_CellBias = &cellBiasTensor;
+    data.m_OutputGateBias = &outputGateBiasTensor;
+
+    data.m_InputLayerNormWeights = &inputLayerNormWeightsTensor;
+    data.m_ForgetLayerNormWeights = &forgetLayerNormWeightsTensor;
+    data.m_CellLayerNormWeights = &cellLayerNormWeightsTensor;
+    data.m_OutputLayerNormWeights = &outputLayerNormWeightsTensor;
+
+    data.m_ProjectionWeights = &projectionWeightsTensor;
+
+    data.m_Parameters.m_CifgEnabled = cifgEnabled;
+    data.m_Parameters.m_PeepholeEnabled = peepholeEnabled;
+    data.m_Parameters.m_ProjectionEnabled = projectionEnabled;
+    data.m_Parameters.m_LayerNormEnabled = layerNormEnabled;
+
+    data.m_Parameters.m_InputIntermediateScale = inputIntermediateScale;
+    data.m_Parameters.m_ForgetIntermediateScale = forgetIntermediateScale;
+    data.m_Parameters.m_CellIntermediateScale = cellIntermediateScale;
+    data.m_Parameters.m_OutputIntermediateScale = outputIntermediateScale;
+
+    data.m_Parameters.m_HiddenStateZeroPoint = hiddenStateZeroPoint;
+    data.m_Parameters.m_HiddenStateScale = hiddenStateScale;
+
+    data.m_Parameters.m_CellClip = cellClip;
+    data.m_Parameters.m_ProjectionClip = projectionClip;
+
+    // Create workload and allocate tensor handles
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateQLstm(data, info);
+    inputHandle->Allocate();
+    outputStateInHandle->Allocate();
+    cellStateInHandle->Allocate();
+
+    outputStateOutHandle->Allocate();
+    cellStateOutHandle->Allocate();
+    outputHandle->Allocate();
+
+    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0]);
+    CopyDataToITensorHandle(outputStateInHandle.get(), &outputStateInTensor[0][0]);
+    CopyDataToITensorHandle(cellStateInHandle.get(), &cellStateInTensor[0][0]);
+
+    workload->Execute();
+
+    CopyDataFromITensorHandle(&ret.output[0][0], outputHandle.get());
+
+    return ret;
+}
+
+// QLSTM: Projection, CIFG, LayerNorm
+LayerTestResult<int8_t, 2> QLstmTestImpl2(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        const boost::multi_array<int8_t, 2>& input,
+        const boost::multi_array<int8_t, 2>& outputExpected)
+{
+    IgnoreUnused(memoryManager);
+    unsigned int numBatches = 2;
+    unsigned int inputSize  = 5;
+    unsigned int outputSize = 3;
+    unsigned int numUnits   = 4;
+
+    bool cifgEnabled       = true;
+    bool peepholeEnabled   = false;
+    bool projectionEnabled = true;
+    bool layerNormEnabled  = true;
+
+    // Scale/Offset quantization info
+    float inputScale    = 0.0078125f;
+    int32_t inputOffset = 0;
+
+    int32_t hiddenStateZeroPoint = 0;
+    float hiddenStateScale       = 0.007f;
+
+    // if (!projectionEnabled) outputScale == hiddenStateScale
+    float outputScale    = 3.05176e-05f;
+    int32_t outputOffset = 0;
+
+    float cellStateScale    = 3.05176e-05f;
+    int32_t cellStateOffset = 0;
+
+    float weightsScale    = 0.00784314f;
+    int32_t weightsOffset = 0;
+
+    float layerNormScale    = 3.05182e-05f;
+    int32_t layerNormOffset = 0;
+
+    float biasScale    = layerNormScale / 1024;
+    int32_t biasOffset = 0;
+
+    float projectionWeightsScale = 0.00392157f;
+
+    float inputIntermediateScale  = 0.007059f;
+    float forgetIntermediateScale = 0.007812f;
+    float cellIntermediateScale   = inputIntermediateScale;
+    float outputIntermediateScale = forgetIntermediateScale;
+
+    float cellClip       = 0.0f;
+    float projectionClip = 0.0f;
+
+    // Input/Output tensor info
+    armnn::TensorInfo inputInfo({numBatches , inputSize},
+                                armnn::DataType::QAsymmS8,
+                                inputScale,
+                                inputOffset);
+
+    armnn::TensorInfo cellStateInfo({numBatches , numUnits},
+                                    armnn::DataType::QSymmS16,
+                                    cellStateScale,
+                                    cellStateOffset);
+
+    armnn::TensorInfo outputStateInfo({numBatches , outputSize},
+                                      armnn::DataType::QAsymmS8,
+                                      outputScale,
+                                      outputOffset);
+
+    LayerTestResult<int8_t, 2> ret(outputStateInfo);
+
+    // Input tensors
+    std::vector<int8_t> inputVector;
+    inputVector.assign(input.data(), input.data() + (numBatches * inputSize));
+    auto inputTensor = MakeTensor<int8_t, 2>(inputInfo, inputVector);
+
+    std::vector<int16_t> cellStateInVector = {0, 0, 0, 0, 0, 0, 0, 0};
+    auto cellStateInTensor = MakeTensor<int16_t, 2>(cellStateInfo, cellStateInVector);
+
+    std::vector<int8_t> outputStateInVector = {0, 0, 0, 0, 0, 0};
+    auto outputStateInTensor = MakeTensor<int8_t, 2>(outputStateInfo, outputStateInVector);
+
+    // Output tensors
+    std::vector<int16_t> cellStateOutVector  = {-14650, 8939, 5771, 6715, -11843, 7847, 1508, 12939};
+    auto cellStateOutTensor  = MakeTensor<int16_t, 2>(cellStateInfo, cellStateOutVector);
+
+    std::vector<int8_t> outputVector;
+    outputVector.assign(outputExpected.data(), outputExpected.data() + (numBatches * outputSize));
+    ret.outputExpected = MakeTensor<int8_t, 2>(outputStateInfo, outputVector);
+
+    // Create tensor handles
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputStateInHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    std::unique_ptr<armnn::ITensorHandle> outputStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> cellStateOutHandle =
+            tensorHandleFactory.CreateTensorHandle(cellStateInfo);
+    std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputStateInfo);
+
+    armnn::QLstmQueueDescriptor data;
+    armnn::WorkloadInfo info;
+
+    // Add inputs and outputs to workload
+    AddInputToWorkload(data, info, inputInfo, inputHandle.get());
+    AddInputToWorkload(data, info, outputStateInfo, outputStateInHandle.get());
+    AddInputToWorkload(data, info, cellStateInfo, cellStateInHandle.get());
+
+    AddOutputToWorkload(data, info, outputStateInfo, outputStateOutHandle.get());
+    AddOutputToWorkload(data, info, cellStateInfo, cellStateOutHandle.get());
+    AddOutputToWorkload(data, info, outputStateInfo, outputHandle.get());
+
+    // Weights and bias tensor and quantization info
+    armnn::TensorInfo inputWeightsInfo({numUnits, inputSize},
+                                       armnn::DataType::QSymmS8,
+                                       weightsScale,
+                                       weightsOffset);
+
+    armnn::TensorInfo recurrentWeightsInfo({numUnits, outputSize},
+                                           armnn::DataType::QSymmS8,
+                                           weightsScale,
+                                           weightsOffset);
+
+    armnn::TensorInfo biasInfo({numUnits}, armnn::DataType::Signed32, biasScale, biasOffset);
+
+    armnn::TensorInfo layerNormWeightsInfo({numUnits}, armnn::DataType::QSymmS16, layerNormScale, layerNormOffset);
+
+    armnn::TensorInfo projectionWeightsInfo({outputSize, numUnits},
+                                            armnn::DataType::QSymmS8,
+                                            projectionWeightsScale,
+                                            0);
+
+    // Weights and bias tensor data
+    auto inputToForgetWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-77, -13, 38, 25, 115, -64, -25, -51, 38, -102, -51, 38, -64, -51, -77, 38, -51, -77, -64, -64});
+    auto inputToCellWeights   = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-51, -38, -25, -13, -64, 64, -25, -38, -25, -77, 77, -13, -51, -38, -89, 89, -115, -64, 102, 77});
+    auto inputToOutputWeights = MakeTensor<int8_t, 2>(inputWeightsInfo,
+            {-102, -51, -25, -115, -13, -89, 38, -38, -102, -25, 77, -25, 51, -89, -38, -64, 13, 64, -77, -51});
+
+    auto recurrentToForgetWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-64, -38, -64, -25, 77, 51, 115, 38, -13, 25, 64, 25});
+    auto recurrentToCellWeights   = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {-38, 25, 13, -38, 102, -10, -25, 38, 102, -77, -13, 25});
+    auto recurrentToOutputWeights = MakeTensor<int8_t, 2>(recurrentWeightsInfo,
+            {38, -13, 13, -25, -64, -89, -25, -77, -13, -51, -89, -25});
+
+    auto forgetGateBias = MakeTensor<int32_t, 1>(biasInfo, {2147484, -6442451, -4294968, 2147484});
+    auto cellBias       = MakeTensor<int32_t, 1>(biasInfo, {-1073742, 15461883, 5368709, 1717987});
+    auto outputGateBias = MakeTensor<int32_t, 1>(biasInfo, {1073742, -214748, 4294968, 2147484});
+
+    auto forgetLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {6553, 6553, 13107, 9830});
+    auto cellLayerNormWeights   = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {22937, 6553, 9830, 26214});
+    auto outputLayerNormWeights = MakeTensor<int16_t, 1>(layerNormWeightsInfo, {19660, 6553, 6553, 16384});
+
+    auto projectionWeights = MakeTensor<int8_t, 2>(projectionWeightsInfo,
+            {-25, 51, 3, -51, 25, 127, 77, 20, 18, 51, -102, 51});
+
+    // ScopedCpuTensorHandles
+    armnn::ScopedCpuTensorHandle inputToForgetWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToCellWeightsTensor(inputWeightsInfo);
+    armnn::ScopedCpuTensorHandle inputToOutputWeightsTensor(inputWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle recurrentToForgetWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToCellWeightsTensor(recurrentWeightsInfo);
+    armnn::ScopedCpuTensorHandle recurrentToOutputWeightsTensor(recurrentWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle forgetGateBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle cellBiasTensor(biasInfo);
+    armnn::ScopedCpuTensorHandle outputGateBiasTensor(biasInfo);
+
+    armnn::ScopedCpuTensorHandle forgetLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle cellLayerNormWeightsTensor(layerNormWeightsInfo);
+    armnn::ScopedCpuTensorHandle outputLayerNormWeightsTensor(layerNormWeightsInfo);
+
+    armnn::ScopedCpuTensorHandle projectionWeightsTensor(projectionWeightsInfo);
+
+    // Allocate and copy data
+    AllocateAndCopyDataToITensorHandle(&inputToForgetWeightsTensor, &inputToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToCellWeightsTensor, &inputToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&inputToOutputWeightsTensor, &inputToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&recurrentToForgetWeightsTensor, &recurrentToForgetWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToCellWeightsTensor, &recurrentToCellWeights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&recurrentToOutputWeightsTensor, &recurrentToOutputWeights[0][0]);
+
+    AllocateAndCopyDataToITensorHandle(&forgetGateBiasTensor, &forgetGateBias[0]);
+    AllocateAndCopyDataToITensorHandle(&cellBiasTensor, &cellBias[0]);
+    AllocateAndCopyDataToITensorHandle(&outputGateBiasTensor, &outputGateBias[0]);
+
+    AllocateAndCopyDataToITensorHandle(&forgetLayerNormWeightsTensor, &forgetLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&cellLayerNormWeightsTensor, &cellLayerNormWeights[0]);
+    AllocateAndCopyDataToITensorHandle(&outputLayerNormWeightsTensor, &outputLayerNormWeights[0]);
+
+    AllocateAndCopyDataToITensorHandle(&projectionWeightsTensor, &projectionWeights[0][0]);
+
+    // Setup queue descriptor
+    data.m_InputToForgetWeights = &inputToForgetWeightsTensor;
+    data.m_InputToCellWeights = &inputToCellWeightsTensor;
+    data.m_InputToOutputWeights = &inputToOutputWeightsTensor;
+
+    data.m_RecurrentToForgetWeights = &recurrentToForgetWeightsTensor;
+    data.m_RecurrentToCellWeights = &recurrentToCellWeightsTensor;
+    data.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
+
+    data.m_ForgetGateBias = &forgetGateBiasTensor;
+    data.m_CellBias = &cellBiasTensor;
+    data.m_OutputGateBias = &outputGateBiasTensor;
+
+    data.m_ForgetLayerNormWeights = &forgetLayerNormWeightsTensor;
+    data.m_CellLayerNormWeights = &cellLayerNormWeightsTensor;
+    data.m_OutputLayerNormWeights = &outputLayerNormWeightsTensor;
+
+    data.m_ProjectionWeights = &projectionWeightsTensor;
+
+    data.m_Parameters.m_CifgEnabled = cifgEnabled;
+    data.m_Parameters.m_PeepholeEnabled = peepholeEnabled;
+    data.m_Parameters.m_ProjectionEnabled = projectionEnabled;
+    data.m_Parameters.m_LayerNormEnabled = layerNormEnabled;
+
+    data.m_Parameters.m_InputIntermediateScale = inputIntermediateScale;
+    data.m_Parameters.m_ForgetIntermediateScale = forgetIntermediateScale;
+    data.m_Parameters.m_CellIntermediateScale = cellIntermediateScale;
+    data.m_Parameters.m_OutputIntermediateScale = outputIntermediateScale;
+
+    data.m_Parameters.m_HiddenStateZeroPoint = hiddenStateZeroPoint;
+    data.m_Parameters.m_HiddenStateScale = hiddenStateScale;
+
+    data.m_Parameters.m_CellClip = cellClip;
+    data.m_Parameters.m_ProjectionClip = projectionClip;
+
+    // Create workload and allocate tensor handles
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateQLstm(data, info);
+    inputHandle->Allocate();
+    outputStateInHandle->Allocate();
+    cellStateInHandle->Allocate();
+
+    outputStateOutHandle->Allocate();
+    cellStateOutHandle->Allocate();
+    outputHandle->Allocate();
+
+    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0]);
+    CopyDataToITensorHandle(outputStateInHandle.get(), &outputStateInTensor[0][0]);
+    CopyDataToITensorHandle(cellStateInHandle.get(), &cellStateInTensor[0][0]);
+
+    workload->Execute();
+
+    CopyDataFromITensorHandle(&ret.output[0][0], outputHandle.get());
+
+    return ret;
+}
+
 
 } // anonymous namespace
 
@@ -1887,7 +2660,8 @@ void LstmUtilsVectorBatchVectorAddTest()
 
 LayerTestResult<float, 2> LstmLayerFloat32WithCifgWithPeepholeNoProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputDesc({ 2, 2 }, armnn::DataType::Float32);
     boost::multi_array<float, 2> input = MakeTensor<float, 2>(inputDesc, std::vector<float>(
@@ -1898,12 +2672,13 @@ LayerTestResult<float, 2> LstmLayerFloat32WithCifgWithPeepholeNoProjectionTest(
             {-0.36444446f, -0.00352185f, 0.12886585f, -0.05163646f,
              -0.42734814f, -0.00478661f,  0.13455015f, -0.03560682f}));
     return LstmLayerWithCifgWithPeepholeNoProjectionTestImpl<armnn::DataType::Float32>(
-        workloadFactory, memoryManager, input, expectedOutput);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
 }
 
 LayerTestResult<float, 2> LstmLayerFloat32NoCifgWithPeepholeWithProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputDesc({ 2, 5 }, armnn::DataType::Float32);
     boost::multi_array<float, 2> input = MakeTensor<float, 2>(inputDesc, std::vector<float>(
@@ -1920,12 +2695,13 @@ LayerTestResult<float, 2> LstmLayerFloat32NoCifgWithPeepholeWithProjectionTest(
              0.00223253f,   -0.00957321f, 0.0210624f,   0.013331f,    0.0150954f,
              0.02168f}));
     return LstmLayerNoCifgWithPeepholeWithProjectionTestImpl<armnn::DataType::Float32>(
-        workloadFactory, memoryManager, input, expectedOutput);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
 }
 
 LayerTestResult<float, 2> LstmLayerFloat32NoCifgNoPeepholeNoProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputDesc({2, 2}, armnn::DataType::Float32);
     boost::multi_array<float, 2> input = MakeTensor<float, 2>(inputDesc, std::vector<float>(
@@ -1937,12 +2713,13 @@ LayerTestResult<float, 2> LstmLayerFloat32NoCifgNoPeepholeNoProjectionTest(
               -0.0185422f,   0.11281417f,  0.24466537f, -0.1826292f}}));
 
     return LstmNoCifgNoPeepholeNoProjectionTestImpl<armnn::DataType::Float32>(
-        workloadFactory, memoryManager, input, expectedOutput);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
 }
 
 LayerTestResult<float, 2> LstmLayerFloat32NoCifgWithPeepholeWithProjectionWithLayerNormTest(
-        armnn::IWorkloadFactory& workloadFactory,
-        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputDesc({ 2, 5 }, armnn::DataType::Float32);
     boost::multi_array<float, 2> input = MakeTensor<float, 2>(inputDesc, std::vector<float>(
@@ -1954,12 +2731,13 @@ LayerTestResult<float, 2> LstmLayerFloat32NoCifgWithPeepholeWithProjectionWithLa
             {  0.0244077f,  0.128027f, -0.00170918f,    //batch 0
              -0.00692428f, 0.0848741f,    0.063445f})); //batch 1
     return LstmLayerNoCifgWithPeepholeWithProjectionWithLayerNormTestImpl<armnn::DataType::Float32>(
-            workloadFactory, memoryManager, input, expectedOutput);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
 }
 
 LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgNoPeepholeNoProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const float qScale = 1.0f;
     const int32_t qOffset = 0;
@@ -1983,13 +2761,14 @@ LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgNoPeepholeNoProjectionTest(
             qScale, qOffset));
 
     return LstmNoCifgNoPeepholeNoProjectionTestImpl<datatype>(
-        workloadFactory, memoryManager, input, expectedOutput, qScale, qOffset, constantDatatype);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput, qScale, qOffset, constantDatatype);
 
 }
 
 LayerTestResult<int16_t, 2> LstmLayerInt16WithCifgWithPeepholeNoProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const float qScale = 1.0f;
     const int32_t qOffset = 0;
@@ -2015,12 +2794,13 @@ LayerTestResult<int16_t, 2> LstmLayerInt16WithCifgWithPeepholeNoProjectionTest(
                 qScale, qOffset));
 
     return LstmLayerWithCifgWithPeepholeNoProjectionTestImpl<datatype>(
-        workloadFactory, memoryManager, input, expectedOutput, qScale, qOffset, constantDatatype);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput, qScale, qOffset, constantDatatype);
 }
 
 LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgWithPeepholeWithProjectionTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const float qScale = 2.0f;
     const int32_t qOffset = 0;
@@ -2057,12 +2837,13 @@ LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgWithPeepholeWithProjectionTest(
                 qScale, qOffset));
 
     return LstmLayerNoCifgWithPeepholeWithProjectionTestImpl<datatype>(
-        workloadFactory, memoryManager, input, expectedOutput, qScale, qOffset, constantDatatype);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput, qScale, qOffset, constantDatatype);
 }
 
 LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgNoPeepholeNoProjectionInt16ConstantTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     const float qScale = 1.0f;
     const int32_t qOffset = 0;
@@ -2086,7 +2867,7 @@ LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgNoPeepholeNoProjectionInt16Const
                 qScale, qOffset));
 
     return LstmNoCifgNoPeepholeNoProjectionTestImpl<datatype>(
-        workloadFactory, memoryManager, input, expectedOutput, qScale, qOffset, datatype);
+        workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput, qScale, qOffset, datatype);
 }
 
 //
@@ -2095,7 +2876,8 @@ LayerTestResult<int16_t, 2> LstmLayerInt16NoCifgNoPeepholeNoProjectionInt16Const
 
 LayerTestResult<uint8_t, 2> QuantizedLstmTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
 {
     armnn::TensorInfo inputDesc({2, 2}, armnn::DataType::QAsymmU8);
     boost::multi_array<uint8_t, 2> input = MakeTensor<uint8_t, 2>(inputDesc, std::vector<uint8_t>(
@@ -2105,5 +2887,54 @@ LayerTestResult<uint8_t, 2> QuantizedLstmTest(
     boost::multi_array<uint8_t, 2> expectedOutput = MakeTensor<uint8_t, 2>(outputDesc, std::vector<uint8_t>(
         {140, 151, 146, 112, 136, 156, 142, 112 }));
 
-    return QuantizedLstmTestImpl(workloadFactory, memoryManager, input, expectedOutput);
+    return QuantizedLstmTestImpl(workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
+}
+
+// QLSTM
+LayerTestResult<int8_t, 2> QLstmTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    armnn::TensorInfo inputDesc({2, 5}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> input = MakeTensor<int8_t, 2>(inputDesc, std::vector<int8_t>(
+            {90, 102, 13, 26, 38, 102, 13, 26, 51, 64}));
+
+    armnn::TensorInfo outputDesc({2, 4}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> expectedOutput = MakeTensor<int8_t, 2>(outputDesc, std::vector<int8_t>(
+            {-15, 21, 14, 20, -15, 15, 5, 27}));
+
+    return QLstmTestImpl(workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
+}
+
+LayerTestResult<int8_t, 2> QLstmTest1(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    armnn::TensorInfo inputDesc({2, 5}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> input = MakeTensor<int8_t, 2>(inputDesc, std::vector<int8_t>(
+            {90, 102, 13, 26, 38, 102, 13, 26, 51, 64}));
+
+    armnn::TensorInfo outputDesc({2, 3}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> expectedOutput = MakeTensor<int8_t, 2>(outputDesc, std::vector<int8_t>(
+            {127, 127, -108, -67, 127, 127}));
+
+    return QLstmTestImpl1(workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
+}
+
+LayerTestResult<int8_t, 2> QLstmTest2(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    armnn::TensorInfo inputDesc({2, 5}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> input = MakeTensor<int8_t, 2>(inputDesc, std::vector<int8_t>(
+            {90, 102, 13, 26, 38, 102, 13, 26, 51, 64}));
+
+    armnn::TensorInfo outputDesc({2, 3}, armnn::DataType::QAsymmS8);
+    boost::multi_array<int8_t, 2> expectedOutput = MakeTensor<int8_t, 2>(outputDesc, std::vector<int8_t>(
+            {127, 127, 127, -128, 127, 127}));
+
+    return QLstmTestImpl2(workloadFactory, memoryManager, tensorHandleFactory, input, expectedOutput);
 }

@@ -9,6 +9,8 @@
 #include <cl/ClLayerSupport.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
+#include <armnn/utility/NumericCast.hpp>
+
 #include <arm_compute/runtime/CL/functions/CLLSTMLayer.h>
 
 #include "ClWorkloadUtils.hpp"
@@ -124,7 +126,7 @@ ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor &descriptor, 
 
     const arm_compute::ICLTensor& input           = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     const arm_compute::ICLTensor& output_state_in = static_cast<IClTensorHandle*>(m_Data.m_Inputs[1])->GetTensor();
-    const arm_compute::ICLTensor& cell_state_in   = static_cast<IClTensorHandle*>(m_Data.m_Inputs[2])->GetTensor();
+    arm_compute::ICLTensor& cell_state_in         = static_cast<IClTensorHandle*>(m_Data.m_Inputs[2])->GetTensor();
 
     arm_compute::ICLTensor& output_state_out      = static_cast<IClTensorHandle*>(m_Data.m_Outputs[1])->GetTensor();
     arm_compute::ICLTensor& cell_state_out        = static_cast<IClTensorHandle*>(m_Data.m_Outputs[2])->GetTensor();
@@ -132,8 +134,8 @@ ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor &descriptor, 
 
     // Get the batch_size and the num_units from the cellStateIn dimensions
     const TensorInfo& inputTensorInfo = info.m_InputTensorInfos[2];
-    const unsigned int batch_size = boost::numeric_cast<unsigned int>(inputTensorInfo.GetShape()[0]);
-    const unsigned int num_units  = boost::numeric_cast<unsigned int>(inputTensorInfo.GetShape()[1]);
+    const unsigned int batch_size = armnn::numeric_cast<unsigned int>(inputTensorInfo.GetShape()[0]);
+    const unsigned int num_units  = armnn::numeric_cast<unsigned int>(inputTensorInfo.GetShape()[1]);
 
     m_ScratchBuffer = std::make_unique<arm_compute::CLTensor>();
     if (m_Data.m_Parameters.m_CifgEnabled)

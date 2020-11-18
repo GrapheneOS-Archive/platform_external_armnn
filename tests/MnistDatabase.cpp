@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
@@ -6,8 +6,6 @@
 
 #include <armnn/Logging.hpp>
 
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/assert.hpp>
 #include <fstream>
 #include <vector>
 
@@ -94,7 +92,8 @@ std::unique_ptr<MnistDatabase::TTestCaseData> MnistDatabase::GetTestCaseData(uns
 
     for (unsigned int i = 0; i < col * row; ++i)
     {
-        inputImageData[i] = boost::numeric_cast<float>(I[i]);
+        // Static_cast of unsigned char is safe with float
+        inputImageData[i] = static_cast<float>(I[i]);
 
         if(m_ScaleValues)
         {

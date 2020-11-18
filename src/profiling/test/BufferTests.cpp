@@ -1,11 +1,13 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "BufferManager.hpp"
 #include "PacketBuffer.hpp"
 #include "ProfilingUtils.hpp"
+
+#include <common/include/SwTrace.hpp>
 
 #include <armnn/Exceptions.hpp>
 
@@ -146,6 +148,21 @@ BOOST_AUTO_TEST_CASE(BufferExhaustionTest)
     BOOST_TEST(packetBuffer.get());
 
     // Cannot reserve buffer when buffer is not available
+    // NOTE: because the buffer manager now has surge capacity of
+    //       initial size * 3 we should be able to reserve three
+    //       buffers before exhaustion
+    packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+    // Successfully reserved the second buffer with requested size
+    BOOST_TEST(reservedSize == 512);
+    BOOST_TEST(packetBuffer.get());
+
+    packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+    // Successfully reserved the third buffer with requested size
+    BOOST_TEST(reservedSize == 512);
+    BOOST_TEST(packetBuffer.get());
+
     auto reservedBuffer = bufferManager.Reserve(512, reservedSize);
     BOOST_TEST(reservedSize == 0);
     BOOST_TEST(!reservedBuffer.get());
@@ -175,6 +192,19 @@ BOOST_AUTO_TEST_CASE(BufferReserveMultipleTest)
     BOOST_TEST(reservedSize2 == 512);
     BOOST_TEST(packetBuffer2.get());
 
+    // NOTE: the buffer now has a surge capacity of initial size * 3
+    //       so we can grab 9 of them prior to exhaustion now
+    for (unsigned int i = 0; i < 6 ; ++i)
+    {
+        // grab another six buffers to exhaust the surge capacity
+        unsigned int reservedSize = 0;
+        auto packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+        // Successfully reserved the third buffer with requested size
+        BOOST_TEST(reservedSize == 512);
+        BOOST_TEST(packetBuffer.get());
+    }
+
     // Cannot reserve when buffer is not available
     unsigned int reservedSize3 = 0;
     auto reservedBuffer = bufferManager.Reserve(512, reservedSize3);
@@ -198,6 +228,20 @@ BOOST_AUTO_TEST_CASE(BufferReleaseTest)
     // Successfully reserved the buffer with requested size
     BOOST_TEST(reservedSize1 == 128);
     BOOST_TEST(packetBuffer1.get());
+
+    // NOTE: now that we have a surge capacity of up to
+    //       initial size * 3 we need to allocate four more
+    //       buffers to exhaust the manager
+    for (unsigned int i = 0; i < 4 ; ++i)
+    {
+        // grab another six buffers to exhaust the surge capacity
+        unsigned int reservedSize = 0;
+        auto packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+        // Successfully reserved the third buffer with requested size
+        BOOST_TEST(reservedSize == 512);
+        BOOST_TEST(packetBuffer.get());
+    }
 
     // Cannot reserve when buffer is not available
     unsigned int reservedSize2 = 0;
@@ -228,6 +272,20 @@ BOOST_AUTO_TEST_CASE(BufferCommitTest)
 
     BOOST_TEST(reservedSize1 == 128);
     BOOST_TEST(packetBuffer1.get());
+
+    // NOTE: now that we have a surge capacity of up to
+    //       initial size * 3 we need to allocate four more
+    //       buffers to exhaust the manager
+    for (unsigned int i = 0; i < 4 ; ++i)
+    {
+        // grab another six buffers to exhaust the surge capacity
+        unsigned int reservedSize = 0;
+        auto packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+        // Successfully reserved the third buffer with requested size
+        BOOST_TEST(reservedSize == 512);
+        BOOST_TEST(packetBuffer.get());
+    }
 
     unsigned int reservedSize2 = 0;
     auto reservedBuffer = bufferManager.Reserve(512, reservedSize2);
@@ -263,6 +321,20 @@ BOOST_AUTO_TEST_CASE(BufferMarkReadTest)
     BOOST_TEST(reservedSize1 == 128);
     BOOST_TEST(packetBuffer1.get());
 
+    // NOTE: now that we have a surge capacity of up to
+    //       initial size * 3 we need to allocate four more
+    //       buffers to exhaust the manager
+    for (unsigned int i = 0; i < 4 ; ++i)
+    {
+        // grab another six buffers to exhaust the surge capacity
+        unsigned int reservedSize = 0;
+        auto packetBuffer = bufferManager.Reserve(512, reservedSize);
+
+        // Successfully reserved the third buffer with requested size
+        BOOST_TEST(reservedSize == 512);
+        BOOST_TEST(packetBuffer.get());
+    }
+
     // Cannot reserve when buffer is not available
     unsigned int reservedSize2 = 0;
     auto reservedBuffer = bufferManager.Reserve(512, reservedSize2);
@@ -291,6 +363,50 @@ BOOST_AUTO_TEST_CASE(BufferMarkReadTest)
 
     BOOST_TEST(reservedSize3 == 56);
     BOOST_TEST(packetBuffer3.get());
+}
+
+BOOST_AUTO_TEST_CASE(ReadSwTraceMessageExceptionTest0)
+{
+    IPacketBufferPtr packetBuffer = std::make_unique<PacketBuffer>(512);
+
+    BOOST_TEST(packetBuffer->GetSize() == 0);
+
+    // Write zero data to the buffer
+    WriteUint32(packetBuffer, 0, 0);
+    WriteUint32(packetBuffer, 4, 0);
+    WriteUint32(packetBuffer, 8, 0);
+    WriteUint32(packetBuffer, 12, 0);
+
+    // Commit
+    packetBuffer->Commit(16);
+
+    unsigned int uint32_t_size = sizeof(uint32_t);
+    unsigned int offset = uint32_t_size;
+    BOOST_CHECK_THROW(arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(), offset, packetBuffer->GetSize()),
+                      arm::pipe::ProfilingException);
+
+}
+
+BOOST_AUTO_TEST_CASE(ReadSwTraceMessageExceptionTest1)
+{
+    IPacketBufferPtr packetBuffer = std::make_unique<PacketBuffer>(512);
+
+    BOOST_TEST(packetBuffer->GetSize() == 0);
+
+    // Write data to the buffer
+    WriteUint32(packetBuffer, 0, 10);
+    WriteUint32(packetBuffer, 4, 20);
+    WriteUint32(packetBuffer, 8, 30);
+    WriteUint32(packetBuffer, 12, 40);
+
+    // Commit
+    packetBuffer->Commit(16);
+
+    unsigned int uint32_t_size = sizeof(uint32_t);
+    unsigned int offset = uint32_t_size;
+    BOOST_CHECK_THROW(arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(), offset, packetBuffer->GetSize()),
+                      arm::pipe::ProfilingException);
+
 }
 
 BOOST_AUTO_TEST_SUITE_END()

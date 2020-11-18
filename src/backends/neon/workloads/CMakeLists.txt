@@ -1,5 +1,5 @@
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -16,12 +16,18 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonBatchNormalizationWorkload.hpp
     NeonBatchToSpaceNdWorkload.cpp
     NeonBatchToSpaceNdWorkload.hpp
+    NeonComparisonWorkload.cpp
+    NeonComparisonWorkload.hpp
     NeonConcatWorkload.cpp
     NeonConcatWorkload.hpp
     NeonConstantWorkload.cpp
     NeonConstantWorkload.hpp
+    NeonConvertBf16ToFp32Workload.cpp
+    NeonConvertBf16ToFp32Workload.hpp
     NeonConvertFp16ToFp32Workload.cpp
     NeonConvertFp16ToFp32Workload.hpp
+    NeonConvertFp32ToBf16Workload.cpp
+    NeonConvertFp32ToBf16Workload.hpp
     NeonConvertFp32ToFp16Workload.cpp
     NeonConvertFp32ToFp16Workload.hpp
     NeonConvolution2dWorkload.cpp
@@ -34,18 +40,24 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonDequantizeWorkload.hpp
     NeonDetectionPostProcessWorkload.cpp
     NeonDetectionPostProcessWorkload.hpp
+    NeonExpWorkload.cpp
+    NeonExpWorkload.hpp
+    NeonFillWorkload.cpp
+    NeonFillWorkload.hpp
     NeonFloorFloatWorkload.cpp
     NeonFloorFloatWorkload.hpp
     NeonFullyConnectedWorkload.cpp
     NeonFullyConnectedWorkload.hpp
-    NeonGreaterWorkload.cpp
-    NeonGreaterWorkload.hpp
+    NeonGatherWorkload.cpp
+    NeonGatherWorkload.hpp
     NeonInstanceNormalizationWorkload.cpp
     NeonInstanceNormalizationWorkload.hpp
     NeonL2NormalizationFloatWorkload.cpp
     NeonL2NormalizationFloatWorkload.hpp
     NeonLstmFloatWorkload.cpp
     NeonLstmFloatWorkload.hpp
+    NeonLogSoftmaxWorkload.cpp
+    NeonLogSoftmaxWorkload.hpp
     NeonMaximumWorkload.cpp
     NeonMaximumWorkload.hpp
     NeonMeanWorkload.cpp
@@ -56,6 +68,8 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonMultiplicationWorkload.hpp
     NeonDivisionWorkload.cpp
     NeonDivisionWorkload.hpp
+    NeonNegWorkload.cpp
+    NeonNegWorkload.hpp
     NeonNormalizationFloatWorkload.cpp
     NeonNormalizationFloatWorkload.hpp
     NeonPadWorkload.cpp
@@ -66,6 +80,8 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonPooling2dWorkload.hpp
     NeonPreluWorkload.cpp
     NeonPreluWorkload.hpp
+    NeonQLstmWorkload.cpp
+    NeonQLstmWorkload.hpp
     NeonQuantizedLstmWorkload.cpp
     NeonQuantizedLstmWorkload.hpp
     NeonQuantizeWorkload.cpp
@@ -78,12 +94,8 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonRsqrtWorkload.hpp
     NeonSliceWorkload.cpp
     NeonSliceWorkload.hpp
-    NeonSoftmaxBaseWorkload.cpp
-    NeonSoftmaxBaseWorkload.hpp
-    NeonSoftmaxFloatWorkload.cpp
-    NeonSoftmaxFloatWorkload.hpp
-    NeonSoftmaxUint8Workload.cpp
-    NeonSoftmaxUint8Workload.hpp
+    NeonSoftmaxWorkload.cpp
+    NeonSoftmaxWorkload.hpp
     NeonSpaceToBatchNdWorkload.cpp
     NeonSpaceToBatchNdWorkload.hpp
     NeonSpaceToDepthWorkload.cpp
@@ -98,6 +110,8 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonSubtractionWorkload.hpp
     NeonTransposeConvolution2dWorkload.cpp
     NeonTransposeConvolution2dWorkload.hpp
+    NeonTransposeWorkload.cpp
+    NeonTransposeWorkload.hpp
     NeonWorkloads.hpp
     NeonWorkloadUtils.hpp
 )
@@ -107,3 +121,4 @@ target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DI
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/armnnUtils)
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
+target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)

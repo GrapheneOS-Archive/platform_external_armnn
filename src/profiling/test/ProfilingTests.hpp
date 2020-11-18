@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,12 +8,14 @@
 #include "ProfilingMocks.hpp"
 
 #include <armnn/Logging.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <CommandHandlerFunctor.hpp>
 #include <IProfilingConnection.hpp>
 #include <ProfilingService.hpp>
 
-#include <boost/polymorphic_cast.hpp>
+#include <common/include/CommandHandlerFunctor.hpp>
+
+
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
@@ -77,19 +79,19 @@ public:
 
     bool WritePacket(const unsigned char* buffer, uint32_t length) override
     {
-        boost::ignore_unused(buffer, length);
+        IgnoreUnused(buffer, length);
 
         return false;
     }
 
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
         // First time we're called return a connection ack packet. After that always timeout.
         if (m_FirstCall)
         {
             m_FirstCall = false;
             // Return connection acknowledged packet
-            return Packet(65536);
+            return arm::pipe::Packet(65536);
         }
         else
         {
@@ -108,7 +110,7 @@ public:
         : m_ReadRequests(0)
     {}
 
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
         // Return connection acknowledged packet after three timeouts
         if (m_ReadRequests % 3 == 0)
@@ -118,7 +120,7 @@ public:
             throw armnn::TimeoutException("Simulate a timeout error\n");
         }
 
-        return Packet(65536);
+        return arm::pipe::Packet(65536);
     }
 
     int ReadCalledCount()
@@ -137,9 +139,9 @@ public:
         : m_ReadRequests(0)
     {}
 
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        boost::ignore_unused(timeout);
+        IgnoreUnused(timeout);
         ++m_ReadRequests;
         throw armnn::Exception("Simulate a non-timeout error");
     }
@@ -156,9 +158,9 @@ private:
 class TestProfilingConnectionBadAckPacket : public TestProfilingConnectionBase
 {
 public:
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        boost::ignore_unused(timeout);
+        IgnoreUnused(timeout);
         // Connection Acknowledged Packet header (word 0, word 1 is always zero):
         // 26:31 [6]  packet_family: Control Packet Family, value 0b000000
         // 16:25 [10] packet_id: Packet identifier, value 0b0000000001
@@ -168,20 +170,20 @@ public:
         uint32_t packetId     = 37;    // Wrong packet id!!!
         uint32_t header       = ((packetFamily & 0x0000003F) << 26) | ((packetId & 0x000003FF) << 16);
 
-        return Packet(header);
+        return arm::pipe::Packet(header);
     }
 };
 
-class TestFunctorA : public CommandHandlerFunctor
+class TestFunctorA : public arm::pipe::CommandHandlerFunctor
 {
 public:
     using CommandHandlerFunctor::CommandHandlerFunctor;
 
     int GetCount() { return m_Count; }
 
-    void operator()(const Packet& packet) override
+    void operator()(const arm::pipe::Packet& packet) override
     {
-        boost::ignore_unused(packet);
+        IgnoreUnused(packet);
         m_Count++;
     }
 
@@ -204,13 +206,15 @@ class SwapProfilingConnectionFactoryHelper : public ProfilingService
 public:
     using MockProfilingConnectionFactoryPtr = std::unique_ptr<MockProfilingConnectionFactory>;
 
-    SwapProfilingConnectionFactoryHelper()
+    SwapProfilingConnectionFactoryHelper(armnn::profiling::ProfilingService& profilingService)
         : ProfilingService()
+        , m_ProfilingService(profilingService)
         , m_MockProfilingConnectionFactory(new MockProfilingConnectionFactory())
         , m_BackupProfilingConnectionFactory(nullptr)
+
     {
         BOOST_CHECK(m_MockProfilingConnectionFactory);
-        SwapProfilingConnectionFactory(ProfilingService::Instance(),
+        SwapProfilingConnectionFactory(m_ProfilingService,
                                        m_MockProfilingConnectionFactory.get(),
                                        m_BackupProfilingConnectionFactory);
         BOOST_CHECK(m_BackupProfilingConnectionFactory);
@@ -219,20 +223,20 @@ public:
     {
         BOOST_CHECK(m_BackupProfilingConnectionFactory);
         IProfilingConnectionFactory* temp = nullptr;
-        SwapProfilingConnectionFactory(ProfilingService::Instance(),
+        SwapProfilingConnectionFactory(m_ProfilingService,
                                        m_BackupProfilingConnectionFactory,
                                        temp);
     }
 
     MockProfilingConnection* GetMockProfilingConnection()
     {
-        IProfilingConnection* profilingConnection = GetProfilingConnection(ProfilingService::Instance());
-        return boost::polymorphic_downcast<MockProfilingConnection*>(profilingConnection);
+        IProfilingConnection* profilingConnection = GetProfilingConnection(m_ProfilingService);
+        return PolymorphicDowncast<MockProfilingConnection*>(profilingConnection);
     }
 
     void ForceTransitionToState(ProfilingState newState)
     {
-        TransitionToState(ProfilingService::Instance(), newState);
+        TransitionToState(m_ProfilingService, newState);
     }
 
     long WaitForPacketsSent(MockProfilingConnection* mockProfilingConnection,
@@ -240,14 +244,14 @@ public:
                             uint32_t length = 0,
                             uint32_t timeout  = 1000)
     {
-        long packetCount = mockProfilingConnection->CheckForPacket({packetType, length});
+        long packetCount = mockProfilingConnection->CheckForPacket({ packetType, length });
         // The first packet we receive may not be the one we are looking for, so keep looping until till we find it,
         // or until WaitForPacketsSent times out
         while(packetCount == 0 && timeout != 0)
         {
             std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
             // Wait for a notification from the send thread
-            ProfilingService::WaitForPacketSent(ProfilingService::Instance(), timeout);
+            ProfilingService::WaitForPacketSent(m_ProfilingService, timeout);
 
             std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
@@ -268,6 +272,7 @@ public:
     }
 
 private:
+    armnn::profiling::ProfilingService& m_ProfilingService;
     MockProfilingConnectionFactoryPtr m_MockProfilingConnectionFactory;
     IProfilingConnectionFactory* m_BackupProfilingConnectionFactory;
 };

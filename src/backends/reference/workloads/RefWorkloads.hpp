@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,7 +22,9 @@
 #include "RefConvolution2dWorkload.hpp"
 #include "RefConstantWorkload.hpp"
 #include "RefConcatWorkload.hpp"
+#include "RefConvertBf16ToFp32Workload.hpp"
 #include "RefConvertFp16ToFp32Workload.hpp"
+#include "RefConvertFp32ToBf16Workload.hpp"
 #include "RefConvertFp32ToFp16Workload.hpp"
 #include "RefDebugWorkload.hpp"
 #include "RefDepthToSpaceWorkload.hpp"
@@ -32,12 +34,15 @@
 #include "RefDequantizeWorkload.hpp"
 #include "RefElementwiseWorkload.hpp"
 #include "RefElementwiseUnaryWorkload.hpp"
+#include "RefFillWorkload.hpp"
 #include "RefFullyConnectedWorkload.hpp"
 #include "RefFloorWorkload.hpp"
 #include "RefFakeQuantizationFloat32Workload.hpp"
 #include "RefGatherWorkload.hpp"
 #include "RefInstanceNormalizationWorkload.hpp"
 #include "RefL2NormalizationWorkload.hpp"
+#include "RefLogicalBinaryWorkload.hpp"
+#include "RefLogicalUnaryWorkload.hpp"
 #include "RefLogSoftmaxWorkload.hpp"
 #include "RefLstmWorkload.hpp"
 #include "RefMeanWorkload.hpp"
@@ -46,7 +51,9 @@
 #include "RefPermuteWorkload.hpp"
 #include "RefPadWorkload.hpp"
 #include "RefPreluWorkload.hpp"
+#include "RefQLstmWorkload.hpp"
 #include "RefQuantizeWorkload.hpp"
+#include "RefRankWorkload.hpp"
 #include "RefReshapeWorkload.hpp"
 #include "RefResizeBilinearWorkload.hpp"
 #include "RefResizeWorkload.hpp"
@@ -58,6 +65,7 @@
 #include "RefStridedSliceWorkload.hpp"
 #include "RefSpaceToDepthWorkload.hpp"
 #include "RefTransposeConvolution2dWorkload.hpp"
+#include "RefTransposeWorkload.hpp"
 #include "RefWorkloadUtils.hpp"
 #include "Resize.hpp"
 #include "Softmax.hpp"

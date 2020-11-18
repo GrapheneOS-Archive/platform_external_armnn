@@ -1,11 +1,10 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "PrototxtConversions.hpp"
-
-#include <boost/format.hpp>
+#include "armnn/Tensor.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -29,4 +28,17 @@ std::string ConvertInt32ToOctalString(int value)
     return returnString;
 }
 
+/// Converts an TensorShape into Prototxt representation
+std::string ConvertTensorShapeToString(const armnn::TensorShape& shape)
+{
+    std::stringstream ss;
+    for (unsigned int i = 0 ; i < shape.GetNumDimensions() ; i++)
+    {
+        ss << "dim {\n";
+        ss << "size: " << std::to_string(shape[i]) << "\n";
+        ss << "}\n";
+    }
+    return ss.str();
+
+}
 } // namespace armnnUtils

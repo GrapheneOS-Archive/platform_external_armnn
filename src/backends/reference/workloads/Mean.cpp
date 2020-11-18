@@ -6,7 +6,7 @@
 #include "Mean.hpp"
 #include <backendsCommon/WorkloadData.hpp>
 
-#include <boost/numeric/conversion/cast.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -111,7 +111,7 @@ void Mean(const armnn::TensorInfo& inputInfo,
           resolvedAxis.push_back(idx);
       }
     }
-    auto numResolvedAxis = boost::numeric_cast<unsigned int>(resolvedAxis.size());
+    auto numResolvedAxis = armnn::numeric_cast<unsigned int>(resolvedAxis.size());
 
     // Iterates through input_data and sum up the reduced axis.
     for (bool hasNext = true; hasNext; hasNext = NextIndex(inputNumDims, inputDims, tempIndex))
@@ -128,15 +128,15 @@ void Mean(const armnn::TensorInfo& inputInfo,
     for (unsigned int idx = 0; idx < numResolvedAxis; ++idx)
     {
         unsigned int current = inputDims[resolvedAxis[idx]];
-        BOOST_ASSERT(boost::numeric_cast<float>(current) <
-              (std::numeric_limits<float>::max() / boost::numeric_cast<float>(numElementsInAxis)));
+        ARMNN_ASSERT(armnn::numeric_cast<float>(current) <
+              (std::numeric_limits<float>::max() / armnn::numeric_cast<float>(numElementsInAxis)));
         numElementsInAxis *= current;
     }
     if (numElementsInAxis > 0) {
         for (unsigned int idx = 0; idx < numOutputs; ++idx)
         {
             output[idx];
-            output.Set(tempSum[idx] / boost::numeric_cast<float>(numElementsInAxis));
+            output.Set(tempSum[idx] / armnn::numeric_cast<float>(numElementsInAxis));
         }
     }
 }

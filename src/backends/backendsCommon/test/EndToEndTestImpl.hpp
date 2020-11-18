@@ -107,7 +107,7 @@ inline bool ConstantUsageUint8Test(const std::vector<BackendId>& backends)
 
 // Utility template for comparing tensor elements
 template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
-bool Compare(T a, T b)
+bool Compare(T a, T b, float tolerance = 0.000001f)
 {
     if (ArmnnType == DataType::Boolean)
     {
@@ -119,7 +119,6 @@ bool Compare(T a, T b)
 
     // NOTE: All other types can be cast to float and compared with
     // a certain level of tolerance
-    constexpr float tolerance = 0.000001f;
     return std::fabs(static_cast<float>(a) - static_cast<float>(b)) <= tolerance;
 }
 
@@ -143,7 +142,8 @@ template<DataType ArmnnIType, DataType ArmnnOType,
 void EndToEndLayerTestImpl(INetworkPtr network,
                            const std::map<int, std::vector<TInput>>& inputTensorData,
                            const std::map<int, std::vector<TOutput>>& expectedOutputData,
-                           std::vector<BackendId> backends)
+                           std::vector<BackendId> backends,
+                           float tolerance = 0.000001f)
 {
     // Create runtime in which test will run
     IRuntime::CreationOptions options;
@@ -184,7 +184,9 @@ void EndToEndLayerTestImpl(INetworkPtr network,
         std::vector<TOutput> out = outputStorage.at(it.first);
         for (unsigned int i = 0; i < out.size(); ++i)
         {
-            BOOST_CHECK(Compare<ArmnnOType>(it.second[i], out[i]) == true);
+            BOOST_CHECK_MESSAGE(Compare<ArmnnOType>(it.second[i], out[i], tolerance) == true,
+                    "Actual output: " << out[i] << ". Expected output:" << it.second[i]);
+
         }
     }
 }
@@ -719,6 +721,11 @@ inline void ExportOutputWithSeveralOutputSlotConnectionsTest(std::vector<Backend
     std::vector<float> outputData0(4);
     std::vector<float> outputData1(4);
 
+    std::vector<float> expectedOutput
+    {
+         1.0f, 4.0f, 9.0f, 16.0f
+    };
+
     InputTensors inputTensors
     {
         {0,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData.data())},
@@ -764,6 +771,48 @@ inline void ExportOutputWithSeveralOutputSlotConnectionsTest(std::vector<Backend
     // Contains CopyMemGeneric
     found = dump.find("CopyMemGeneric");
     BOOST_TEST(found != std::string::npos);
+
+    // Check that the outputs are correct
+    BOOST_CHECK_EQUAL_COLLECTIONS(outputData0.begin(), outputData0.end(),
+                                  expectedOutput.begin(), expectedOutput.end());
+    BOOST_CHECK_EQUAL_COLLECTIONS(outputData1.begin(), outputData1.end(),
+                                  expectedOutput.begin(), expectedOutput.end());
+}
+
+inline void StridedSliceInvalidSliceEndToEndTest(std::vector<BackendId> backends)
+{
+    using namespace armnn;
+
+    // Create runtime in which test will run
+    IRuntime::CreationOptions options;
+    IRuntimePtr runtime(armnn::IRuntime::Create(options));
+
+    // build up the structure of the network
+    INetworkPtr net(INetwork::Create());
+
+    IConnectableLayer* input = net->AddInputLayer(0);
+
+    // Configure a strided slice with a stride the same size as the input but with a ShrinkAxisMask on the first
+    // dim of the output to make it too small to hold the specified slice.
+    StridedSliceDescriptor descriptor;
+    descriptor.m_Begin          = {0, 0};
+    descriptor.m_End            = {2, 3};
+    descriptor.m_Stride         = {1, 1};
+    descriptor.m_BeginMask      = 0;
+    descriptor.m_EndMask        = 0;
+    descriptor.m_ShrinkAxisMask = 1;
+    IConnectableLayer* stridedSlice = net->AddStridedSliceLayer(descriptor);
+
+    IConnectableLayer* output0 = net->AddOutputLayer(0);
+
+    input->GetOutputSlot(0).Connect(stridedSlice->GetInputSlot(0));
+    stridedSlice->GetOutputSlot(0).Connect(output0->GetInputSlot(0));
+
+    input->GetOutputSlot(0).SetTensorInfo(TensorInfo({ 2, 3 }, DataType::Float32));
+    stridedSlice->GetOutputSlot(0).SetTensorInfo(TensorInfo({ 3 }, DataType::Float32));
+
+    // Attempt to optimize the network and check that the correct exception is thrown
+    BOOST_CHECK_THROW(Optimize(*net, backends, runtime->GetDeviceSpec()), armnn::LayerValidationException);
 }
 
 } // anonymous namespace

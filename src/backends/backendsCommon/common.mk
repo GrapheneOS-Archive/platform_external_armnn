@@ -14,11 +14,13 @@ COMMON_SOURCES := \
     IBackendInternal.cpp \
     ITensorHandleFactory.cpp \
     LayerSupportBase.cpp \
+    MapWorkload.cpp \
     MemCopyWorkload.cpp \
     MemImportWorkload.cpp \
     MemSyncWorkload.cpp \
     OptimizationViews.cpp \
     TensorHandleFactoryRegistry.cpp \
+    UnmapWorkload.cpp \
     WorkloadData.cpp \
     WorkloadFactory.cpp \
     WorkloadUtils.cpp
@@ -32,6 +34,7 @@ COMMON_TEST_SOURCES := \
     test/InstanceNormalizationEndToEndTestImpl.cpp \
     test/JsonPrinterTestImpl.cpp \
     test/LogSoftmaxEndToEndTestImpl.cpp \
+    test/QLstmEndToEndTestImpl.cpp \
     test/QuantizedLstmEndToEndTestImpl.cpp \
     test/SpaceToDepthEndToEndTestImpl.cpp \
     test/TensorCopyUtils.cpp \
@@ -44,27 +47,34 @@ COMMON_TEST_SOURCES := \
     test/layerTests/ConcatTestImpl.cpp \
     test/layerTests/ConstantTestImpl.cpp \
     test/layerTests/Conv2dTestImpl.cpp \
+    test/layerTests/ConvertBf16ToFp32TestImpl.cpp \
     test/layerTests/ConvertFp16ToFp32TestImpl.cpp \
+    test/layerTests/ConvertFp32ToBf16TestImpl.cpp \
     test/layerTests/ConvertFp32ToFp16TestImpl.cpp \
     test/layerTests/DebugTestImpl.cpp \
     test/layerTests/DepthToSpaceTestImpl.cpp \
     test/layerTests/DequantizeTestImpl.cpp \
     test/layerTests/DivisionTestImpl.cpp \
     test/layerTests/ElementwiseUnaryTestImpl.cpp \
+    test/layerTests/ExpTestImpl.cpp \
     test/layerTests/FakeQuantizationTestImpl.cpp \
+    test/layerTests/FillTestImpl.cpp \
     test/layerTests/FloorTestImpl.cpp \
     test/layerTests/FullyConnectedTestImpl.cpp \
     test/layerTests/GatherTestImpl.cpp \
     test/layerTests/InstanceNormalizationTestImpl.cpp \
     test/layerTests/L2NormalizationTestImpl.cpp \
+    test/layerTests/LogicalTestImpl.cpp \
     test/layerTests/LogSoftmaxTestImpl.cpp \
     test/layerTests/LstmTestImpl.cpp \
     test/layerTests/MaximumTestImpl.cpp \
     test/layerTests/MinimumTestImpl.cpp \
     test/layerTests/MultiplicationTestImpl.cpp \
+    test/layerTests/NegTestImpl.cpp \
     test/layerTests/NormalizationTestImpl.cpp \
     test/layerTests/PadTestImpl.cpp \
     test/layerTests/Pooling2dTestImpl.cpp \
+    test/layerTests/RankTestImpl.cpp \
     test/layerTests/ReshapeTestImpl.cpp \
     test/layerTests/ResizeTestImpl.cpp \
     test/layerTests/RsqrtTestImpl.cpp \

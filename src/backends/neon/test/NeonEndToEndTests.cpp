@@ -5,6 +5,7 @@
 
 #include <backendsCommon/test/EndToEndTestImpl.hpp>
 
+#include <backendsCommon/test/ActivationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ArgMinMaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ComparisonEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ConcatEndToEndTestImpl.hpp>
@@ -12,8 +13,10 @@
 #include <backendsCommon/test/DequantizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DetectionPostProcessEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ElementwiseUnaryEndToEndTestImpl.hpp>
+#include <backendsCommon/test/FillEndToEndTestImpl.hpp>
 #include <backendsCommon/test/InstanceNormalizationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/PreluEndToEndTestImpl.hpp>
+#include <backendsCommon/test/QLstmEndToEndTestImpl.hpp>
 #include <backendsCommon/test/QuantizedLstmEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SpaceToDepthEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SplitterEndToEndTestImpl.hpp>
@@ -207,6 +210,37 @@ BOOST_AUTO_TEST_CASE(DequantizeEndToEndOffsetTest)
     DequantizeEndToEndOffset<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
+BOOST_AUTO_TEST_CASE(NeonEluEndToEndTestFloat32)
+{
+    EluEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonEluEndToEndTestFloat16)
+{
+    EluEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
+// HardSwish
+BOOST_AUTO_TEST_CASE(NeonHardSwishEndToEndTestFloat32)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonHardSwishEndToEndTestFloat16)
+{
+    HardSwishEndToEndTest<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonHardSwishEndToEndTestQAsymmS8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonHardSwishEndToEndTestQAsymmU8)
+{
+    HardSwishEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
 BOOST_AUTO_TEST_CASE(NeonPreluEndToEndFloat32Test)
 {
     PreluEndToEndNegativeTest<armnn::DataType::Float32>(defaultBackends);
@@ -376,27 +410,27 @@ BOOST_AUTO_TEST_CASE(NeonExportNonAlignedOutputPointerTest)
     ExportNonAlignedOutputPointerTest(defaultBackends);
 }
 
-BOOST_AUTO_TEST_CASE(NeonImportAlignedPointerTest, * boost::unit_test::disabled())
+BOOST_AUTO_TEST_CASE(NeonImportAlignedPointerTest)
 {
     ImportAlignedPointerTest(defaultBackends);
 }
 
-BOOST_AUTO_TEST_CASE(NeonImportOnlyWorkload, * boost::unit_test::disabled())
+BOOST_AUTO_TEST_CASE(NeonImportOnlyWorkload)
 {
     ImportOnlyWorkload(defaultBackends);
 }
 
-BOOST_AUTO_TEST_CASE(NeonExportOnlyWorkload, * boost::unit_test::disabled())
+BOOST_AUTO_TEST_CASE(NeonExportOnlyWorkload)
 {
     ExportOnlyWorkload(defaultBackends);
 }
 
-BOOST_AUTO_TEST_CASE(NeonImportAndExportWorkload, * boost::unit_test::disabled())
+BOOST_AUTO_TEST_CASE(NeonImportAndExportWorkload)
 {
     ImportAndExportWorkload(defaultBackends);
 }
 
-BOOST_AUTO_TEST_CASE(NeonExportOutputWithSeveralOutputSlotConnectionsTest, * boost::unit_test::disabled())
+BOOST_AUTO_TEST_CASE(NeonExportOutputWithSeveralOutputSlotConnectionsTest)
 {
     ExportOutputWithSeveralOutputSlotConnectionsTest(defaultBackends);
 }
@@ -410,6 +444,22 @@ BOOST_AUTO_TEST_CASE(NeonInstanceNormalizationNchwEndToEndTest1)
 BOOST_AUTO_TEST_CASE(NeonInstanceNormalizationNchwEndToEndTest2)
 {
     InstanceNormalizationNchwEndToEndTest2(defaultBackends);
+}
+
+// Fill
+BOOST_AUTO_TEST_CASE(NeonFillEndToEndTest)
+{
+    FillEndToEnd<armnn::DataType::Float32>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestFloat16)
+{
+    FillEndToEnd<armnn::DataType::Float16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonFillEndToEndTestInt32)
+{
+    FillEndToEnd<armnn::DataType::Signed32>(defaultBackends);
 }
 
 // ArgMinMax
@@ -511,6 +561,11 @@ BOOST_AUTO_TEST_CASE(NeonArgMaxAxis3TestQuantisedAsymm8)
 BOOST_AUTO_TEST_CASE(NeonArgMinAxis3TestQuantisedAsymm8)
 {
     ArgMinAxis3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(NeonStridedSliceInvalidSliceEndToEndTest)
+{
+    StridedSliceInvalidSliceEndToEndTest(defaultBackends);
 }
 
 BOOST_AUTO_TEST_CASE(NeonDetectionPostProcessRegularNmsTest, * boost::unit_test::disabled())
@@ -675,6 +730,11 @@ BOOST_AUTO_TEST_CASE(NeonDetectionPostProcessFastNmsUint8Test, * boost::unit_tes
     DetectionPostProcessFastNmsEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, qBoxEncodings,
                                                                           qScores, qAnchors,
                                                                           1.0f, 1, 0.01f, 0, 0.5f, 0);
+}
+
+BOOST_AUTO_TEST_CASE(NeonQLstmEndToEndTest)
+{
+    QLstmEndToEnd(defaultBackends);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

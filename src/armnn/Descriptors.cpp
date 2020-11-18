@@ -1,16 +1,18 @@
-﻿//
+//
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "armnn/Descriptors.hpp"
 #include "armnn/Logging.hpp"
 
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/NumericCast.hpp>
+
 #include <algorithm>
 #include <array>
 #include <vector>
 
-#include <boost/format.hpp>
-#include <boost/numeric/conversion/cast.hpp>
+#include <fmt/format.h>
 
 namespace armnn
 {
@@ -21,9 +23,11 @@ PermutationVector::PermutationVector(const ValueType *dimMappings, const SizeTyp
 
     if (numDimMappings > MaxNumOfTensorDimensions)
     {
-        boost::format fmt("The number of mappings (%1%) cannot be greater "
-                          "than the maximum number of dimensions supported (%2%)");
-        throw InvalidArgumentException(boost::str(fmt % numDimMappings % MaxNumOfTensorDimensions));
+        throw InvalidArgumentException(
+            fmt::format("The number of mappings ({0}) cannot be greater "
+                        "than the maximum number of dimensions supported ({1})",
+                        numDimMappings,
+                        MaxNumOfTensorDimensions));
     }
 
     if ((dimMappings == nullptr) && (numDimMappings != 0))
@@ -36,8 +40,12 @@ PermutationVector::PermutationVector(const ValueType *dimMappings, const SizeTyp
         const ValueType dstIndex = dimMappings[i];
         if (dstIndex >= numDimMappings)
         {
-            boost::format fmt("Dimension mapping at index %1% is invalid: %2% is outside of the valid range [0,%3%]");
-            throw InvalidArgumentException(boost::str(fmt % i % dstIndex % (numDimMappings - 1)));
+            throw InvalidArgumentException(
+                fmt::format("Dimension mapping at index {0} is invalid: "
+                            "{1} is outside of the valid range [0,{2}]",
+                            i,
+                            dstIndex,
+                            (numDimMappings - 1)));
         }
     }
 
@@ -67,7 +75,7 @@ PermutationVector::PermutationVector(const ValueType *dimMappings, const SizeTyp
 }
 
 PermutationVector::PermutationVector(std::initializer_list<ValueType> dimMappings)
-    : PermutationVector(dimMappings.begin(), boost::numeric_cast<SizeType>(dimMappings.size()))
+    : PermutationVector(dimMappings.begin(), armnn::numeric_cast<SizeType>(dimMappings.size()))
 {
 }
 
@@ -195,7 +203,7 @@ const uint32_t* OriginsDescriptor::GetViewOrigin(uint32_t idx) const
 // Reorders the viewOrigins in accordance with the indices presented in newOrdering array.
 void OriginsDescriptor::ReorderOrigins(unsigned int*  newOrdering, unsigned int numNewOrdering)
 {
-    BOOST_ASSERT_MSG(m_NumViews == numNewOrdering, "number of views must match number of "
+    ARMNN_ASSERT_MSG(m_NumViews == numNewOrdering, "number of views must match number of "
         "elements in the new ordering array");
     std::vector<uint32_t*> viewOrigins(&m_ViewOrigins[0], &m_ViewOrigins[m_NumViews]);
 
@@ -372,7 +380,7 @@ int StridedSliceDescriptor::GetStartForAxis(const TensorShape& inputShape,
         }
     }
 
-    const int axisSize = boost::numeric_cast<int>(inputShape[axis]);
+    const int axisSize = armnn::numeric_cast<int>(inputShape[axis]);
     if (start < 0)
     {
         start += (axisSize);
@@ -406,7 +414,7 @@ int StridedSliceDescriptor::GetStopForAxis(const TensorShape& inputShape,
         }
     }
 
-    const int axisSize = boost::numeric_cast<int>(inputShape[axis]);
+    const int axisSize = armnn::numeric_cast<int>(inputShape[axis]);
     if (stop < 0)
     {
         stop += axisSize;

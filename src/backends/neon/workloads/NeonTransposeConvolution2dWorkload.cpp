@@ -9,14 +9,13 @@
 #include <Profiling.hpp>
 
 #include <armnn/Types.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
 #include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <neon/workloads/NeonWorkloadUtils.hpp>
-
-#include <boost/cast.hpp>
 
 namespace armnn
 {
@@ -38,7 +37,7 @@ arm_compute::Status NeonTransposeConvolution2dWorkloadValidate(const TensorInfo&
 
     if (descriptor.m_BiasEnabled)
     {
-        BOOST_ASSERT(biases.has_value());
+        ARMNN_ASSERT(biases.has_value());
 
         aclBiasesInfo = BuildArmComputeTensorInfo(biases.value(), descriptor.m_DataLayout);
         optionalAclBiasesInfo = &aclBiasesInfo;
@@ -60,8 +59,8 @@ NeonTransposeConvolution2dWorkload::NeonTransposeConvolution2dWorkload(
 {
     m_Data.ValidateInputsOutputs("NeonTransposeConvolution2dWorkload", 1, 1);
 
-    arm_compute::ITensor& input  = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
-    arm_compute::ITensor& output = boost::polymorphic_downcast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
+    arm_compute::ITensor& input  = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
     input.info()->set_data_layout(aclDataLayout);
@@ -81,7 +80,7 @@ NeonTransposeConvolution2dWorkload::NeonTransposeConvolution2dWorkload(
     m_Layer = std::make_unique<arm_compute::NEDeconvolutionLayer>(memoryManager);
     m_Layer->configure(&input, m_KernelTensor.get(), m_BiasTensor.get(), &output, padStrideInfo);
 
-    BOOST_ASSERT(m_Layer);
+    ARMNN_ASSERT(m_Layer);
 
     InitializeArmComputeTensorData(*m_KernelTensor, m_Data.m_Weight);
 

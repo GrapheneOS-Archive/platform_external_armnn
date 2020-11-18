@@ -1,12 +1,10 @@
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
 list(APPEND armnnRefBackendWorkloads_sources
     Abs.hpp
-    ArgMinMax.cpp
-    ArgMinMax.hpp
     Activation.cpp
     Activation.hpp
     ArgMinMax.cpp
@@ -33,6 +31,8 @@ list(APPEND armnnRefBackendWorkloads_sources
     ElementwiseFunction.hpp
     Encoders.hpp
     Exp.hpp
+    Fill.cpp
+    Fill.hpp
     FullyConnected.cpp
     FullyConnected.hpp
     Gather.cpp
@@ -69,8 +69,12 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefConcatWorkload.hpp
     RefConstantWorkload.cpp
     RefConstantWorkload.hpp
+    RefConvertBf16ToFp32Workload.cpp
+    RefConvertBf16ToFp32Workload.hpp
     RefConvertFp16ToFp32Workload.cpp
     RefConvertFp16ToFp32Workload.hpp
+    RefConvertFp32ToBf16Workload.cpp
+    RefConvertFp32ToBf16Workload.hpp
     RefConvertFp32ToFp16Workload.cpp
     RefConvertFp32ToFp16Workload.hpp
     RefConvolution2dWorkload.cpp
@@ -91,6 +95,8 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefElementwiseUnaryWorkload.hpp
     RefFakeQuantizationFloat32Workload.cpp
     RefFakeQuantizationFloat32Workload.hpp
+    RefFillWorkload.cpp
+    RefFillWorkload.hpp
     RefFloorWorkload.cpp
     RefFloorWorkload.hpp
     RefFullyConnectedWorkload.cpp
@@ -101,6 +107,10 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefInstanceNormalizationWorkload.hpp
     RefL2NormalizationWorkload.cpp
     RefL2NormalizationWorkload.hpp
+    RefLogicalBinaryWorkload.cpp
+    RefLogicalBinaryWorkload.hpp
+    RefLogicalUnaryWorkload.cpp
+    RefLogicalUnaryWorkload.hpp
     RefLogSoftmaxWorkload.cpp
     RefLogSoftmaxWorkload.hpp
     RefLstmWorkload.cpp
@@ -119,6 +129,9 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefPreluWorkload.hpp
     RefQuantizeWorkload.cpp
     RefQuantizeWorkload.hpp
+    RefQLstmWorkload.cpp
+    RefQLstmWorkload.hpp
+    RefRankWorkload.hpp
     RefReshapeWorkload.cpp
     RefReshapeWorkload.hpp
     RefResizeBilinearWorkload.cpp
@@ -141,6 +154,8 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefStridedSliceWorkload.hpp
     RefTransposeConvolution2dWorkload.cpp
     RefTransposeConvolution2dWorkload.hpp
+    RefTransposeWorkload.cpp
+    RefTransposeWorkload.hpp
     RefWorkloads.hpp
     RefWorkloadUtils.hpp
     Resize.cpp
@@ -173,3 +188,4 @@ target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/armnnUtils)
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
+target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)

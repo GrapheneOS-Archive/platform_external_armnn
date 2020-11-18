@@ -1,9 +1,10 @@
-﻿//
-// Copyright © 2017 Arm Ltd. All rights reserved.
+//
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
+#include <armnn/BackendOptions.hpp>
 #include <armnn/Deprecated.hpp>
 #include <armnn/DescriptorsFwd.hpp>
 #include <armnn/ILayerVisitor.hpp>
@@ -11,7 +12,6 @@
 #include <armnn/Optional.hpp>
 #include <armnn/TensorFwd.hpp>
 #include <armnn/Types.hpp>
-#include <armnn/Deprecated.hpp>
 
 #include <memory>
 #include <vector>
@@ -61,22 +61,38 @@ protected:
 class IConnectableLayer
 {
 public:
+    /// Returns the name of the layer
     virtual const char* GetName() const = 0;
 
+    /// Returns the number of connectable input slots
     virtual unsigned int GetNumInputSlots() const = 0;
+
+    /// Returns the number of connectable output slots
     virtual unsigned int GetNumOutputSlots() const = 0;
 
+    /// Get a const input slot handle by slot index
     virtual const IInputSlot& GetInputSlot(unsigned int index) const = 0;
+
+    /// Get the input slot handle by slot index
     virtual IInputSlot& GetInputSlot(unsigned int index) = 0;
 
+    /// Get the const output slot handle by slot index
     virtual const IOutputSlot& GetOutputSlot(unsigned int index) const = 0;
+
+    /// Get the output slot handle by slot index
     virtual IOutputSlot& GetOutputSlot(unsigned int index) = 0;
 
+    /// Infer the shape of the output(s) based on the provided input shape(s)
     virtual std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const = 0;
 
+    /// Returns the unique id of the layer
     virtual LayerGuid GetGuid() const = 0;
 
+    /// Apply a visitor to this layer
     virtual void Accept(ILayerVisitor& visitor) const = 0;
+
+    /// Provide a hint for the optimizer as to which backend to prefer for this layer
+    virtual void BackendSelectionHint(Optional<BackendId> backend) = 0;
 protected:
       /// Objects are not deletable via the handle
     ~IConnectableLayer() {}
@@ -89,13 +105,11 @@ using INetworkPtr = std::unique_ptr<INetwork, void(*)(INetwork* network)>;
 class INetwork
 {
 public:
-    static INetwork* CreateRaw();
-    static INetworkPtr Create();
+    static INetwork* CreateRaw(NetworkOptions networkOptions = {});
+    static INetworkPtr Create(NetworkOptions networkOptions = {});
     static void Destroy(INetwork* network);
 
     virtual Status PrintGraph() = 0;
-
-    virtual profiling::ProfilingGuid GetGuid() const = 0;
 
     /// Adds an input layer to the network.
     /// @param id - User generated id to uniquely identify a particular input. The same id needs to be specified.
@@ -114,7 +128,7 @@ public:
     /// Add a Comparison layer to the network.
     /// @param name - Optional name for the layer.
     /// @param desc - Descriptor for the comparison operation.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddComparisonLayer(const ComparisonDescriptor& comparisonDescriptor,
                                                   const char* name = nullptr) = 0;
 
@@ -199,9 +213,16 @@ public:
     /// Add an ElementwiseUnary layer to the network.
     /// @param name - Optional name for the layer.
     /// @param desc - Descriptor for the elementwiseUnary operation.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddElementwiseUnaryLayer(const ElementwiseUnaryDescriptor& elementwiseUnaryDescriptor,
                                                         const char* name = nullptr) = 0;
+
+    /// Add an Fill layer to the network.
+    /// @param name - Optional name for the layer.
+    /// @param fillDescriptor - Descriptor for the fill operation.
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddFillLayer(const FillDescriptor& fillDescriptor,
+                                            const char* name = nullptr) = 0;
 
     /// Adds a fully connected layer to the network.
     /// @param fullyConnectedDescriptor - Description of the fully connected layer.
@@ -303,7 +324,7 @@ public:
 
     /// Add absolute layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     ARMNN_DEPRECATED_MSG("Use AddElementwiseUnaryLayer instead")
     virtual IConnectableLayer* AddAbsLayer(const char* name = nullptr) = 0;
 
@@ -330,6 +351,11 @@ public:
         const ConstTensor& beta,
         const ConstTensor& gamma,
         const char* name = nullptr) = 0;
+
+    /// Adds a rank layer to the network.
+    /// @param name - Optional name for the layer.
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddRankLayer(const char* name = nullptr) = 0;
 
     /// Adds a resize bilinear layer to the network.
     /// @param resizeDesc - Parameters for the resize operation.
@@ -432,13 +458,13 @@ public:
 
     /// Add a Maximum layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddMaximumLayer(const char* name = nullptr) = 0;
 
     /// Add a Mean layer to the network.
     /// @param meanDescriptor - Parameters for the mean operation.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddMeanLayer(const MeanDescriptor& meanDescriptor, const char* name = nullptr) = 0;
 
     /// Adds a fully pad layer to the network.
@@ -464,31 +490,39 @@ public:
 
     /// Add a Minimum layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddMinimumLayer(const char* name = nullptr) = 0;
 
     /// Add a Greater layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     ARMNN_DEPRECATED_MSG("Use AddComparisonLayer instead")
     virtual IConnectableLayer* AddGreaterLayer(const char* name = nullptr) = 0;
 
     /// Add a Equal layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     ARMNN_DEPRECATED_MSG("Use AddComparisonLayer instead")
     virtual IConnectableLayer* AddEqualLayer(const char* name = nullptr) = 0;
 
     /// Add Reciprocal of square root layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
     ARMNN_DEPRECATED_MSG("Use AddElementwiseUnaryLayer instead")
     virtual IConnectableLayer* AddRsqrtLayer(const char* name = nullptr) = 0;
 
     /// Add Gather layer to the network.
     /// @param name - Optional name for the layer.
-    /// @ return - Interface for configuring the layer.
+    /// @return - Interface for configuring the layer.
+    ARMNN_DEPRECATED_MSG("Use AddGatherLayer with descriptor instead")
     virtual IConnectableLayer* AddGatherLayer(const char* name = nullptr) = 0;
+
+    /// Add Gather layer to the network.
+    /// @param descriptor - Description of the gather layer.
+    /// @param name - Optional name for the layer.
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddGatherLayer(const GatherDescriptor& descriptor,
+                                              const char* name = nullptr) = 0;
 
     /// Adds a switch layer to the network.
     /// @param name - Optional name for the layer.
@@ -511,13 +545,19 @@ public:
                                                               const Optional<ConstTensor>& biases,
                                                               const char* name = nullptr) = 0;
 
+    /// Adds a transpose layer to the network.
+    /// @param transposeDescriptor - TransposeDescriptor to configure the transpose.
+    /// @param name - Optional name for the layer.
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddTransposeLayer(const TransposeDescriptor& transposeDescriptor,
+                                                 const char* name = nullptr) = 0;
+
     /// Adds a stack layer to the network.
     /// @param descriptor - Description of the stack layer.
     /// @param name - Optional name for the layer.
     /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddStackLayer(const StackDescriptor& descriptor,
                                              const char* name = nullptr) = 0;
-
 
     /// Add a stand-in layer for a type unknown to the Arm NN framework.
     /// Note: Due to the nature of this layer, no validation can be performed by the framework.
@@ -533,6 +573,22 @@ public:
     /// @param name - Optional name for the layer
     /// @return - Interface for configuring the layer.
     virtual IConnectableLayer* AddQuantizedLstmLayer(const QuantizedLstmInputParams& params,
+                                                     const char* name = nullptr) = 0;
+
+    /// Add a QLstm layer to the network
+    /// @param descriptor - Parameters for the QLstm operation
+    /// @param params - Weights and biases for the layer
+    /// @param name - Optional name for the layer
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddQLstmLayer(const QLstmDescriptor& descriptor,
+                                             const LstmInputParams& params,
+                                             const char* name = nullptr) = 0;
+
+    /// Adds a Logical Binary layer to the network.
+    /// @param descriptor - Description of the Logical Binary layer.
+    /// @param name - Optional name for the layer.
+    /// @return - Interface for configuring the layer.
+    virtual IConnectableLayer* AddLogicalBinaryLayer(const LogicalBinaryDescriptor& descriptor,
                                                      const char* name = nullptr) = 0;
 
     virtual void Accept(ILayerVisitor& visitor) const = 0;
@@ -562,18 +618,60 @@ struct OptimizerOptions
     OptimizerOptions()
         : m_ReduceFp32ToFp16(false)
         , m_Debug(false)
+        , m_ReduceFp32ToBf16(false)
+        , m_shapeInferenceMethod(armnn::ShapeInferenceMethod::ValidateOnly)
+        , m_ImportEnabled(false)
+        , m_ModelOptions()
     {}
 
-    OptimizerOptions(bool reduceFp32ToFp16, bool debug)
+    OptimizerOptions(bool reduceFp32ToFp16, bool debug, bool reduceFp32ToBf16, bool importEnabled,
+        ModelOptions modelOptions = {})
         : m_ReduceFp32ToFp16(reduceFp32ToFp16)
         , m_Debug(debug)
-    {}
+        , m_ReduceFp32ToBf16(reduceFp32ToBf16)
+        , m_shapeInferenceMethod(armnn::ShapeInferenceMethod::ValidateOnly)
+        , m_ImportEnabled(importEnabled)
+        , m_ModelOptions(modelOptions)
+    {
+        if (m_ReduceFp32ToFp16 && m_ReduceFp32ToBf16)
+        {
+            throw InvalidArgumentException("BFloat16 and Float16 optimization cannot be enabled at the same time.");
+        }
+    }
+
+    OptimizerOptions(bool reduceFp32ToFp16, bool debug, bool reduceFp32ToBf16 = false,
+                     ShapeInferenceMethod shapeInferenceMethod = armnn::ShapeInferenceMethod::ValidateOnly,
+                     bool importEnabled = false, ModelOptions modelOptions = {})
+        : m_ReduceFp32ToFp16(reduceFp32ToFp16)
+        , m_Debug(debug)
+        , m_ReduceFp32ToBf16(reduceFp32ToBf16)
+        , m_shapeInferenceMethod(shapeInferenceMethod)
+        , m_ImportEnabled(importEnabled)
+        , m_ModelOptions(modelOptions)
+    {
+        if (m_ReduceFp32ToFp16 && m_ReduceFp32ToBf16)
+        {
+            throw InvalidArgumentException("BFloat16 and Float16 optimization cannot be enabled at the same time.");
+        }
+    }
 
     // Reduce Fp32 data to Fp16 for faster processing
     bool m_ReduceFp32ToFp16;
 
     // Add debug data for easier troubleshooting
     bool m_Debug;
+
+    // Reduce Fp32 data to Bf16 for faster processing
+    bool m_ReduceFp32ToBf16;
+
+    // Infer output size when not available
+    ShapeInferenceMethod m_shapeInferenceMethod;
+
+    // Enable Import
+    bool m_ImportEnabled;
+
+    // Enable Model Options
+    ModelOptions m_ModelOptions;
 };
 
 /// Create an optimized version of the network

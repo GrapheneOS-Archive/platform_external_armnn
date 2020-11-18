@@ -11,6 +11,7 @@
 #include <armnn/IRuntime.hpp>
 #include <armnn/TypesUtils.hpp>
 #include <armnn/BackendRegistry.hpp>
+#include <armnn/utility/Assert.hpp>
 
 #include <armnnTfLiteParser/ITfLiteParser.hpp>
 
@@ -18,9 +19,7 @@
 
 #include <test/TensorHelpers.hpp>
 
-#include <boost/filesystem.hpp>
-#include <boost/assert.hpp>
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "flatbuffers/idl.h"
 #include "flatbuffers/util.h"
@@ -43,6 +42,7 @@ struct ParserFlatbuffersFixture
     {
         ITfLiteParser::TfLiteParserOptions options;
         options.m_StandInLayerForUnsupported = true;
+        options.m_InferAndValidate = true;
 
         m_Parser.reset(ITfLiteParser::CreateRaw(armnn::Optional<ITfLiteParser::TfLiteParserOptions>(options)));
     }
@@ -81,13 +81,12 @@ struct ParserFlatbuffersFixture
         if (ret != armnn::Status::Success)
         {
             throw armnn::Exception(
-                boost::str(
-                    boost::format("The runtime failed to load the network. "
-                                    "Error was: %1%. in %2% [%3%:%4%]") %
-                    errorMessage %
-                    __func__ %
-                    __FILE__ %
-                    __LINE__));
+                fmt::format("The runtime failed to load the network. "
+                            "Error was: {}. in {} [{}:{}]",
+                            errorMessage,
+                            __func__,
+                            __FILE__,
+                            __LINE__));
         }
     }
 
@@ -107,10 +106,10 @@ struct ParserFlatbuffersFixture
         flatbuffers::Parser parser;
 
         bool ok = parser.Parse(schemafile.c_str());
-        BOOST_ASSERT_MSG(ok, "Failed to parse schema file");
+        ARMNN_ASSERT_MSG(ok, "Failed to parse schema file");
 
         ok &= parser.Parse(m_JsonString.c_str());
-        BOOST_ASSERT_MSG(ok, "Failed to parse json input");
+        ARMNN_ASSERT_MSG(ok, "Failed to parse json input");
 
         if (!ok)
         {
@@ -150,7 +149,8 @@ struct ParserFlatbuffersFixture
               armnn::DataType ArmnnType2>
     void RunTest(size_t subgraphId,
                  const std::map<std::string, std::vector<armnn::ResolveType<ArmnnType1>>>& inputData,
-                 const std::map<std::string, std::vector<armnn::ResolveType<ArmnnType2>>>& expectedOutputData);
+                 const std::map<std::string, std::vector<armnn::ResolveType<ArmnnType2>>>& expectedOutputData,
+                 bool isDynamic = false);
 
 
     /// Multiple Inputs, Multiple Outputs w/ Variable Datatypes and different dimension sizes.
@@ -249,7 +249,8 @@ template <std::size_t NumOutputDimensions,
           armnn::DataType armnnType2>
 void ParserFlatbuffersFixture::RunTest(size_t subgraphId,
     const std::map<std::string, std::vector<armnn::ResolveType<armnnType1>>>& inputData,
-    const std::map<std::string, std::vector<armnn::ResolveType<armnnType2>>>& expectedOutputData)
+    const std::map<std::string, std::vector<armnn::ResolveType<armnnType2>>>& expectedOutputData,
+    bool isDynamic)
 {
     using DataType2 = armnn::ResolveType<armnnType2>;
 
@@ -273,10 +274,10 @@ void ParserFlatbuffersFixture::RunTest(size_t subgraphId,
         // Check that output tensors have correct number of dimensions (NumOutputDimensions specified in test)
         auto outputNumDimensions = outputTensorInfo.GetNumDimensions();
         BOOST_CHECK_MESSAGE((outputNumDimensions == NumOutputDimensions),
-            boost::str(boost::format("Number of dimensions expected %1%, but got %2% for output layer %3%")
-                                       % NumOutputDimensions
-                                       % outputNumDimensions
-                                       % it.first));
+            fmt::format("Number of dimensions expected {}, but got {} for output layer {}",
+                        NumOutputDimensions,
+                        outputNumDimensions,
+                        it.first));
 
         armnn::VerifyTensorInfoDataType(outputTensorInfo, armnnType2);
         outputStorage.emplace(it.first, MakeTensor<DataType2, NumOutputDimensions>(outputTensorInfo));
@@ -290,8 +291,8 @@ void ParserFlatbuffersFixture::RunTest(size_t subgraphId,
     for (auto&& it : expectedOutputData)
     {
         armnn::BindingPointInfo bindingInfo = m_Parser->GetNetworkOutputBindingInfo(subgraphId, it.first);
-        auto outputExpected = MakeTensor<DataType2, NumOutputDimensions>(bindingInfo.second, it.second);
-        BOOST_TEST(CompareTensors(outputExpected, outputStorage[it.first]));
+        auto outputExpected = MakeTensor<DataType2, NumOutputDimensions>(bindingInfo.second, it.second, isDynamic);
+        BOOST_TEST(CompareTensors(outputExpected, outputStorage[it.first], false, isDynamic));
     }
 }
 
