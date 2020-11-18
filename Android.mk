@@ -282,6 +282,11 @@ include $(BUILD_STATIC_LIBRARY)
 ###############
 include $(CLEAR_VARS)
 
+#For in-tree android build, disable building tests as the boost dependency (only used in test)
+#is not present.
+BUILD_TESTS := 0
+ifeq ($(BUILD_TESTS),1)
+
 LOCAL_MODULE := armnn-tests
 ifeq ($(Q_OR_LATER),1)
 # "eng" is deprecated in Android Q
@@ -453,3 +458,4 @@ endif
 endif
 
 include $(BUILD_EXECUTABLE)
+endif
