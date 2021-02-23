@@ -12,6 +12,8 @@
 #include <backendsCommon/WorkloadFactoryBase.hpp>
 #include <aclCommon/BaseMemoryManager.hpp>
 
+#include <arm_compute/core/CL/CLCompileContext.h>
+
 namespace armnn
 {
 
@@ -23,6 +25,8 @@ public:
 
     ClWorkloadFactory(const std::shared_ptr<ClMemoryManager>& memoryManager,
                       const IBackendInternal::IBackendSpecificModelContextPtr& modelContextPtr);
+
+    void AfterWorkloadsCreated() override;
 
     const BackendId& GetBackendId() const override;
 
@@ -138,6 +142,9 @@ public:
     std::unique_ptr<IWorkload> CreateL2Normalization(const L2NormalizationQueueDescriptor& descriptor,
                                                      const WorkloadInfo& info) const override;
 
+    std::unique_ptr<IWorkload> CreateLogicalBinary(const LogicalBinaryQueueDescriptor& descriptor,
+                                                   const WorkloadInfo& info) const override;
+
     std::unique_ptr<IWorkload> CreateLogSoftmax(const LogSoftmaxQueueDescriptor& descriptor,
                                                 const WorkloadInfo& info) const override;
 
@@ -251,8 +258,11 @@ private:
                                                    const WorkloadInfo& info,
                                                    Args&&... args);
 
+    void InitializeCLCompileContext();
+
     mutable std::shared_ptr<ClMemoryManager> m_MemoryManager;
     const IBackendInternal::IBackendSpecificModelContextPtr m_ModelContextPtr;
+    arm_compute::CLCompileContext m_CLCompileContext;
 };
 
 } // namespace armnn
