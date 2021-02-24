@@ -747,6 +747,7 @@ ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleReshapeFloat32, SimpleReshapeTest<armnn::Dat
 ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleReshapeInt8, SimpleReshapeTest<armnn::DataType::QAsymmS8>)
 ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleReshapeUint8, SimpleReshapeTest<armnn::DataType::QAsymmU8>)
 ARMNN_AUTO_TEST_CASE_WITH_THF(Reshape5d, Reshape5dTest<armnn::DataType::Float32>)
+ARMNN_AUTO_TEST_CASE_WITH_THF(ReshapeBoolean, ReshapeBooleanTest)
 
 // Pad
 ARMNN_AUTO_TEST_CASE_WITH_THF(PadFloat322d, PadFloat322dTest)
@@ -1321,6 +1322,22 @@ ARMNN_AUTO_TEST_CASE_WITH_THF(ExpNegative, ExpNegativeTest<DataType::Float32>)
 ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleFill, SimpleFillTest<DataType::Float32>)
 ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleFillF16, SimpleFillTest<DataType::Float16>)
 ARMNN_AUTO_TEST_CASE_WITH_THF(SimpleFillS32, SimpleFillTest<DataType::Signed32>)
+
+// Logical
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalNot, LogicalNotTest)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalNotInt, LogicalNotIntTest)
+
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalAnd, LogicalAndTest)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalAndInt, LogicalAndIntTest)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalAndBroadcast1, LogicalAndBroadcast1Test)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalAndBroadcast2, LogicalAndBroadcast2Test)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalAndBroadcast3, LogicalAndBroadcast3Test)
+
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalOr, LogicalOrTest)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalOrInt, LogicalOrIntTest)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalOrBroadcast1, LogicalOrBroadcast1Test)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalOrBroadcast2, LogicalOrBroadcast2Test)
+ARMNN_AUTO_TEST_CASE_WITH_THF(LogicalOrBroadcast3, LogicalOrBroadcast3Test)
 
 #if defined(ARMNNREF_ENABLED)
 
