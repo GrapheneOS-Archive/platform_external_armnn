@@ -33,6 +33,9 @@ ARMNN_BACKEND_MAKEFILE_DIRS := $(subst /backend.mk,,$(ARMNN_BACKEND_MAKEFILE_PAT
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libarmnn
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSL-1.0 SPDX-license-identifier-MIT SPDX-license-identifier-PSF-2.0 legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 Q_OR_LATER := 1
 CPP_VERSION := c++17
 ifeq ($(Q_OR_LATER),1)
@@ -288,6 +291,9 @@ BUILD_TESTS := 0
 ifeq ($(BUILD_TESTS),1)
 
 LOCAL_MODULE := armnn-tests
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSL-1.0 SPDX-license-identifier-MIT SPDX-license-identifier-PSF-2.0 legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 ifeq ($(Q_OR_LATER),1)
 # "eng" is deprecated in Android Q
 LOCAL_MODULE_TAGS := optional
