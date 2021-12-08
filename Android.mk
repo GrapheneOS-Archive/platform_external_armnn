@@ -456,11 +456,7 @@ LOCAL_SHARED_LIBRARIES := \
         android.hidl.memory@1.0
 
 ifeq ($(ARMNN_COMPUTE_CL_ENABLED),1)
-ifeq (,$(realpath $(TOPDIR)vendor/arm/mali/valhall/Android.bp))
-    LOCAL_SHARED_LIBRARIES += libGLES_mali
-else
     LOCAL_SHARED_LIBRARIES += libOpenCL
-endif
 endif
 
 include $(BUILD_EXECUTABLE)
