@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -46,7 +46,7 @@ arm_compute::Status NeonMultiplicationWorkloadValidate(const TensorInfo& input0,
 
 NeonMultiplicationWorkload::NeonMultiplicationWorkload(const MultiplicationQueueDescriptor& descriptor,
                                                        const WorkloadInfo& info)
-    : BaseWorkload<MultiplicationQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<MultiplicationQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonMultiplicationWorkload", 2, 1);
 
@@ -77,7 +77,7 @@ NeonMultiplicationWorkload::NeonMultiplicationWorkload(const MultiplicationQueue
 
 void NeonMultiplicationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonMultiplicationWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonMultiplicationWorkload_Execute", this->GetGuid());
     m_PixelWiseMultiplication->run();
 }
 

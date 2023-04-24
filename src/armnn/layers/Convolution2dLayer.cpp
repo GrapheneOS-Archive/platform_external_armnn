@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,8 +10,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <string>
 
@@ -21,7 +21,7 @@ namespace armnn
 {
 
 Convolution2dLayer::Convolution2dLayer(const Convolution2dDescriptor& param, const char* name)
-    : LayerWithParameters(1, 1, LayerType::Convolution2d, param, name)
+    : LayerWithParameters(param.GetNumInputs(), 1, LayerType::Convolution2d, param, name)
 {
 
 }
@@ -32,7 +32,7 @@ void Convolution2dLayer::SerializeLayerParameters(ParameterStringifyFunction& fn
     const std::vector<TensorShape>& inputShapes =
     {
         GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-        m_Weight->GetTensorInfo().GetShape()
+        GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape()
     };
     const TensorShape filterShape = inputShapes[1];
     DataLayoutIndexed dataLayoutIndex(m_Param.m_DataLayout);
@@ -48,35 +48,16 @@ void Convolution2dLayer::SerializeLayerParameters(ParameterStringifyFunction& fn
 
 std::unique_ptr<IWorkload> Convolution2dLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    // on this level constant data should not be released..
-    ARMNN_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
-
+    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "Convolution2dLayer_CreateWorkload");
     Convolution2dQueueDescriptor descriptor;
-
-    descriptor.m_Weight = m_Weight.get();
-
-    if (m_Param.m_BiasEnabled)
-    {
-        ARMNN_ASSERT_MSG(m_Bias != nullptr, "Convolution2dLayer: Bias data should not be null.");
-        descriptor.m_Bias = m_Bias.get();
-    }
-
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateConvolution2d(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Convolution2d, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 Convolution2dLayer* Convolution2dLayer::Clone(Graph& graph) const
 {
     auto layer = CloneBase<Convolution2dLayer>(graph, m_Param, GetName());
-
-    layer->m_Weight = m_Weight ? std::make_unique<ScopedCpuTensorHandle>(*m_Weight) : nullptr;
-
-    if (layer->m_Param.m_BiasEnabled)
-    {
-        layer->m_Bias = m_Bias ? std::make_unique<ScopedCpuTensorHandle>(*m_Bias) : nullptr;
-    }
-
     return std::move(layer);
 }
 
@@ -88,6 +69,9 @@ std::vector<TensorShape> Convolution2dLayer::InferOutputShapes(const std::vector
 
     // If we support multiple batch dimensions in the future, then this assert will need to change.
     ARMNN_ASSERT_MSG(inputShape.GetNumDimensions() == 4, "Convolutions will always have 4D input.");
+
+    ARMNN_ASSERT( m_Param.m_StrideX > 0);
+    ARMNN_ASSERT( m_Param.m_StrideY > 0);
 
     DataLayoutIndexed dataLayoutIndex(m_Param.m_DataLayout);
 
@@ -117,41 +101,33 @@ std::vector<TensorShape> Convolution2dLayer::InferOutputShapes(const std::vector
 
 void Convolution2dLayer::ValidateTensorShapesFromInputs()
 {
-    VerifyLayerConnections(1, CHECK_LOCATION());
+    VerifyLayerConnections(m_Param.GetNumInputs(), CHECK_LOCATION());
 
     const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
 
     VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
-    // check if we m_Weight data is not nullptr
-    ARMNN_ASSERT_MSG(m_Weight != nullptr, "Convolution2dLayer: Weights data should not be null.");
+    ARMNN_ASSERT_MSG(GetInputSlot(1).GetConnection(),
+                     "Convolution2dLayer: Weights should be connected to input slot 1.");
 
-    auto inferredShapes = InferOutputShapes({
-        GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-        m_Weight->GetTensorInfo().GetShape() });
+    std::vector<TensorShape> inferredShapes = InferOutputShapes({
+             GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
+             GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape() });
 
     ARMNN_ASSERT(inferredShapes.size() == 1);
 
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "Convolution2dLayer");
 }
 
-Layer::ConstantTensors Convolution2dLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors Convolution2dLayer::GetConstantTensorsByRef() const
 {
-    return {m_Weight, m_Bias};
+    Layer::ImmutableConstantTensors tensors = GetConnectedConstantAsInputTensors();
+    return tensors;
 }
 
-void Convolution2dLayer::Accept(ILayerVisitor& visitor) const
+void Convolution2dLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor weightsTensor(m_Weight->GetTensorInfo(), m_Weight->Map(true)) ;
-    Optional<ConstTensor> optionalBiasTensor = EmptyOptional();
-
-    if (GetParameters().m_BiasEnabled)
-    {
-        ConstTensor biasTensor(m_Bias->GetTensorInfo(), m_Bias->Map(true));
-        optionalBiasTensor = Optional<ConstTensor>(biasTensor);
-    }
-
-    visitor.VisitConvolution2dLayer(this, GetParameters(), weightsTensor, optionalBiasTensor, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

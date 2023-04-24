@@ -1,18 +1,19 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020-2021,2023 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include "../TestUtils.hpp"
+#include <TestUtils.hpp>
 
 #include <Optimizer.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
-BOOST_AUTO_TEST_SUITE(Optimizer)
+TEST_SUITE("Optimizer")
+{
 using namespace armnn::optimizations;
 
-BOOST_AUTO_TEST_CASE(MoveTransposeUpTest)
+TEST_CASE("MoveTransposeUpTest")
 {
     const armnn::TensorInfo info({ 1, 5, 2, 3 }, armnn::DataType::Float32);
     const armnn::TensorInfo transposed({ 1, 3, 5, 2 }, armnn::DataType::Float32);
@@ -36,7 +37,7 @@ BOOST_AUTO_TEST_CASE(MoveTransposeUpTest)
     head = graph.InsertNewLayer<armnn::ActivationLayer>(head->GetInputSlot(0), armnn::ActivationDescriptor{}, "");
     head->GetOutputHandler().SetTensorInfo(info);
 
-    head = graph.InsertNewLayer<armnn::AdditionLayer>(head->GetInputSlot(0), "");
+    head = graph.InsertNewLayer<armnn::ElementwiseBinaryLayer>(head->GetInputSlot(0), armnn::BinaryOperation::Add, "");
     head->GetOutputHandler().SetTensorInfo(info);
 
     // Inserts input for 2nd input of Addition.
@@ -54,7 +55,7 @@ BOOST_AUTO_TEST_CASE(MoveTransposeUpTest)
     head = graph.InsertNewLayer<armnn::MemCopyLayer>(head->GetInputSlot(0), "");
     head->GetOutputHandler().SetTensorInfo(info);
 
-    head = graph.InsertNewLayer<armnn::MultiplicationLayer>(head->GetInputSlot(0), "");
+    head = graph.InsertNewLayer<armnn::ElementwiseBinaryLayer>(head->GetInputSlot(0), armnn::BinaryOperation::Mul, "");
     head->GetOutputHandler().SetTensorInfo(info);
 
     // Inserts input for 2nd input of Multiplication.
@@ -67,27 +68,28 @@ BOOST_AUTO_TEST_CASE(MoveTransposeUpTest)
         ->GetOutputHandler()
         .SetTensorInfo(info);
 
-    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::InputLayer>, &IsLayerOfType<armnn::InputLayer>,
-                             &IsLayerOfType<armnn::MultiplicationLayer>, &IsLayerOfType<armnn::MemCopyLayer>,
+                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::MemCopyLayer>,
                              &IsLayerOfType<armnn::FloorLayer>, &IsLayerOfType<armnn::FakeQuantizationLayer>,
-                             &IsLayerOfType<armnn::AdditionLayer>, &IsLayerOfType<armnn::ActivationLayer>,
+                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::ActivationLayer>,
                              &IsLayerOfType<armnn::TransposeLayer>, &IsLayerOfType<armnn::OutputLayer>));
 
     armnn::Optimizer::Pass(graph, armnn::MakeOptimizations(MoveTransposeUp()));
 
     // The transpose is moved to the top. New transposes for layers with multiple inputs.
-    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::InputLayer>, &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::TransposeLayer>, &IsLayerOfType<armnn::TransposeLayer>,
-                             &IsLayerOfType<armnn::TransposeLayer>, &IsLayerOfType<armnn::MultiplicationLayer>,
+                             &IsLayerOfType<armnn::TransposeLayer>, &IsLayerOfType<armnn::ElementwiseBinaryLayer>,
                              &IsLayerOfType<armnn::MemCopyLayer>, &IsLayerOfType<armnn::FloorLayer>,
-                             &IsLayerOfType<armnn::FakeQuantizationLayer>, &IsLayerOfType<armnn::AdditionLayer>,
-                             &IsLayerOfType<armnn::ActivationLayer>, &IsLayerOfType<armnn::OutputLayer>));
+                             &IsLayerOfType<armnn::FakeQuantizationLayer>,
+                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::ActivationLayer>,
+                             &IsLayerOfType<armnn::OutputLayer>));
 
     std::list<std::string> testRelatedLayers = { transposeLayerName };
 
-    BOOST_TEST(CheckRelatedLayers<armnn::TransposeLayer>(graph, testRelatedLayers));
+    CHECK(CheckRelatedLayers<armnn::TransposeLayer>(graph, testRelatedLayers));
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

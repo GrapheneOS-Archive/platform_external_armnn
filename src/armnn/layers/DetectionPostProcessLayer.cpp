@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,9 +8,9 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -26,13 +26,13 @@ std::unique_ptr<IWorkload> DetectionPostProcessLayer::CreateWorkload(const armnn
     descriptor.m_Anchors = m_Anchors.get();
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateDetectionPostProcess(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::DetectionPostProcess, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 DetectionPostProcessLayer* DetectionPostProcessLayer::Clone(Graph& graph) const
 {
     auto layer = CloneBase<DetectionPostProcessLayer>(graph, m_Param, GetName());
-    layer->m_Anchors = m_Anchors ? std::make_unique<ScopedCpuTensorHandle>(*m_Anchors) : nullptr;
+    layer->m_Anchors = m_Anchors ? m_Anchors : nullptr;
     return std::move(layer);
 }
 
@@ -49,39 +49,57 @@ void DetectionPostProcessLayer::ValidateTensorShapesFromInputs()
 
     ARMNN_ASSERT_MSG(GetNumOutputSlots() == 4, "DetectionPostProcessLayer: The layer should return 4 outputs.");
 
-    unsigned int detectedBoxes = m_Param.m_MaxDetections * m_Param.m_MaxClassesPerDetection;
+    std::vector<TensorShape> inferredShapes = InferOutputShapes(
+            { GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
+              GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape() });
 
-    const TensorShape& inferredDetectionBoxes = TensorShape({ 1, detectedBoxes, 4 });
-    const TensorShape& inferredDetectionScores = TensorShape({ 1, detectedBoxes });
-    const TensorShape& inferredNumberDetections = TensorShape({ 1 });
+    ARMNN_ASSERT(inferredShapes.size() == 4);
+    ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified);
+    ARMNN_ASSERT(inferredShapes[1].GetDimensionality() == Dimensionality::Specified);
+    ARMNN_ASSERT(inferredShapes[2].GetDimensionality() == Dimensionality::Specified);
+    ARMNN_ASSERT(inferredShapes[3].GetDimensionality() == Dimensionality::Specified);
 
-    ValidateAndCopyShape(outputShape, inferredDetectionBoxes, m_ShapeInferenceMethod, "DetectionPostProcessLayer");
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "DetectionPostProcessLayer");
 
     ValidateAndCopyShape(GetOutputSlot(1).GetTensorInfo().GetShape(),
-                         inferredDetectionScores,
+                         inferredShapes[1],
                          m_ShapeInferenceMethod,
                          "DetectionPostProcessLayer", 1);
 
     ValidateAndCopyShape(GetOutputSlot(2).GetTensorInfo().GetShape(),
-                         inferredDetectionScores,
+                         inferredShapes[2],
                          m_ShapeInferenceMethod,
                          "DetectionPostProcessLayer", 2);
 
     ValidateAndCopyShape(GetOutputSlot(3).GetTensorInfo().GetShape(),
-                         inferredNumberDetections,
+                         inferredShapes[3],
                          m_ShapeInferenceMethod,
                          "DetectionPostProcessLayer", 3);
 }
 
-Layer::ConstantTensors DetectionPostProcessLayer::GetConstantTensorsByRef()
+std::vector<TensorShape> DetectionPostProcessLayer::InferOutputShapes(const std::vector<TensorShape>&) const
 {
+    unsigned int detectedBoxes = m_Param.m_MaxDetections * m_Param.m_MaxClassesPerDetection;
+
+    std::vector<TensorShape> results;
+    results.push_back({ 1, detectedBoxes, 4 });
+    results.push_back({ 1, detectedBoxes });
+    results.push_back({ 1, detectedBoxes });
+    results.push_back({ 1 });
+    return results;
+}
+
+Layer::ImmutableConstantTensors DetectionPostProcessLayer::GetConstantTensorsByRef() const
+{
+    // For API stability DO NOT ALTER order and add new members to the end of vector
     return { m_Anchors };
 }
 
-void DetectionPostProcessLayer::Accept(ILayerVisitor& visitor) const
+void DetectionPostProcessLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor anchorTensor(m_Anchors->GetTensorInfo(), m_Anchors->GetConstTensor<void>());
-    visitor.VisitDetectionPostProcessLayer(this, GetParameters(), anchorTensor, GetName());
+    ManagedConstTensorHandle managedAnchors(m_Anchors);
+    std::vector<armnn::ConstTensor> constTensors { {managedAnchors.GetTensorInfo(), managedAnchors.Map()} };
+    strategy.ExecuteStrategy(this, GetParameters(), constTensors, GetName());
 }
 
 } // namespace armnn

@@ -4,7 +4,7 @@
 //
 #pragma once
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include "RefMemoryManager.hpp"
 
@@ -17,7 +17,7 @@ class RefTensorHandle : public ITensorHandle
 public:
     RefTensorHandle(const TensorInfo& tensorInfo, std::shared_ptr<RefMemoryManager> &memoryManager);
 
-    RefTensorHandle(const TensorInfo& tensorInfo, MemorySourceFlags importFlags);
+    RefTensorHandle(const TensorInfo& tensorInfo);
 
     ~RefTensorHandle();
 
@@ -51,12 +51,10 @@ public:
         return m_TensorInfo;
     }
 
-    virtual MemorySourceFlags GetImportFlags() const override
-    {
-        return m_ImportFlags;
-    }
+    virtual MemorySourceFlags GetImportFlags() const override;
 
     virtual bool Import(void* memory, MemorySource source) override;
+    virtual bool CanBeImported(void* memory, MemorySource source) override;
 
 private:
     // Only used for testing
@@ -73,9 +71,7 @@ private:
     std::shared_ptr<RefMemoryManager> m_MemoryManager;
     RefMemoryManager::Pool* m_Pool;
     mutable void* m_UnmanagedMemory;
-    MemorySourceFlags m_ImportFlags;
-    bool m_Imported;
-    bool m_IsImportEnabled;
+    void* m_ImportedMemory;
 };
 
 }

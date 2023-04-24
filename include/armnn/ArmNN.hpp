@@ -5,10 +5,12 @@
 #pragma once
 
 #include "BackendId.hpp"
+#include "BackendHelper.hpp"
 #include "Descriptors.hpp"
 #include "Exceptions.hpp"
 #include "INetwork.hpp"
 #include "IRuntime.hpp"
+#include "IWorkingMemHandle.hpp"
 #include "LstmParams.hpp"
 #include "Optional.hpp"
 #include "QuantizedLstmParams.hpp"

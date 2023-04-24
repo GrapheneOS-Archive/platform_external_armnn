@@ -9,6 +9,10 @@
 #include <vector>
 #include <chrono>
 #include <memory>
+
+#include <common/include/ProfilingGuid.hpp>
+#include <armnn/Optional.hpp>
+
 #include "Instrument.hpp"
 #include "armnn/Types.hpp"
 
@@ -16,7 +20,7 @@ namespace armnn
 {
 
 /// Forward declaration
-class Profiler;
+class IProfiler;
 
 /// Event class records measurements reported by BeginEvent()/EndEvent() and returns measurements when
 /// Event::GetMeasurements() is called.
@@ -27,10 +31,11 @@ public:
     using Instruments = std::vector<InstrumentPtr>;
 
     Event(const std::string& eventName,
-          Profiler* profiler,
+          IProfiler* profiler,
           Event* parent,
           const BackendId backendId,
-          std::vector<InstrumentPtr>&& instrument);
+          std::vector<InstrumentPtr>&& instrument,
+          const Optional<arm::pipe::ProfilingGuid> guid);
 
     Event(const Event& other) = delete;
 
@@ -50,13 +55,17 @@ public:
     /// \return Recorded measurements of the event
     const std::vector<Measurement> GetMeasurements() const;
 
+    /// Get the Instruments used by this Event
+    /// \return Return a reference to the collection of Instruments
+    const std::vector<InstrumentPtr>& GetInstruments() const;
+
     /// Get the name of the event
     /// \return Name of the event
     const std::string& GetName() const;
 
     /// Get the pointer of the profiler associated with this event
     /// \return Pointer of the profiler associated with this event
-    const Profiler* GetProfiler() const;
+    const IProfiler* GetProfiler() const;
 
     /// Get the pointer of the parent event
     /// \return Pointer of the parent event
@@ -65,6 +74,10 @@ public:
     /// Get the backend id of the event
     /// \return Backend id of the event
     BackendId GetBackendId() const;
+
+    /// Get the associated profiling GUID if the event is a workload
+    /// \return Optional GUID of the event
+    Optional<arm::pipe::ProfilingGuid> GetProfilingGuid() const;
 
     /// Assignment operator
     Event& operator=(const Event& other) = delete;
@@ -77,7 +90,7 @@ private:
     std::string m_EventName;
 
     /// Stored associated profiler
-    Profiler* m_Profiler;
+    IProfiler* m_Profiler;
 
     /// Stores optional parent event
     Event* m_Parent;
@@ -87,6 +100,9 @@ private:
 
     /// Instruments to use
     Instruments m_Instruments;
+
+    /// Workload Profiling id
+    Optional<arm::pipe::ProfilingGuid> m_ProfilingGuid;
 };
 
 } // namespace armnn

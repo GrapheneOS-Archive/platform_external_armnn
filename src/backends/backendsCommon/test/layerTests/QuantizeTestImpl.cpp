@@ -9,12 +9,12 @@
 
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 namespace
 {
@@ -31,10 +31,7 @@ LayerTestResult<T, Dim> QuantizeTestImpl(
     armnn::QuantizeQueueDescriptor descriptor)
 {
     IgnoreUnused(memoryManager);
-    boost::multi_array<float, Dim> input = MakeTensor<float, Dim>(inputTensorInfo, inputData);
-
-    LayerTestResult<T, Dim> ret(outputTensorInfo);
-    ret.outputExpected = MakeTensor<T, Dim>(outputTensorInfo, expectedOutputData);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -43,18 +40,23 @@ LayerTestResult<T, Dim> QuantizeTestImpl(
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateQuantize(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Quantize,
+                                                                                descriptor,
+                                                                                info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(ret.output.data(), outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return ret;
+    return LayerTestResult<T, Dim>(actualOutput,
+                                   expectedOutputData,
+                                   outputHandle->GetShape(),
+                                   outputTensorInfo.GetShape());
 }
 
 template <armnn::DataType ArmnnOutputType, typename T = armnn::ResolveType<ArmnnOutputType>>

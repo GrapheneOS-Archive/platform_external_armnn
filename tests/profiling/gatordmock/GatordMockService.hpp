@@ -16,12 +16,10 @@
 
 #include <server/include/basePipeServer/BasePipeServer.hpp>
 
+#include <server/include/timelineDecoder/DirectoryCaptureCommandHandler.hpp>
 #include <server/include/timelineDecoder/TimelineDecoder.hpp>
 #include <server/include/timelineDecoder/TimelineCaptureCommandHandler.hpp>
 #include <server/include/timelineDecoder/TimelineDirectoryCaptureCommandHandler.hpp>
-
-// src/profiling
-#include <DirectoryCaptureCommandHandler.hpp>
 
 #include <atomic>
 #include <string>
@@ -34,7 +32,7 @@ namespace gatordmock
 {
 
 ///  A class that implements a Mock Gatord server. It will listen on a specified Unix domain socket (UDS)
-///  namespace for client connections. It will then allow opertaions to manage coutners while receiving counter data.
+///  namespace for client connections. It will then allow opertaions to manage counters while receiving counter data.
 class GatordMockService
 {
 public:
@@ -54,7 +52,7 @@ public:
             // This stub lets us ignore any counter capture packets we receive without throwing an error
             , m_StubCommandHandler(3, 0, m_PacketVersionResolver.ResolvePacketVersion(0, 3).GetEncodedValue())
             , m_DirectoryCaptureCommandHandler(
-                    0, 2, m_PacketVersionResolver.ResolvePacketVersion(0, 2).GetEncodedValue(), !echoPackets)
+                    "ARMNN", 0, 2, m_PacketVersionResolver.ResolvePacketVersion(0, 2).GetEncodedValue(), !echoPackets)
             , m_TimelineCaptureCommandHandler(
                     1, 1, m_PacketVersionResolver.ResolvePacketVersion(1, 1).GetEncodedValue(), m_TimelineDecoder)
             , m_TimelineDirectoryCaptureCommandHandler(
@@ -120,7 +118,7 @@ public:
     /// Execute the WAIT command from the comamnd file.
     void WaitCommand(uint32_t timeout);
 
-    profiling::DirectoryCaptureCommandHandler& GetDirectoryCaptureCommandHandler()
+    arm::pipe::DirectoryCaptureCommandHandler& GetDirectoryCaptureCommandHandler()
     {
         return m_DirectoryCaptureCommandHandler;
     }
@@ -155,7 +153,7 @@ private:
     gatordmock::StreamMetadataCommandHandler m_StreamMetadataCommandHandler;
     gatordmock::StubCommandHandler m_StubCommandHandler;
 
-    profiling::DirectoryCaptureCommandHandler m_DirectoryCaptureCommandHandler;
+    arm::pipe::DirectoryCaptureCommandHandler m_DirectoryCaptureCommandHandler;
 
     arm::pipe::TimelineCaptureCommandHandler m_TimelineCaptureCommandHandler;
     arm::pipe::TimelineDirectoryCaptureCommandHandler m_TimelineDirectoryCaptureCommandHandler;

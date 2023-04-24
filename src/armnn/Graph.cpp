@@ -1,18 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include "Graph.hpp"
-#include "SubgraphView.hpp"
-#include "LayersFwd.hpp"
+#include <Graph.hpp>
+#include <LayersFwd.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
+#include <armnn/backends/SubgraphView.hpp>
 
 #include <armnn/BackendId.hpp>
 #include <armnn/Logging.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <armnn/Utils.hpp>
 #include <armnn/utility/Assert.hpp>
 #include <armnn/utility/NumericCast.hpp>
 
@@ -27,6 +26,9 @@ namespace armnn
 
 Graph::Graph(const Graph& other)
 :   m_LayersInOrder(other.m_LayersInOrder)
+,   m_AllowExpandedDims(other.m_AllowExpandedDims)
+,   m_ShapeInferenceMethod(other.m_ShapeInferenceMethod)
+,   m_Profiler(other.m_Profiler)
 {
     std::unordered_map<const Layer*, Layer*> otherToClonedMap;
 
@@ -180,6 +182,7 @@ Status Graph::AllocateDynamicBuffers()
 {
     // Layers must be sorted in topological order
     ARMNN_ASSERT(m_LayersInOrder);
+    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "LoadNetwork_AllocateDynamicBuffers");
 
     std::unordered_set<const ITensorHandle*> preallocatedTensors;
     std::unordered_map<const ITensorHandle*, unsigned int> handleReferenceCounts;
@@ -433,17 +436,23 @@ void Graph::SubstituteSubgraph(SubgraphView& subgraph, IConnectableLayer* substi
 {
     ARMNN_ASSERT(substituteLayer != nullptr);
 
-    ReplaceSubgraphConnections(subgraph, substituteLayer);
-    EraseSubgraphLayers(subgraph);
+    // Create a new sub-graph with only the given layer, using
+    // the given sub-graph as a reference of which parent graph to use
+    SubgraphView substituteSubgraph(substituteLayer);
+
+    SubstituteSubgraph(subgraph, substituteSubgraph);
 }
 
 void Graph::SubstituteSubgraph(SubgraphView& subgraph, const SubgraphView& substituteSubgraph)
 {
     // Look through each layer in the new subgraph and add any that are not already a member of this graph
-    substituteSubgraph.ForEachLayer([this](Layer* layer)
+    substituteSubgraph.ForEachIConnectableLayer([this](IConnectableLayer* iConnectableLayer)
     {
-        if (std::find(std::begin(m_Layers), std::end(m_Layers), layer) == std::end(m_Layers))
+        if (std::find(std::begin(m_Layers),
+                      std::end(m_Layers),
+                      iConnectableLayer) == std::end(m_Layers))
         {
+            auto layer = PolymorphicDowncast<Layer*>(iConnectableLayer);
             layer->Reparent(*this, m_Layers.end());
             m_LayersInOrder = false;
         }
@@ -454,36 +463,28 @@ void Graph::SubstituteSubgraph(SubgraphView& subgraph, const SubgraphView& subst
     TopologicalSort();
 }
 
-void Graph::ReplaceSubgraphConnections(const SubgraphView& subgraph, IConnectableLayer* substituteLayer)
-{
-    ARMNN_ASSERT(substituteLayer != nullptr);
-
-    // Create a new sub-graph with only the given layer, using
-    // the given sub-graph as a reference of which parent graph to use
-    SubgraphView substituteSubgraph(substituteLayer);
-    ReplaceSubgraphConnections(subgraph, substituteSubgraph);
-}
-
 void Graph::ReplaceSubgraphConnections(const SubgraphView& subgraph, const SubgraphView& substituteSubgraph)
 {
-    ARMNN_ASSERT_MSG(!substituteSubgraph.GetLayers().empty(), "New sub-graph used for substitution must not be empty");
+    ARMNN_ASSERT_MSG(!substituteSubgraph.GetIConnectableLayers().empty(),
+                     "New sub-graph used for substitution must not be empty");
 
-    const SubgraphView::Layers& substituteSubgraphLayers = substituteSubgraph.GetLayers();
-    std::for_each(substituteSubgraphLayers.begin(), substituteSubgraphLayers.end(), [&](Layer* layer)
+    const SubgraphView::IConnectableLayers& substituteSubgraphLayers = substituteSubgraph.GetIConnectableLayers();
+    std::for_each(substituteSubgraphLayers.begin(), substituteSubgraphLayers.end(), [&](IConnectableLayer* layer)
     {
         IgnoreUnused(layer);
+        layer = PolymorphicDowncast<Layer*>(layer);
         ARMNN_ASSERT_MSG(std::find(m_Layers.begin(), m_Layers.end(), layer) != m_Layers.end(),
                          "Substitute layer is not a member of graph");
     });
 
-    const SubgraphView::InputSlots& subgraphInputSlots = subgraph.GetInputSlots();
-    const SubgraphView::OutputSlots& subgraphOutputSlots = subgraph.GetOutputSlots();
+    const SubgraphView::IInputSlots& subgraphInputSlots = subgraph.GetIInputSlots();
+    const SubgraphView::IOutputSlots& subgraphOutputSlots = subgraph.GetIOutputSlots();
 
     unsigned int subgraphNumInputSlots = armnn::numeric_cast<unsigned int>(subgraphInputSlots.size());
     unsigned int subgraphNumOutputSlots = armnn::numeric_cast<unsigned int>(subgraphOutputSlots.size());
 
-    const SubgraphView::InputSlots& substituteSubgraphInputSlots = substituteSubgraph.GetInputSlots();
-    const SubgraphView::OutputSlots& substituteSubgraphOutputSlots = substituteSubgraph.GetOutputSlots();
+    const SubgraphView::IInputSlots& substituteSubgraphInputSlots = substituteSubgraph.GetIInputSlots();
+    const SubgraphView::IOutputSlots& substituteSubgraphOutputSlots = substituteSubgraph.GetIOutputSlots();
 
     ARMNN_ASSERT(subgraphNumInputSlots == substituteSubgraphInputSlots.size());
     ARMNN_ASSERT(subgraphNumOutputSlots == substituteSubgraphOutputSlots.size());
@@ -493,37 +494,75 @@ void Graph::ReplaceSubgraphConnections(const SubgraphView& subgraph, const Subgr
     // Step 1: process input slots
     for (unsigned int inputSlotIdx = 0; inputSlotIdx < subgraphNumInputSlots; ++inputSlotIdx)
     {
-        InputSlot* subgraphInputSlot = subgraphInputSlots.at(inputSlotIdx);
+        IInputSlot* subgraphInputSlot = subgraphInputSlots.at(inputSlotIdx);
         ARMNN_ASSERT(subgraphInputSlot);
 
-        IOutputSlot* connectedOutputSlot = subgraphInputSlot->GetConnection();
-        ARMNN_ASSERT(connectedOutputSlot);
-        connectedOutputSlot->Disconnect(*subgraphInputSlot);
+        // Only disconnect if the InputSlot has a connection, this might not be the case when
+        // dealing with working copies of SubgraphViews
+        // Note: we don't need this check for OutputSlot as it iterates over a vector of valid connections
+        if (subgraphInputSlot->GetConnection())
+        {
+            IOutputSlot* connectedOutputSlot = subgraphInputSlot->GetConnection();
+            ARMNN_ASSERT(connectedOutputSlot);
+            connectedOutputSlot->Disconnect(*subgraphInputSlot);
 
-        IInputSlot* substituteInputSlot = substituteSubgraphInputSlots.at(inputSlotIdx);
-        ARMNN_ASSERT(substituteInputSlot);
-        connectedOutputSlot->Connect(*substituteInputSlot);
+            IInputSlot* substituteInputSlot = substituteSubgraphInputSlots.at(inputSlotIdx);
+            ARMNN_ASSERT(substituteInputSlot);
+            connectedOutputSlot->Connect(*substituteInputSlot);
+        }
     }
 
     // Step 2: process output slots
     for(unsigned int outputSlotIdx = 0; outputSlotIdx < subgraphNumOutputSlots; ++outputSlotIdx)
     {
-        OutputSlot* subgraphOutputSlot = subgraphOutputSlots.at(outputSlotIdx);
+        auto subgraphOutputSlot =
+                PolymorphicDowncast<OutputSlot*>(subgraphOutputSlots.at(outputSlotIdx));
         ARMNN_ASSERT(subgraphOutputSlot);
 
-        OutputSlot* substituteOutputSlot = substituteSubgraphOutputSlots.at(outputSlotIdx);
+        auto substituteOutputSlot =
+                PolymorphicDowncast<OutputSlot*>(substituteSubgraphOutputSlots.at(outputSlotIdx));
         ARMNN_ASSERT(substituteOutputSlot);
+
         subgraphOutputSlot->MoveAllConnections(*substituteOutputSlot);
     }
 }
 
 void Graph::EraseSubgraphLayers(SubgraphView &subgraph)
 {
-    for (auto layer : subgraph.GetLayers())
+
+    for (auto iConnectableLayer : subgraph.GetIConnectableLayers())
     {
+        auto layer = PolymorphicDowncast<Layer*>(iConnectableLayer);
         EraseLayer(layer);
     }
     subgraph.Clear();
+}
+
+/// For each ConstantLayer in Graph, ensures TensorInfo is set on all output slots.
+/// LayerValidationException thrown if no TensorInfo is set.
+///
+/// @throws LayerValidationException
+void Graph::VerifyConstantLayerSetTensorInfo() const
+{
+    for (auto&& layer : TopologicalSort())
+    {
+        if (layer->GetType() == armnn::LayerType::Constant)
+        {
+            for (auto&& output: layer->GetOutputSlots())
+            {
+                if (!output.IsTensorInfoSet())
+                {
+                    std::ostringstream message;
+                    message << "Output slot TensorInfo not set on "
+                            << GetLayerTypeAsCString(layer->GetType())
+                            << " layer \""
+                            << layer->GetName()
+                            << "\"";
+                    throw LayerValidationException(message.str());
+                }
+            }
+        }
+    }
 }
 
 void Graph::InferTensorInfos()
@@ -535,26 +574,93 @@ void Graph::InferTensorInfos()
             const IOutputSlot* source = input.GetConnectedOutputSlot();
             if (source == NULL)
             {
-                std::ostringstream message;
-                message << "Input not connected on "
-                        << GetLayerTypeAsCString(layer->GetType())
-                        << " layer \""
-                        << layer->GetName()
-                        << "\"";
-                throw LayerValidationException(message.str());
+                // Throws exception due to a layer input not being connected to an output slot.
+                // Verifies input slot weights and bias are set for FullyConnected layers.
+                ConstructErrorMessageForUnconnectedInputs(layer, input.GetSlotIndex());
             }
 
             if (!source->IsTensorInfoSet())
             {
-                throw LayerValidationException("All inputs must have the TensorInfo set at this point.");
+                std::ostringstream message;
+                message << "Output slot TensorInfo not set on "
+                        << GetLayerTypeAsCString(layer->GetType())
+                        << " layer "
+                        << std::quoted(layer->GetName());
+                throw LayerValidationException(message.str());
             }
+        }
 
-            if (layer->m_ShapeInferenceMethod == ShapeInferenceMethod::ValidateOnly)
+        if (layer->m_ShapeInferenceMethod == ShapeInferenceMethod::ValidateOnly)
+        {
+            layer->ValidateTensorShapesFromInputs();
+        }
+    }
+}
+
+/// Throws exception due to a layer input not being connected to an output slot.
+/// Verifies weights and bias are set for layers on input slots 1
+/// and 2 respectively. Method checks if bias is enabled before ensuring it is set.
+///
+/// @param layer constant pointer to a Layer object
+/// @param slotIndex input slot index of layer
+/// @throws LayerValidationException
+void Graph::ConstructErrorMessageForUnconnectedInputs(Layer* const layer,
+                                                      unsigned int slotIndex)
+{
+    std::ostringstream message;
+    bool noWeightsAndBias = false;
+
+    if ((layer->GetType() == armnn::LayerType::FullyConnected ||
+         layer->GetType() == armnn::LayerType::Convolution2d  ||
+         layer->GetType() == armnn::LayerType::Convolution3d  ||
+         layer->GetType() == armnn::LayerType::DepthwiseConvolution2d) && slotIndex > 0)
+    {
+        message << std::endl;
+
+        // If weights are not set and is bias enabled, also check if bias is set
+        if (slotIndex == 1 && layer->GetNumInputSlots() == 3)
+        {
+            const IOutputSlot* biasSource = layer->GetInputSlot(2).GetConnectedOutputSlot();
+            if (biasSource == NULL)
             {
-                layer->ValidateTensorShapesFromInputs();
+                message << "Weights and bias layers not set." << std::endl;
+                noWeightsAndBias = true;
+            }
+        }
+
+        // Only weights or bias are not set
+        if (!noWeightsAndBias)
+        {
+            if (slotIndex == 1)
+            {
+                message << "Weights layer not set." << std::endl;
+            }
+            else
+            {
+                message << "Bias layer not set." << std::endl;
             }
         }
     }
+
+    std::string slotString = noWeightsAndBias ? "1 & 2" : std::to_string(slotIndex);
+    message << "Input slot(s) "
+            << slotString
+            << " for "
+            << GetLayerTypeAsCString(layer->GetType())
+            << " not connected to an output slot. " << std::endl
+            << "Layer name: "
+            << std::quoted(layer->GetName());
+    throw LayerValidationException(message.str());
+}
+
+const std::shared_ptr<IProfiler>& Graph::GetProfiler() const
+{
+    return m_Profiler;
+}
+
+void Graph::SetLayersOutOfOrder()
+{
+    m_LayersInOrder = false;
 }
 
 } // namespace armnn

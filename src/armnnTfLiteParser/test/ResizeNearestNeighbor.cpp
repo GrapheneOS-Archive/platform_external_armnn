@@ -1,19 +1,13 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 
-#include <string>
-#include <iostream>
 
-using armnnTfLiteParser::TfLiteParser;
-
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_ResizeNearestNeighbor")
+{
 struct ResizeNearestNeighborFixture : public ParserFlatbuffersFixture
 {
     explicit ResizeNearestNeighborFixture(const std::string & inputShape,
@@ -100,7 +94,7 @@ struct SimpleResizeNearestNeighborFixture : ResizeNearestNeighborFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseResizeNearestNeighbor, SimpleResizeNearestNeighborFixture)
+TEST_CASE_FIXTURE(SimpleResizeNearestNeighborFixture, "ParseResizeNearestNeighbor")
 {
     RunTest<4, armnn::DataType::Float32>(
                 0,
@@ -108,4 +102,4 @@ BOOST_FIXTURE_TEST_CASE(ParseResizeNearestNeighbor, SimpleResizeNearestNeighborF
                 {{"OutputTensor", {  1.0f }}});
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

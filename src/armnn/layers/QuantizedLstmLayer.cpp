@@ -8,8 +8,8 @@
 
 #include <armnn/QuantizedLstmParams.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -41,7 +41,7 @@ std::unique_ptr<IWorkload> QuantizedLstmLayer::CreateWorkload(const IWorkloadFac
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateQuantizedLstm(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::QuantizedLstm, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 QuantizedLstmLayer* QuantizedLstmLayer::Clone(Graph& graph) const
@@ -49,31 +49,31 @@ QuantizedLstmLayer* QuantizedLstmLayer::Clone(Graph& graph) const
     auto layer = CloneBase<QuantizedLstmLayer>(graph, GetName());
 
     layer->m_QuantizedLstmParameters.m_InputToInputWeights = m_QuantizedLstmParameters.m_InputToInputWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_InputToInputWeights) : nullptr;
+            m_QuantizedLstmParameters.m_InputToInputWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_InputToForgetWeights = m_QuantizedLstmParameters.m_InputToForgetWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_InputToForgetWeights) : nullptr;
+            m_QuantizedLstmParameters.m_InputToForgetWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_InputToCellWeights = m_QuantizedLstmParameters.m_InputToCellWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_InputToCellWeights) : nullptr;
+            m_QuantizedLstmParameters.m_InputToCellWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_InputToOutputWeights = m_QuantizedLstmParameters.m_InputToOutputWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_InputToOutputWeights) : nullptr;
+            m_QuantizedLstmParameters.m_InputToOutputWeights : nullptr;
 
     layer->m_QuantizedLstmParameters.m_RecurrentToInputWeights = m_QuantizedLstmParameters.m_RecurrentToInputWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_RecurrentToInputWeights) : nullptr;
+            m_QuantizedLstmParameters.m_RecurrentToInputWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_RecurrentToForgetWeights = m_QuantizedLstmParameters.m_RecurrentToForgetWeights
-            ? std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_RecurrentToForgetWeights) : nullptr;
+            ? m_QuantizedLstmParameters.m_RecurrentToForgetWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_RecurrentToCellWeights = m_QuantizedLstmParameters.m_RecurrentToCellWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_RecurrentToCellWeights) : nullptr;
+            m_QuantizedLstmParameters.m_RecurrentToCellWeights : nullptr;
     layer->m_QuantizedLstmParameters.m_RecurrentToOutputWeights = m_QuantizedLstmParameters.m_RecurrentToOutputWeights
-            ? std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_RecurrentToOutputWeights) : nullptr;
+            ? m_QuantizedLstmParameters.m_RecurrentToOutputWeights : nullptr;
 
     layer->m_QuantizedLstmParameters.m_InputGateBias = m_QuantizedLstmParameters.m_InputGateBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_InputGateBias) : nullptr;
+            m_QuantizedLstmParameters.m_InputGateBias : nullptr;
     layer->m_QuantizedLstmParameters.m_ForgetGateBias = m_QuantizedLstmParameters.m_ForgetGateBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_ForgetGateBias) : nullptr;
+            m_QuantizedLstmParameters.m_ForgetGateBias : nullptr;
     layer->m_QuantizedLstmParameters.m_CellBias = m_QuantizedLstmParameters.m_CellBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_CellBias) : nullptr;
+            m_QuantizedLstmParameters.m_CellBias : nullptr;
     layer->m_QuantizedLstmParameters.m_OutputGateBias = m_QuantizedLstmParameters.m_OutputGateBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_QuantizedLstmParameters.m_OutputGateBias) : nullptr;
+            m_QuantizedLstmParameters.m_OutputGateBias : nullptr;
 
     return std::move(layer);
 }
@@ -148,8 +148,9 @@ void QuantizedLstmLayer::ValidateTensorShapesFromInputs()
                          1);
 }
 
-Layer::ConstantTensors QuantizedLstmLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors QuantizedLstmLayer::GetConstantTensorsByRef() const
 {
+    // For API stability DO NOT ALTER order and add new members to the end of vector
     return
     {
         m_QuantizedLstmParameters.m_InputToInputWeights,
@@ -169,126 +170,106 @@ Layer::ConstantTensors QuantizedLstmLayer::GetConstantTensorsByRef()
     };
 }
 
-void QuantizedLstmLayer::Accept(ILayerVisitor& visitor) const
+void QuantizedLstmLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    QuantizedLstmInputParams inputParams;
+    std::vector<ConstTensor> constTensors;
+
+    ManagedConstTensorHandle managedInputToInputWeights(m_QuantizedLstmParameters.m_InputToInputWeights);
+    ManagedConstTensorHandle managedInputToForgetWeights(m_QuantizedLstmParameters.m_InputToForgetWeights);
+    ManagedConstTensorHandle managedInputToCellWeights(m_QuantizedLstmParameters.m_InputToCellWeights);
+    ManagedConstTensorHandle managedInputToOutputWeights(m_QuantizedLstmParameters.m_InputToOutputWeights);
+
+    ManagedConstTensorHandle managedRecurrentToInputWeights(m_QuantizedLstmParameters.m_RecurrentToInputWeights);
+    ManagedConstTensorHandle managedRecurrentToForgetWeights(m_QuantizedLstmParameters.m_RecurrentToForgetWeights);
+    ManagedConstTensorHandle managedRecurrentToCellWeights(m_QuantizedLstmParameters.m_RecurrentToCellWeights);
+    ManagedConstTensorHandle managedRecurrentToOutputWeights(m_QuantizedLstmParameters.m_RecurrentToOutputWeights);
+
+    ManagedConstTensorHandle managedInputGateBias(m_QuantizedLstmParameters.m_InputGateBias);
+    ManagedConstTensorHandle managedForgetGateBias(m_QuantizedLstmParameters.m_ForgetGateBias);
+    ManagedConstTensorHandle managedCellBias(m_QuantizedLstmParameters.m_CellBias);
+    ManagedConstTensorHandle managedOutputGateBias(m_QuantizedLstmParameters.m_OutputGateBias);
 
     // InputToX weight tensors
-    ConstTensor inputToInputWeightsTensor;
     if (m_QuantizedLstmParameters.m_InputToInputWeights != nullptr)
     {
-        ConstTensor inputToInputWeightsTensorCopy(m_QuantizedLstmParameters.m_InputToInputWeights->GetTensorInfo(),
-                                                  m_QuantizedLstmParameters.m_InputToInputWeights->Map(true));
-        inputToInputWeightsTensor = inputToInputWeightsTensorCopy;
-        inputParams.m_InputToInputWeights = &inputToInputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToInputWeights.GetTensorInfo(),
+                                              managedInputToInputWeights.Map()));
     }
 
-    ConstTensor inputToForgetWeightsTensor;
     if (m_QuantizedLstmParameters.m_InputToForgetWeights != nullptr)
     {
-        ConstTensor inputToForgetWeightsTensorCopy(m_QuantizedLstmParameters.m_InputToForgetWeights->GetTensorInfo(),
-                                                   m_QuantizedLstmParameters.m_InputToForgetWeights->Map(true));
-        inputToForgetWeightsTensor = inputToForgetWeightsTensorCopy;
-        inputParams.m_InputToForgetWeights = &inputToForgetWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToForgetWeights.GetTensorInfo(),
+                                              managedInputToForgetWeights.Map()));
     }
 
-    ConstTensor inputToCellWeightsTensor;
     if (m_QuantizedLstmParameters.m_InputToCellWeights != nullptr)
     {
-        ConstTensor inputToCellWeightsTensorCopy(m_QuantizedLstmParameters.m_InputToCellWeights->GetTensorInfo(),
-                                                 m_QuantizedLstmParameters.m_InputToCellWeights->Map(true));
-        inputToCellWeightsTensor = inputToCellWeightsTensorCopy;
-        inputParams.m_InputToCellWeights = &inputToCellWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToCellWeights.GetTensorInfo(),
+                                              managedInputToCellWeights.Map()));
     }
 
-    ConstTensor inputToOutputWeightsTensor;
     if (m_QuantizedLstmParameters.m_InputToOutputWeights != nullptr)
     {
-        ConstTensor inputToOutputWeightsTensorCopy(m_QuantizedLstmParameters.m_InputToOutputWeights->GetTensorInfo(),
-                                                   m_QuantizedLstmParameters.m_InputToOutputWeights->Map(true));
-        inputToOutputWeightsTensor = inputToOutputWeightsTensorCopy;
-        inputParams.m_InputToOutputWeights = &inputToOutputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToOutputWeights.GetTensorInfo(),
+                                              managedInputToOutputWeights.Map()));
     }
 
     // RecurrentToX weight tensors
-    ConstTensor recurrentToInputWeightsTensor;
     if (m_QuantizedLstmParameters.m_RecurrentToInputWeights != nullptr)
     {
-        ConstTensor recurrentToInputWeightsTensorCopy(
-                m_QuantizedLstmParameters.m_RecurrentToInputWeights->GetTensorInfo(),
-                m_QuantizedLstmParameters.m_RecurrentToInputWeights->Map(true));
-        recurrentToInputWeightsTensor = recurrentToInputWeightsTensorCopy;
-        inputParams.m_RecurrentToInputWeights = &recurrentToInputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToInputWeights.GetTensorInfo(),
+                managedRecurrentToInputWeights.Map()));
     }
 
-    ConstTensor recurrentToForgetWeightsTensor;
     if (m_QuantizedLstmParameters.m_RecurrentToForgetWeights != nullptr)
     {
-        ConstTensor recurrentToForgetWeightsTensorCopy(
-                m_QuantizedLstmParameters.m_RecurrentToForgetWeights->GetTensorInfo(),
-                m_QuantizedLstmParameters.m_RecurrentToForgetWeights->Map(true));
-        recurrentToForgetWeightsTensor = recurrentToForgetWeightsTensorCopy;
-        inputParams.m_RecurrentToForgetWeights = &recurrentToForgetWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToForgetWeights.GetTensorInfo(),
+                managedRecurrentToForgetWeights.Map()));
     }
 
-    ConstTensor recurrentToCellWeightsTensor;
     if (m_QuantizedLstmParameters.m_RecurrentToCellWeights != nullptr)
     {
-        ConstTensor recurrentToCellWeightsTensorCopy(
-                m_QuantizedLstmParameters.m_RecurrentToCellWeights->GetTensorInfo(),
-                m_QuantizedLstmParameters.m_RecurrentToCellWeights->Map(true));
-        recurrentToCellWeightsTensor = recurrentToCellWeightsTensorCopy;
-        inputParams.m_RecurrentToCellWeights = &recurrentToCellWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToCellWeights.GetTensorInfo(),
+                managedRecurrentToCellWeights.Map()));
     }
 
-    ConstTensor recurrentToOutputWeightsTensor;
     if (m_QuantizedLstmParameters.m_RecurrentToOutputWeights != nullptr)
     {
-        ConstTensor recurrentToOutputWeightsTensorCopy(
-                m_QuantizedLstmParameters.m_RecurrentToOutputWeights->GetTensorInfo(),
-                m_QuantizedLstmParameters.m_RecurrentToOutputWeights->Map(true));
-        recurrentToOutputWeightsTensor = recurrentToOutputWeightsTensorCopy;
-        inputParams.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToOutputWeights.GetTensorInfo(),
+                managedRecurrentToOutputWeights.Map()));
     }
 
     // Bias tensors
-    ConstTensor inputGateBiasTensor;
     if (m_QuantizedLstmParameters.m_InputGateBias != nullptr)
     {
-        ConstTensor inputGateBiasTensorCopy(m_QuantizedLstmParameters.m_InputGateBias->GetTensorInfo(),
-                                            m_QuantizedLstmParameters.m_InputGateBias->Map(true));
-        inputGateBiasTensor = inputGateBiasTensorCopy;
-        inputParams.m_InputGateBias = &inputGateBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedInputGateBias.GetTensorInfo(),
+                                              managedInputGateBias.Map()));
     }
 
-    ConstTensor forgetGateBiasTensor;
     if (m_QuantizedLstmParameters.m_ForgetGateBias != nullptr)
     {
-        ConstTensor forgetGateBiasTensorCopy(m_QuantizedLstmParameters.m_ForgetGateBias->GetTensorInfo(),
-                                             m_QuantizedLstmParameters.m_ForgetGateBias->Map(true));
-        forgetGateBiasTensor = forgetGateBiasTensorCopy;
-        inputParams.m_ForgetGateBias = &forgetGateBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedForgetGateBias.GetTensorInfo(),
+                                              managedForgetGateBias.Map()));
     }
 
-    ConstTensor cellBiasTensor;
     if (m_QuantizedLstmParameters.m_CellBias != nullptr)
     {
-        ConstTensor cellBiasTensorCopy(m_QuantizedLstmParameters.m_CellBias->GetTensorInfo(),
-                                       m_QuantizedLstmParameters.m_CellBias->Map(true));
-        cellBiasTensor = cellBiasTensorCopy;
-        inputParams.m_CellBias = &cellBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedCellBias.GetTensorInfo(),
+                                              managedCellBias.Map()));
     }
 
-    ConstTensor outputGateBiasTensor;
     if (m_QuantizedLstmParameters.m_OutputGateBias != nullptr)
     {
-        ConstTensor outputGateBiasCopy(m_QuantizedLstmParameters.m_OutputGateBias->GetTensorInfo(),
-                                       m_QuantizedLstmParameters.m_OutputGateBias->Map(true));
-        outputGateBiasTensor = outputGateBiasCopy;
-        inputParams.m_OutputGateBias = &outputGateBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedOutputGateBias.GetTensorInfo(),
+                                              managedOutputGateBias.Map()));
     }
 
-    visitor.VisitQuantizedLstmLayer(this, inputParams, GetName());
+
+    strategy.ExecuteStrategy(this, BaseDescriptor(), constTensors, GetName());
 }
 
 } // namespace armnn

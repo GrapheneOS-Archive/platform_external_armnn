@@ -18,6 +18,9 @@ BACKEND_SOURCES := \
         ClBackendContext.cpp \
         ClBackendModelContext.cpp \
         ClContextControl.cpp \
+        ClContextDeserializer.cpp \
+        ClContextSerializer.cpp \
+        ClImportTensorHandleFactory.cpp \
         ClLayerSupport.cpp \
         ClRegistryInitializer.cpp \
         ClTensorHandleFactory.cpp \
@@ -27,25 +30,31 @@ BACKEND_SOURCES := \
         workloads/ClActivationWorkload.cpp \
         workloads/ClAdditionWorkload.cpp \
         workloads/ClArgMinMaxWorkload.cpp \
+        workloads/ClBatchMatMulWorkload.cpp \
         workloads/ClBatchNormalizationFloatWorkload.cpp \
         workloads/ClBatchToSpaceNdWorkload.cpp \
+        workloads/ClCastWorkload.cpp \
+        workloads/ClChannelShuffleWorkload.cpp \
         workloads/ClComparisonWorkload.cpp \
         workloads/ClConcatWorkload.cpp \
         workloads/ClConstantWorkload.cpp \
         workloads/ClConvertFp16ToFp32Workload.cpp \
         workloads/ClConvertFp32ToFp16Workload.cpp \
         workloads/ClConvolution2dWorkload.cpp \
+        workloads/ClConvolution3dWorkload.cpp \
         workloads/ClDepthToSpaceWorkload.cpp \
         workloads/ClDepthwiseConvolutionWorkload.cpp \
         workloads/ClDequantizeWorkload.cpp \
-        workloads/ClDivisionFloatWorkload.cpp \
+        workloads/ClDivisionWorkload.cpp \
         workloads/ClExpWorkload.cpp \
         workloads/ClFillWorkload.cpp \
         workloads/ClFloorFloatWorkload.cpp \
         workloads/ClFullyConnectedWorkload.cpp \
         workloads/ClGatherWorkload.cpp \
+        workloads/ClGatherNdWorkload.cpp \
         workloads/ClInstanceNormalizationWorkload.cpp \
         workloads/ClL2NormalizationFloatWorkload.cpp \
+        workloads/ClLogWorkload.cpp \
         workloads/ClLogicalAndWorkload.cpp \
         workloads/ClLogicalNotWorkload.cpp \
         workloads/ClLogicalOrWorkload.cpp \
@@ -60,23 +69,28 @@ BACKEND_SOURCES := \
         workloads/ClPadWorkload.cpp \
         workloads/ClPermuteWorkload.cpp \
         workloads/ClPooling2dWorkload.cpp \
+        workloads/ClPooling3dWorkload.cpp \
         workloads/ClPreluWorkload.cpp \
         workloads/ClQLstmWorkload.cpp \
         workloads/ClQuantizedLstmWorkload.cpp \
         workloads/ClQuantizeWorkload.cpp \
+        workloads/ClReduceWorkload.cpp \
         workloads/ClReshapeWorkload.cpp \
         workloads/ClResizeWorkload.cpp \
         workloads/ClRsqrtWorkload.cpp \
+        workloads/ClSinWorkload.cpp \
         workloads/ClSliceWorkload.cpp \
         workloads/ClSoftmaxWorkload.cpp \
         workloads/ClSpaceToBatchNdWorkload.cpp \
         workloads/ClSpaceToDepthWorkload.cpp \
         workloads/ClSplitterWorkload.cpp \
+        workloads/ClSqrtWorkload.cpp \
         workloads/ClStackWorkload.cpp \
         workloads/ClStridedSliceWorkload.cpp \
         workloads/ClSubtractionWorkload.cpp \
         workloads/ClTransposeConvolution2dWorkload.cpp \
-        workloads/ClTransposeWorkload.cpp
+        workloads/ClTransposeWorkload.cpp \
+        workloads/ClUnidirectionalSequenceLstmFloatWorkload.cpp
 else
 
 # ARMNN_COMPUTE_CL_ENABLED == 0
@@ -97,6 +111,8 @@ ifeq ($(ARMNN_COMPUTE_CL_ENABLED),1)
 # Include the source files for the CL backend tests
 
 BACKEND_TEST_SOURCES := \
+        test/ClBackendTests.cpp \
+        test/ClContextSerializerTests.cpp \
         test/ClCreateWorkloadTests.cpp \
         test/ClEndToEndTests.cpp \
         test/ClJsonPrinterTests.cpp \
