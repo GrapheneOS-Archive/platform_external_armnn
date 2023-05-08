@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -12,7 +12,6 @@
 #include <arm_compute/core/ITensor.h>
 #include <arm_compute/core/TensorInfo.h>
 #include <arm_compute/core/Types.h>
-#include <arm_compute/core/Size2D.h>
 
 #include <Half.hpp>
 
@@ -26,6 +25,9 @@ namespace armcomputetensorutils
 /// Utility function to map an armnn::DataType to corresponding arm_compute::DataType.
 arm_compute::DataType GetArmComputeDataType(armnn::DataType dataType, bool multiScales);
 
+/// Utility function to map an arm_compute::DataType to corresponding armnn::DataType.
+armnn::DataType GetArmNNDataType(arm_compute::DataType datatype);
+
 /// Utility function used to set up an arm_compute::Coordinates from a vector of ArmNN Axes for reduction functions
 arm_compute::Coordinates BuildArmComputeReductionCoordinates(size_t inputDimensions,
                                                              unsigned int originalInputRank,
@@ -34,15 +36,37 @@ arm_compute::Coordinates BuildArmComputeReductionCoordinates(size_t inputDimensi
 /// Utility function used to setup an arm_compute::TensorShape object from an armnn::TensorShape.
 arm_compute::TensorShape BuildArmComputeTensorShape(const armnn::TensorShape& tensorShape);
 
+/// Utility function used to setup an arm_compute::TensorShape object from an armnn::TensorShape. This will
+/// attempt to reduce the number of leading 1s until the dimension length is equal to the dimensions passed in.
+arm_compute::TensorShape BuildArmComputeTensorShape(const armnn::TensorShape& tensorShape, unsigned int dimensions);
+
 /// Utility function used to setup an arm_compute::ITensorInfo object whose dimensions are based on the given
 /// armnn::ITensorInfo.
 arm_compute::TensorInfo BuildArmComputeTensorInfo(const armnn::TensorInfo& tensorInfo);
+
+/// Utility function used to setup an arm_compute::ITensorInfo object whose dimensions are based on the given
+/// armnn::ITensorInfo. This will attempt to reduce the number of leading 1s until the dimension length is equal
+/// to the dimensions passed in.
+arm_compute::TensorInfo BuildArmComputeTensorInfo(const armnn::TensorInfo& tensorInfo, unsigned int dimensions);
+
+/// Utility function used to setup an arm_compute::ITensorInfo object whose dimensions are based on the given
+/// armnn::ITensorInfo. This will attempt to reduce the number of leading 1s until the dimension length is equal
+/// to the dimensions passed in.
+arm_compute::TensorInfo BuildArmComputeTensorInfo(const armnn::TensorInfo& tensorInfo,
+                                                  armnn::DataLayout dataLayout,
+                                                  unsigned int dimensions);
 
 /// Utility function used to setup an arm_compute::ITensorInfo object whose dimensions are based on the given
 /// armnn::ITensorInfo.
 /// armnn::DataLayout.
 arm_compute::TensorInfo BuildArmComputeTensorInfo(const armnn::TensorInfo& tensorInfo,
                                                   armnn::DataLayout dataLayout);
+
+/// Utility function used to setup an arm_compute::ITensorInfo object whose dimensions are based on the given
+/// armnn::ITensorInfo. This will attempt to reduce the number of leading 1s until the dimension length is equal
+/// to the dimensions passed in.
+arm_compute::TensorInfo BuildArmComputeTensorInfo(const armnn::TensorInfo& tensorInfo,
+                                                  armnn::DataLayout dataLayout, unsigned int dimensions);
 
 /// Utility function used to convert armnn::DataLayout to arm_compute::DataLayout
 /// armnn::DataLayout.
@@ -54,22 +78,37 @@ arm_compute::DataLayout ConvertDataLayout(armnn::DataLayout dataLayout);
 arm_compute::PoolingLayerInfo BuildArmComputePoolingLayerInfo(const Pooling2dDescriptor& descriptor,
                                                               bool fpMixedPrecision = false);
 
+/// Utility function used to setup an arm_compute::Pooling3dLayerInfo object from given
+/// armnn::Pooling3dDescriptor
+/// bool fpMixedPrecision
+arm_compute::Pooling3dLayerInfo BuildArmComputePooling3dLayerInfo(const Pooling3dDescriptor& descriptor,
+                                                                  bool fpMixedPrecision = false);
+
 /// Utility function to setup an arm_compute::NormalizationLayerInfo object from an armnn::NormalizationDescriptor.
 arm_compute::NormalizationLayerInfo BuildArmComputeNormalizationLayerInfo(const NormalizationDescriptor& desc);
 
 /// Utility function used to setup an arm_compute::PermutationVector object from an armnn::PermutationVector.
-arm_compute::PermutationVector BuildArmComputePermutationVector(const armnn::PermutationVector& vector);
+/// \param perm PermutationVector used in Arm NN Permute layer
+/// \return PermutationVector used in ACL Transpose layer
+arm_compute::PermutationVector BuildArmComputePermutationVector(const armnn::PermutationVector& perm);
 
 /// Utility function used to setup an arm_compute::PermutationVector object from an armnn::PermutationVector.
-arm_compute::PermutationVector BuildArmComputeTransposeVector(const armnn::PermutationVector& vector);
+/// \param perm PermutationVector used in Arm NN Transpose layer
+/// \return PermutationVector used in ACL Transpose layer
+arm_compute::PermutationVector BuildArmComputeTransposeVector(const armnn::PermutationVector& perm);
 
 /// Utility function used to setup an arm_compute::Size2D object from width and height values.
 arm_compute::Size2D BuildArmComputeSize2D(const unsigned int width, const unsigned int height);
 
-/// Gets the appropriate PixelValue for the input DataType
-arm_compute::PixelValue GetPixelValue(arm_compute::ITensor& input, float pixelValue);
+/// Gets the appropriate PixelValue for the TensorInfo DataType
+arm_compute::PixelValue GetPixelValue(const arm_compute::ITensorInfo* tensorInfo, float value);
 
-/// Utility function used to setup an arm_compute::PadStrideInfo object from an armnn layer descriptor.
+/// Computes the depth multiplier parameter for the Depthwise Conv2d ACL workload.
+unsigned int ComputeDepthwiseConv2dDepthMultiplier(armnn::DataLayout layout,
+                                                   const arm_compute::TensorShape& weightsShape,
+                                                   const arm_compute::TensorShape& inputShape);
+
+/// Utility function used to setup an arm_compute::PadStrideInfo object from an ArmNN layer descriptor.
 template <typename Descriptor>
 arm_compute::PadStrideInfo BuildArmComputePadStrideInfo(const Descriptor &descriptor)
 {

@@ -8,9 +8,9 @@
 
 #include <armnn/INetwork.hpp>
 
-#include <backendsCommon/test/CommonTestUtils.hpp>
+#include <CommonTestUtils.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <vector>
 
@@ -30,7 +30,7 @@ INetworkPtr CreateBatchToSpaceNdNetwork(const armnn::TensorShape& inputShape,
     // Builds up the structure of the network.
     INetworkPtr net(INetwork::Create());
 
-    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset);
+    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset, true);
     TensorInfo outputTensorInfo(outputShape, DataType, qScale, qOffset);
 
     BatchToSpaceNdDescriptor batchToSpaceNdDesc(blockShape, crops);
@@ -62,7 +62,7 @@ void BatchToSpaceNdEndToEnd(const std::vector<BackendId>& backends, armnn::DataL
     // Builds up the structure of the network
     INetworkPtr net = CreateBatchToSpaceNdNetwork<ArmnnType>(inputShape, outputShape, blockShape, crops, dataLayout);
 
-    BOOST_TEST_CHECKPOINT("create a network");
+    CHECK(net);
 
     // Creates structures for input & output.
     std::vector<T> inputData{ 1, 2, 3, 4 };
@@ -93,7 +93,7 @@ void BatchToSpaceNdComplexEndToEnd(const std::vector<BackendId>& backends, armnn
     // Builds up the structure of the network
     INetworkPtr net = CreateBatchToSpaceNdNetwork<ArmnnType>(inputShape, outputShape, blockShape, crops, dataLayout);
 
-    BOOST_TEST_CHECKPOINT("create a network");
+    CHECK(net);
 
     // Creates structures for input & output.
     std::vector<T> inputData{

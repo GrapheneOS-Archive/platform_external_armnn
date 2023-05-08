@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -15,12 +15,24 @@ namespace armnn
 
 void RefConvertFp16ToFp32Workload::Execute() const
 {
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefConvertFp16ToFp32Workload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefConvertFp16ToFp32Workload::Execute(std::vector<ITensorHandle*> inputs,
+                                           std::vector<ITensorHandle*> outputs) const
+{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefConvertFp16ToFp32Workload_Execute");
 
-    const Half* const input = GetInputTensorDataHalf(0, m_Data);
-    float* const output = GetOutputTensorDataFloat(0, m_Data);
+    const Half* const input = reinterpret_cast<const Half*>(inputs[0]->Map());
+    float* const output = reinterpret_cast<float*>(outputs[0]->Map());
 
-    unsigned int numElements = GetTensorInfo(m_Data.m_Inputs[0]).GetNumElements();
+    unsigned int numElements = GetTensorInfo(inputs[0]).GetNumElements();
     armnnUtils::FloatingPointConverter::ConvertFloat16To32(input, numElements, output);
 }
 

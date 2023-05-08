@@ -66,6 +66,13 @@ void OpenClTimer::Start()
             // Store the Kernel info for later GetMeasurements() call
             m_Kernels.emplace_back(ss.str(), customEvent);
 
+            if(event != nullptr)
+            {
+                //return cl_event from the intercepted call
+                clRetainEvent(customEvent);
+                *event = customEvent;
+            }
+
             return retVal;
         };
 
@@ -76,6 +83,11 @@ void OpenClTimer::Start()
 void OpenClTimer::Stop()
 {
     CLSymbols::get().clEnqueueNDRangeKernel_ptr = m_OriginalEnqueueFunction;
+}
+
+bool OpenClTimer::HasKernelMeasurements() const
+{
+    return m_Kernels.size() > 0;
 }
 
 std::vector<Measurement> OpenClTimer::GetMeasurements() const

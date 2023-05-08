@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,13 +7,13 @@
 #include <armnn/IRuntime.hpp>
 #include <armnn/INetwork.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <set>
 
-BOOST_AUTO_TEST_SUITE(FlowControl)
-
-BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
+TEST_SUITE("FlowControl")
+{
+TEST_CASE("ErrorOnLoadNetwork")
 {
     using namespace armnn;
 
@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
     INetworkPtr net(INetwork::Create());
 
     std::vector<uint8_t> falseData = {0};
-    ConstTensor falseTensor(armnn::TensorInfo({1}, armnn::DataType::Boolean), falseData);
+    ConstTensor falseTensor(armnn::TensorInfo({1}, armnn::DataType::Boolean, 0.0f, 0, true), falseData);
     IConnectableLayer* constLayer = net->AddConstantLayer(falseTensor, "const");
     constLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({1}, armnn::DataType::Boolean));
 
@@ -55,14 +55,14 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
 
     try
     {
-        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptions(), errMessages);
-        BOOST_FAIL("Should have thrown an exception.");
+        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptionsOpaque(), errMessages);
+        FAIL("Should have thrown an exception.");
     }
-    catch (const InvalidArgumentException& e)
+    catch (const InvalidArgumentException&)
     {
         // Different exceptions are thrown on different backends
     }
-    BOOST_TEST(errMessages.size() > 0);
+    CHECK(errMessages.size() > 0);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

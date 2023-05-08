@@ -3,5 +3,5 @@
 `armnnTfLiteParser` is a library for loading neural networks defined by TensorFlow Lite FlatBuffers files
 into the Arm NN runtime.
 
-For more information about the TensorFlow Lite operators that are supported, and the networks that have been tested,
-see [TensorFlowLiteSupport.md](./TensorFlowLiteSupport.md).
+For more information, a list of supported TensorFlow Lite layers, and the networks that have been tested,
+please visit our [doxygen documentation](https://arm-software.github.io/armnn/latest/parsers.xhtml#S6_tf_lite_parser).

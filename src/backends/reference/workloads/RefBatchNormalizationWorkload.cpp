@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -15,14 +15,26 @@ namespace armnn
 
 RefBatchNormalizationWorkload::RefBatchNormalizationWorkload(const BatchNormalizationQueueDescriptor& descriptor,
                                                              const WorkloadInfo& info)
-    : BaseWorkload(descriptor, info)
-    , m_Mean    (std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Mean)))
-    , m_Variance(std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Variance)))
-    , m_Beta    (std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Beta)))
-    , m_Gamma   (std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Gamma)))
+    : RefBaseWorkload(descriptor, info)
+    , m_Mean    (std::make_unique<ScopedTensorHandle>(*(descriptor.m_Mean)))
+    , m_Variance(std::make_unique<ScopedTensorHandle>(*(descriptor.m_Variance)))
+    , m_Beta    (std::make_unique<ScopedTensorHandle>(*(descriptor.m_Beta)))
+    , m_Gamma   (std::make_unique<ScopedTensorHandle>(*(descriptor.m_Gamma)))
 {}
 
 void RefBatchNormalizationWorkload::Execute() const
+{
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefBatchNormalizationWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefBatchNormalizationWorkload::Execute(std::vector<ITensorHandle*> inputs,
+                                            std::vector<ITensorHandle*> outputs) const
 {
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefBatchNormalizationWorkload_Execute");
 
@@ -34,10 +46,10 @@ void RefBatchNormalizationWorkload::Execute() const
                                                                          m_Gamma->Map(true));
     std::unique_ptr<Decoder<float>> betaDecoder     = MakeDecoder<float>(m_Beta->GetTensorInfo(),
                                                                          m_Beta->Map(true));
-    std::unique_ptr<Decoder<float>> inputDecoder    = MakeDecoder<float>(GetTensorInfo(m_Data.m_Inputs[0]),
-                                                                         m_Data.m_Inputs[0]->Map());
-    std::unique_ptr<Encoder<float>> outputEncoder   = MakeEncoder<float>(GetTensorInfo(m_Data.m_Outputs[0]),
-                                                                         m_Data.m_Outputs[0]->Map());
+    std::unique_ptr<Decoder<float>> inputDecoder    = MakeDecoder<float>(GetTensorInfo(inputs[0]),
+                                                                         inputs[0]->Map());
+    std::unique_ptr<Encoder<float>> outputEncoder   = MakeEncoder<float>(GetTensorInfo(outputs[0]),
+                                                                         outputs[0]->Map());
 
     BatchNormImpl(m_Data, *meanDecoder, *varianceDecoder, *betaDecoder, *gammaDecoder, *inputDecoder, *outputEncoder);
 }

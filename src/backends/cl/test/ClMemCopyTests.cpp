@@ -3,44 +3,72 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include "ClWorkloadFactoryHelper.hpp"
-
+#include <armnnTestUtils/LayerTestResult.hpp>
+#include <armnnTestUtils/MemCopyTestImpl.hpp>
+#include <armnnTestUtils/MockBackend.hpp>
 #include <cl/ClWorkloadFactory.hpp>
-#include <aclCommon/test/MemCopyTestImpl.hpp>
+#include <cl/ClBackend.hpp>
+#include <doctest/doctest.h>
 
-#include <reference/RefWorkloadFactory.hpp>
-#include <reference/test/RefWorkloadFactoryHelper.hpp>
+namespace
+{
 
-#include <boost/test/unit_test.hpp>
+template <>
+struct MemCopyTestHelper<armnn::ClWorkloadFactory>
+{
+    static armnn::IBackendInternal::IMemoryManagerSharedPtr GetMemoryManager()
+    {
+        armnn::ClBackend backend;
+        return backend.CreateMemoryManager();
+    }
 
-BOOST_AUTO_TEST_SUITE(ClMemCopy)
+    static armnn::ClWorkloadFactory GetFactory(
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ModelOptions& modelOptions = {})
+    {
+        armnn::ClBackend backend;
+        return armnn::ClWorkloadFactory(armnn::PolymorphicPointerDowncast<armnn::ClMemoryManager>(memoryManager),
+                                        backend.CreateBackendSpecificModelContext(modelOptions));
+    }
+};
+}    // namespace
 
-BOOST_AUTO_TEST_CASE(CopyBetweenCpuAndGpu)
+TEST_SUITE("ClMemCopy")
+{
+TEST_CASE("CopyBetweenCpuAndGpu")
 {
     LayerTestResult<float, 4> result =
-        MemCopyTest<armnn::RefWorkloadFactory, armnn::ClWorkloadFactory, armnn::DataType::Float32>(false);
-    BOOST_TEST(CompareTensors(result.output, result.outputExpected));
+        MemCopyTest<armnn::MockWorkloadFactory, armnn::ClWorkloadFactory, armnn::DataType::Float32>(false);
+    auto predResult = CompareTensors(result.m_ActualData,  result.m_ExpectedData,
+                                     result.m_ActualShape, result.m_ExpectedShape);
+    CHECK_MESSAGE(predResult.m_Result, predResult.m_Message.str());
 }
 
-BOOST_AUTO_TEST_CASE(CopyBetweenGpuAndCpu)
+TEST_CASE("CopyBetweenGpuAndCpu")
 {
     LayerTestResult<float, 4> result =
-        MemCopyTest<armnn::ClWorkloadFactory, armnn::RefWorkloadFactory, armnn::DataType::Float32>(false);
-    BOOST_TEST(CompareTensors(result.output, result.outputExpected));
+        MemCopyTest<armnn::ClWorkloadFactory, armnn::MockWorkloadFactory, armnn::DataType::Float32>(false);
+    auto predResult = CompareTensors(result.m_ActualData,  result.m_ExpectedData,
+                                     result.m_ActualShape, result.m_ExpectedShape);
+    CHECK_MESSAGE(predResult.m_Result, predResult.m_Message.str());
 }
 
-BOOST_AUTO_TEST_CASE(CopyBetweenCpuAndGpuWithSubtensors)
+TEST_CASE("CopyBetweenCpuAndGpuWithSubtensors")
 {
     LayerTestResult<float, 4> result =
-        MemCopyTest<armnn::RefWorkloadFactory, armnn::ClWorkloadFactory, armnn::DataType::Float32>(true);
-    BOOST_TEST(CompareTensors(result.output, result.outputExpected));
+        MemCopyTest<armnn::MockWorkloadFactory, armnn::ClWorkloadFactory, armnn::DataType::Float32>(true);
+    auto predResult = CompareTensors(result.m_ActualData,  result.m_ExpectedData,
+                                     result.m_ActualShape, result.m_ExpectedShape);
+    CHECK_MESSAGE(predResult.m_Result, predResult.m_Message.str());
 }
 
-BOOST_AUTO_TEST_CASE(CopyBetweenGpuAndCpuWithSubtensors)
+TEST_CASE("CopyBetweenGpuAndCpuWithSubtensors")
 {
     LayerTestResult<float, 4> result =
-        MemCopyTest<armnn::ClWorkloadFactory, armnn::RefWorkloadFactory, armnn::DataType::Float32>(true);
-    BOOST_TEST(CompareTensors(result.output, result.outputExpected));
+        MemCopyTest<armnn::ClWorkloadFactory, armnn::MockWorkloadFactory, armnn::DataType::Float32>(true);
+    auto predResult = CompareTensors(result.m_ActualData,  result.m_ExpectedData,
+                                     result.m_ActualShape, result.m_ExpectedShape);
+    CHECK_MESSAGE(predResult.m_Result, predResult.m_Message.str());
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

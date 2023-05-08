@@ -4,25 +4,27 @@
 //
 #pragma once
 
-#include <armnn/backends/ITensorHandleFactory.hpp>
 #include <aclCommon/BaseMemoryManager.hpp>
-#include <armnn/backends/IMemoryManager.hpp>
 #include <armnn/MemorySources.hpp>
+#include <armnn/backends/IMemoryManager.hpp>
+#include <armnn/backends/ITensorHandleFactory.hpp>
 
 namespace armnn
 {
 
-constexpr const char* ClTensorHandleFactoryId() { return "Arm/Cl/TensorHandleFactory"; }
+constexpr const char* ClTensorHandleFactoryId()
+{
+    return "Arm/Cl/TensorHandleFactory";
+}
 
-class ClTensorHandleFactory : public ITensorHandleFactory {
+class ClTensorHandleFactory : public ITensorHandleFactory
+{
 public:
     static const FactoryId m_Id;
 
     ClTensorHandleFactory(std::shared_ptr<ClMemoryManager> mgr)
-                          : m_MemoryManager(mgr),
-                            m_ImportFlags(static_cast<MemorySourceFlags>(MemorySource::Undefined)),
-                            m_ExportFlags(static_cast<MemorySourceFlags>(MemorySource::Undefined))
-        {}
+        : m_MemoryManager(mgr)
+    {}
 
     std::unique_ptr<ITensorHandle> CreateSubTensorHandle(ITensorHandle& parent,
                                                          const TensorShape& subTensorShape,
@@ -52,8 +54,6 @@ public:
 
 private:
     mutable std::shared_ptr<ClMemoryManager> m_MemoryManager;
-    MemorySourceFlags m_ImportFlags;
-    MemorySourceFlags m_ExportFlags;
 };
 
-} // namespace armnn
+}    // namespace armnn

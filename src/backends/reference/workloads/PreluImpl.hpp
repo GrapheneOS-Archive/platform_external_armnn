@@ -8,12 +8,14 @@
 #include "Encoders.hpp"
 #include "Decoders.hpp"
 
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
 
-void PreluImpl(const PreluQueueDescriptor& data,
+void PreluImpl(const TensorInfo& inputInfo,
+               const TensorInfo& alphaInfo,
+               const TensorInfo& outputInfo,
                Decoder<float>& inputData,
                Decoder<float>& alphaData,
                Encoder<float>& outputData);

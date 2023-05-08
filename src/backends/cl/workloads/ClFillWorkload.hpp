@@ -5,16 +5,18 @@
 
 #pragma once
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/Workload.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include "ClBaseWorkload.hpp"
 #include <arm_compute/runtime/CL/functions/CLFill.h>
 
 namespace armnn {
 
-class ClFillWorkload : public BaseWorkload<FillQueueDescriptor>
+class ClFillWorkload : public ClBaseWorkload<FillQueueDescriptor>
 {
 public:
-    ClFillWorkload(const FillQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClFillWorkload(const FillQueueDescriptor& descriptor,
+                   const WorkloadInfo& info,
+                   const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:

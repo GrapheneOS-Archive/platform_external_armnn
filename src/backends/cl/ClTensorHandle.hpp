@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -18,40 +18,60 @@
 #include <arm_compute/core/TensorShape.h>
 #include <arm_compute/core/Coordinates.h>
 
+#include <aclCommon/IClTensorHandle.hpp>
+
 namespace armnn
 {
-
-
-class IClTensorHandle : public IAclTensorHandle
-{
-public:
-    virtual arm_compute::ICLTensor& GetTensor() = 0;
-    virtual arm_compute::ICLTensor const& GetTensor() const = 0;
-    virtual arm_compute::DataType GetDataType() const = 0;
-    virtual void SetMemoryGroup(const std::shared_ptr<arm_compute::IMemoryGroup>& memoryGroup) = 0;
-};
 
 class ClTensorHandle : public IClTensorHandle
 {
 public:
     ClTensorHandle(const TensorInfo& tensorInfo)
+                     : m_ImportFlags(static_cast<MemorySourceFlags>(MemorySource::Undefined)),
+                       m_Imported(false),
+                       m_IsImportEnabled(false)
     {
         armnn::armcomputetensorutils::BuildArmComputeTensor(m_Tensor, tensorInfo);
     }
 
-    ClTensorHandle(const TensorInfo& tensorInfo, DataLayout dataLayout)
+    ClTensorHandle(const TensorInfo& tensorInfo,
+                   DataLayout dataLayout,
+                   MemorySourceFlags importFlags = static_cast<MemorySourceFlags>(MemorySource::Undefined))
+                   : m_ImportFlags(importFlags),
+                     m_Imported(false),
+                     m_IsImportEnabled(false)
     {
         armnn::armcomputetensorutils::BuildArmComputeTensor(m_Tensor, tensorInfo, dataLayout);
     }
 
     arm_compute::CLTensor& GetTensor() override { return m_Tensor; }
     arm_compute::CLTensor const& GetTensor() const override { return m_Tensor; }
-    virtual void Allocate() override {armnn::armcomputetensorutils::InitialiseArmComputeTensorEmpty(m_Tensor);}
+    virtual void Allocate() override
+    {
+        // If we have enabled Importing, don't allocate the tensor
+        if (m_IsImportEnabled)
+        {
+            throw MemoryImportException("ClTensorHandle::Attempting to allocate memory when importing");
+        }
+        else
+        {
+            armnn::armcomputetensorutils::InitialiseArmComputeTensorEmpty(m_Tensor);
+        }
+
+    }
 
     virtual void Manage() override
     {
-        assert(m_MemoryGroup != nullptr);
-        m_MemoryGroup->manage(&m_Tensor);
+        // If we have enabled Importing, don't manage the tensor
+        if (m_IsImportEnabled)
+        {
+            throw MemoryImportException("ClTensorHandle::Attempting to manage memory when importing");
+        }
+        else
+        {
+            assert(m_MemoryGroup != nullptr);
+            m_MemoryGroup->manage(&m_Tensor);
+        }
     }
 
     virtual const void* Map(bool blocking = true) const override
@@ -84,6 +104,39 @@ public:
         return armcomputetensorutils::GetShape(m_Tensor.info()->tensor_shape());
     }
 
+    void SetImportFlags(MemorySourceFlags importFlags)
+    {
+        m_ImportFlags = importFlags;
+    }
+
+    MemorySourceFlags GetImportFlags() const override
+    {
+        return m_ImportFlags;
+    }
+
+    void SetImportEnabledFlag(bool importEnabledFlag)
+    {
+        m_IsImportEnabled = importEnabledFlag;
+    }
+
+    virtual bool Import(void* memory, MemorySource source) override
+    {
+        armnn::IgnoreUnused(memory);
+        if (m_ImportFlags & static_cast<MemorySourceFlags>(source))
+        {
+            throw MemoryImportException("ClTensorHandle::Incorrect import flag");
+        }
+        m_Imported = false;
+        return false;
+    }
+
+    virtual bool CanBeImported(void* memory, MemorySource source) override
+    {
+        // This TensorHandle can never import.
+        armnn::IgnoreUnused(memory, source);
+        return false;
+    }
+
 private:
     // Only used for testing
     void CopyOutTo(void* memory) const override
@@ -100,6 +153,7 @@ private:
                 armcomputetensorutils::CopyArmComputeITensorData(this->GetTensor(),
                                                                  static_cast<uint8_t*>(memory));
                 break;
+            case arm_compute::DataType::QSYMM8:
             case arm_compute::DataType::QSYMM8_PER_CHANNEL:
             case arm_compute::DataType::QASYMM8_SIGNED:
                 armcomputetensorutils::CopyArmComputeITensorData(this->GetTensor(),
@@ -146,6 +200,7 @@ private:
                                                                  this->GetTensor());
                 break;
             case arm_compute::DataType::S16:
+            case arm_compute::DataType::QSYMM8:
             case arm_compute::DataType::QSYMM8_PER_CHANNEL:
             case arm_compute::DataType::QASYMM8_SIGNED:
                 armcomputetensorutils::CopyArmComputeITensorData(static_cast<const int8_t*>(memory),
@@ -169,6 +224,9 @@ private:
 
     arm_compute::CLTensor m_Tensor;
     std::shared_ptr<arm_compute::MemoryGroup> m_MemoryGroup;
+    MemorySourceFlags m_ImportFlags;
+    bool m_Imported;
+    bool m_IsImportEnabled;
 };
 
 class ClSubTensorHandle : public IClTensorHandle
@@ -234,6 +292,7 @@ private:
                 armcomputetensorutils::CopyArmComputeITensorData(this->GetTensor(),
                                                                  static_cast<armnn::Half*>(memory));
                 break;
+            case arm_compute::DataType::QSYMM8:
             case arm_compute::DataType::QSYMM8_PER_CHANNEL:
             case arm_compute::DataType::QASYMM8_SIGNED:
             armcomputetensorutils::CopyArmComputeITensorData(this->GetTensor(),
@@ -275,6 +334,7 @@ private:
                 armcomputetensorutils::CopyArmComputeITensorData(static_cast<const armnn::Half*>(memory),
                                                                  this->GetTensor());
                 break;
+            case arm_compute::DataType::QSYMM8:
             case arm_compute::DataType::QSYMM8_PER_CHANNEL:
             case arm_compute::DataType::QASYMM8_SIGNED:
                 armcomputetensorutils::CopyArmComputeITensorData(static_cast<const int8_t*>(memory),

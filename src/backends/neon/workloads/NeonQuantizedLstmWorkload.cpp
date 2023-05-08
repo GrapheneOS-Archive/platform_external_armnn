@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,7 @@
 #include "NeonWorkloadUtils.hpp"
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 namespace armnn
@@ -16,7 +16,7 @@ using namespace armcomputetensorutils;
 
 NeonQuantizedLstmWorkload::NeonQuantizedLstmWorkload(const QuantizedLstmQueueDescriptor &descriptor,
                                                      const WorkloadInfo &info)
-        : BaseWorkload<QuantizedLstmQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<QuantizedLstmQueueDescriptor>(descriptor, info)
 {
     // Basic parameters
     m_InputToInputWeightsTensor = std::make_unique<arm_compute::Tensor>();
@@ -124,6 +124,7 @@ NeonQuantizedLstmWorkload::NeonQuantizedLstmWorkload(const QuantizedLstmQueueDes
 
 void NeonQuantizedLstmWorkload::Execute() const
 {
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonQuantizedLstmWorkload_Execute", this->GetGuid());
     m_QuantizedLstmLayer.run();
 }
 

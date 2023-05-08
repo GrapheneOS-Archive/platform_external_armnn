@@ -5,20 +5,20 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
 #include <backendsCommon/test/WorkloadFactoryHelper.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> PreluTest(
@@ -61,22 +61,18 @@ LayerTestResult<T, 4> PreluTest(
        0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, -1.0f, -2.0f, 0.0f, -2.0f, -4.0f
     };
 
-    auto input = MakeTensor<T, 4>(inputTensorInfo,
-                                  armnnUtils::QuantizedVector<T>(inputData,
-                                                                 inputTensorInfo.GetQuantizationScale(),
-                                                                 inputTensorInfo.GetQuantizationOffset()));
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData,
+                                                          inputTensorInfo.GetQuantizationScale(),
+                                                          inputTensorInfo.GetQuantizationOffset());
 
-    auto alpha = MakeTensor<T, 4>(alphaTensorInfo,
-                                  armnnUtils::QuantizedVector<T>(alphaData,
+    std::vector<T> alpha = armnnUtils::QuantizedVector<T>(alphaData,
                                                                  alphaTensorInfo.GetQuantizationScale(),
-                                                                 alphaTensorInfo.GetQuantizationOffset()));
+                                                                 alphaTensorInfo.GetQuantizationOffset());
 
-    LayerTestResult<T, 4> result(outputTensorInfo);
-    result.outputExpected =
-        MakeTensor<T, 4>(outputTensorInfo,
-                         armnnUtils::QuantizedVector<T>(outputExpectedData,
-                                                        outputTensorInfo.GetQuantizationScale(),
-                                                        outputTensorInfo.GetQuantizationOffset()));
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(outputExpectedData,
+                                                                   outputTensorInfo.GetQuantizationScale(),
+                                                                   outputTensorInfo.GetQuantizationOffset());
 
     std::unique_ptr <armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr <armnn::ITensorHandle> alphaHandle  = tensorHandleFactory.CreateTensorHandle(alphaTensorInfo);
@@ -88,18 +84,23 @@ LayerTestResult<T, 4> PreluTest(
     AddInputToWorkload (descriptor, info, alphaTensorInfo,  alphaHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreatePrelu(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Prelu,
+                                                                                descriptor,
+                                                                                info);
 
     inputHandle->Allocate();
     alphaHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
-    CopyDataToITensorHandle(alphaHandle.get(), &alpha[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(alphaHandle.get(), alpha.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 expectedOutput,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
