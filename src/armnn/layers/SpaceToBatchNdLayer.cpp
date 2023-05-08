@@ -10,8 +10,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <numeric>
 
@@ -31,7 +31,7 @@ std::unique_ptr<IWorkload> SpaceToBatchNdLayer::CreateWorkload(const IWorkloadFa
     descriptor.m_Parameters.m_PadList    = m_Param.m_PadList;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSpaceToBatchNd(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::SpaceToBatchNd, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SpaceToBatchNdLayer* SpaceToBatchNdLayer::Clone(Graph& graph) const
@@ -83,9 +83,9 @@ void SpaceToBatchNdLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SpaceToBatchNdLayer");
 }
 
-void SpaceToBatchNdLayer::Accept(ILayerVisitor& visitor) const
+void SpaceToBatchNdLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSpaceToBatchNdLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace

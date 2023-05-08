@@ -4,7 +4,8 @@
 //
 
 #include "JSONTimelineDecoder.hpp"
-#include "../profiling/ProfilingUtils.hpp"
+
+#include <client/src/ProfilingUtils.hpp>
 
 #include <string>
 
@@ -302,7 +303,8 @@ std::string JSONTimelineDecoder::GetWorkloadExecutionJSONString(const JSONTimeli
 {
     if(entity.childEntities.size() < 2)
     {
-        throw Exception("Workload Execution Entity Packet does not have the expected Event packets attached");
+        throw arm::pipe::ProfilingException(
+            "Workload Execution Entity Packet does not have the expected Event packets attached");
     }
     JSONEntity jsonEventOne = entity.childEntities[0];
     JSONEntity jsonEventTwo = entity.childEntities[1];

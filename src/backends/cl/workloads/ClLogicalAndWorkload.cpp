@@ -32,21 +32,31 @@ arm_compute::Status ClLogicalAndWorkloadValidate(const TensorInfo& input0,
 }
 
 ClLogicalAndWorkload::ClLogicalAndWorkload(const LogicalBinaryQueueDescriptor& descriptor,
-                                           const WorkloadInfo& info)
-    : BaseWorkload<LogicalBinaryQueueDescriptor>(descriptor, info)
+                                           const WorkloadInfo& info,
+                                           const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<LogicalBinaryQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClLogicalAndWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClLogicalAndWorkload", 2, 1);
 
     arm_compute::ICLTensor& input0 = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& input1 = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Inputs[1])->GetTensor();
     arm_compute::ICLTensor& output = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
-    m_LogicalAndLayer.configure(&input0, &input1, &output);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClLogicalAndWorkload_configure");
+        m_LogicalAndLayer.configure(clCompileContext, &input0, &input1, &output);
+    }
 }
 
 void ClLogicalAndWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClLogicalAndWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClLogicalAndWorkload_Execute", this->GetGuid());
     m_LogicalAndLayer.run();
 }
 

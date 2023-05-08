@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> FillLayer::CreateWorkload(const IWorkloadFactory& fac
     FillQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateFill(descriptor, PrepInfoAndDesc(descriptor) );
+    return factory.CreateWorkload(LayerType::Fill, descriptor, PrepInfoAndDesc(descriptor) );
 }
 
 FillLayer* FillLayer::Clone(Graph& graph) const
@@ -51,9 +51,9 @@ void FillLayer::ValidateTensorShapesFromInputs()
         inferredShapes[0][0]);
 }
 
-void FillLayer::Accept(ILayerVisitor& visitor) const
+void FillLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitFillLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

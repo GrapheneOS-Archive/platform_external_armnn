@@ -1,23 +1,21 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ActivationTestImpl.hpp"
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 #include <backendsCommon/test/ActivationFixture.hpp>
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 #include <reference/test/RefWorkloadFactoryHelper.hpp>
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <test/TensorHelpers.hpp>
-
-#include <boost/multi_array.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 #include <algorithm>
 
@@ -58,9 +56,7 @@ LayerTestResult<T, 4> BoundedReLuTestCommon(
         outputTensorInfo.SetQuantizationOffset(outputOffset);
     }
 
-    LayerTestResult<T, 4> result(inputTensorInfo);
-
-    auto input = MakeTensor<T, 4>(inputTensorInfo, inputData);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -75,20 +71,22 @@ LayerTestResult<T, 4> BoundedReLuTestCommon(
     descriptor.m_Parameters.m_A = upperBound;
     descriptor.m_Parameters.m_B = lowerBound;
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(descriptor, workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                descriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    result.outputExpected = MakeTensor<T, 4>(outputTensorInfo, outputExpectedData);
-
-    return result;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 outputExpectedData,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 LayerTestResult<float, 4> BoundedReLuUpperAndLowerBoundTest(
@@ -245,7 +243,7 @@ struct BoundedReLuRandomInputTestTraits
     }
 };
 
-boost::multi_array<float, 4> BoundedReLuRandomInputTest(
+std::vector<float> BoundedReLuRandomInputTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
@@ -257,11 +255,10 @@ boost::multi_array<float, 4> BoundedReLuRandomInputTest(
     const armnn::TensorInfo inputTensorInfo = BoundedReLuRandomInputTestTraits::GetInputTensorInfo();
     const armnn::TensorInfo outputTensorInfo = BoundedReLuRandomInputTestTraits::GetOutputTensorInfo();
 
-    boost::multi_array<float, 4> output(GetTensorShapeAsArray<4>(outputTensorInfo));
-
     // Min/max random values passed to MakeRandomTensor are purposely outside of the ReLu
     // range [lowerBound, upperBound].
-    auto input = MakeRandomTensor<float, 4>(inputTensorInfo, 4605828, lowerBound - 5.0f, upperBound * 2.0f);
+    std::vector<float> input = MakeRandomTensor<float>(inputTensorInfo, 4605828, lowerBound - 5.0f, upperBound * 2.0f);
+    std::vector<float> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -273,18 +270,19 @@ boost::multi_array<float, 4> BoundedReLuRandomInputTest(
     AddOutputToWorkload(descriptor, workloadInfo, outputTensorInfo, outputHandle.get());
     descriptor.m_Parameters = activationDescriptor;
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(descriptor, workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                descriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return output;
+    return actualOutput;
 }
 
 } // namespace
@@ -305,20 +303,20 @@ LayerTestResult<float, 4> CompareBoundedReLuTest(
     activationDescriptor.m_A = upperBound;
     activationDescriptor.m_B = lowerBound;
 
-    result.output = BoundedReLuRandomInputTest(
+    result.m_ActualData = BoundedReLuRandomInputTest(
         workloadFactory, memoryManager, tensorHandleFactory, 0.0f, upperBound, activationDescriptor);
-    result.outputExpected = BoundedReLuRandomInputTest(
+    result.m_ExpectedData = BoundedReLuRandomInputTest(
         refWorkloadFactory, nullptr, refTensorHandleFactory, 0.0f, upperBound, activationDescriptor);
 
     return result;
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
-LayerTestResult<T,4> ConstantLinearActivationTestCommon(
+LayerTestResult<T, 4> ConstantLinearActivationTestCommon(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
-    float qScale = 0.0f,
+    float qScale = 1.0f,
     int32_t qOffset = 0)
 {
     IgnoreUnused(memoryManager);
@@ -344,7 +342,6 @@ LayerTestResult<T,4> ConstantLinearActivationTestCommon(
         outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    LayerTestResult<T, 4> ret(outputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
@@ -357,22 +354,26 @@ LayerTestResult<T,4> ConstantLinearActivationTestCommon(
     data.m_Parameters.m_B = 0.0f;
     data.m_Parameters.m_Function = armnn::ActivationFunction::Linear;
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    boost::multi_array<T, 4> input = MakeRandomTensor<T, 4>(inputTensorInfo, 7123561);
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
+    std::vector<T> input = MakeRandomTensor<T>(inputTensorInfo, 7123561);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    // Ensure output equals input.
-    ret.outputExpected = input;
-
-    return ret;
+    // Use input as ExpectedData as tensor doesn't change.
+    return LayerTestResult<T, 4>(actualOutput,
+                                 input,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 LayerTestResult<float, 4> ConstantLinearActivationTest(
@@ -441,9 +442,11 @@ LayerTestResult<T, 4> SimpleActivationTest(
         outputTensorInfo.SetQuantizationOffset(outOffset);
     }
 
-    LayerTestResult<T, 4> result(inputTensorInfo);
+    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, scale, offset);
 
-    auto input = MakeTensor<T, 4>(inputTensorInfo, armnnUtils::QuantizedVector<T>(inputData, scale, offset));
+    // Calculated outputExpected manually.
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<T> outputExpected = armnnUtils::QuantizedVector<T>(outputExpectedData, outScale, outOffset);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -458,22 +461,22 @@ LayerTestResult<T, 4> SimpleActivationTest(
     descriptor.m_Parameters.m_A = activationParameterA;
     descriptor.m_Parameters.m_B = activationParameterB;
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(descriptor, workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                descriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    // Calculated manually.
-    result.outputExpected =
-        MakeTensor<T, 4>(outputTensorInfo, armnnUtils::QuantizedVector<T>(outputExpectedData, outScale, outOffset));
-
-    return result;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 outputExpected,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -497,8 +500,8 @@ LayerTestResult<T, 4> SimpleSigmoidTestCommon(
     {
         return 1.0f / (1.0f + std::exp(-value));
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> m_OutputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), m_OutputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -511,7 +514,7 @@ LayerTestResult<T, 4> SimpleSigmoidTestCommon(
                                            inputData,
                                            1.f / 256.f,
                                            0,
-                                           outputExpectedData);
+                                           m_OutputExpected);
 }
 
 LayerTestResult<float, 4> SimpleSigmoidTest(
@@ -561,8 +564,8 @@ LayerTestResult<T, 4> ReLuTestCommon(
     {
         return std::fmax(0.0f, value);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> outputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), outputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -575,7 +578,7 @@ LayerTestResult<T, 4> ReLuTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           outputExpected);
 }
 
 LayerTestResult<int16_t, 4> ReLuInt16Test(
@@ -625,8 +628,8 @@ LayerTestResult<T, 4> BoundedReLuTestCommon(
     {
         return std::min(a, std::max(b, value));
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> outputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), outputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -639,7 +642,7 @@ LayerTestResult<T, 4> BoundedReLuTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           outputExpected);
 }
 
 LayerTestResult<int16_t, 4> BoundedReLuInt16Test(
@@ -672,8 +675,8 @@ LayerTestResult<T, 4> SoftReLuTestCommon(
     {
         return std::log(1.0f + std::exp(value));
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> outputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), outputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -686,7 +689,7 @@ LayerTestResult<T, 4> SoftReLuTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           outputExpected);
 }
 
 LayerTestResult<float, 4> SoftReLuTest(
@@ -735,8 +738,8 @@ LayerTestResult<T, 4> LeakyReLuTestCommon(
     {
         return value > 0.0f ? value : (value * a);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> outputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), outputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -749,7 +752,7 @@ LayerTestResult<T, 4> LeakyReLuTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           outputExpected);
 }
 
 LayerTestResult<float, 4> LeakyReLuTest(
@@ -797,8 +800,8 @@ LayerTestResult<T, 4> AbsTestCommon(
     {
         return std::abs(value);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> outputExpected(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), outputExpected.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -811,7 +814,7 @@ LayerTestResult<T, 4> AbsTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           outputExpected);
 }
 
 LayerTestResult<float, 4> AbsTest(
@@ -856,17 +859,15 @@ LayerTestResult<float, 5> SqrtNNTest(
     {
         return std::sqrt(value);
     };
-    std::vector<float> outputExpectedData(inputDataSize);
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputDataSize);
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     armnn::TensorInfo inputTensorInfo(
         { 1u, 2u, 3u, 4u, 5u }, armnn::DataType::Float32);
     armnn::TensorInfo outputTensorInfo(
         { 1u, 2u, 3u, 4u, 5u }, armnn::DataType::Float32);
 
-    LayerTestResult<float, 5> result(inputTensorInfo);
-
-    auto input = MakeTensor<float, 5>(inputTensorInfo, inputData);
+    std::vector<float> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -878,21 +879,22 @@ LayerTestResult<float, 5> SqrtNNTest(
 
     descriptor.m_Parameters.m_Function = armnn::ActivationFunction::Sqrt;
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(descriptor, workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                descriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    // Calculated manually.
-    result.outputExpected = MakeTensor<float, 5>(outputTensorInfo, outputExpectedData);
-
-    return result;
+    return LayerTestResult<float, 5>(actualOutput,
+                                     expectedOutput,
+                                     outputHandle->GetShape(),
+                                     outputTensorInfo.GetShape());
 };
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -915,8 +917,8 @@ LayerTestResult<T, 4> SqrtTestCommon(
     {
         return std::sqrt(value);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -929,7 +931,7 @@ LayerTestResult<T, 4> SqrtTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           expectedOutput);
 }
 
 LayerTestResult<float, 4> SqrtTest(
@@ -976,8 +978,8 @@ LayerTestResult<T, 4> SquareTestCommon(
     {
         return std::pow(value,2);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -990,7 +992,7 @@ LayerTestResult<T, 4> SquareTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           expectedOutput);
 }
 
 LayerTestResult<float, 4> SquareTest(
@@ -1040,8 +1042,8 @@ LayerTestResult<T, 4> TanhTestCommon(
     {
         return a * tanhf(b * value);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -1054,7 +1056,7 @@ LayerTestResult<T, 4> TanhTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           expectedOutput);
 }
 
 LayerTestResult<float, 4> TanhTest(
@@ -1104,8 +1106,8 @@ LayerTestResult<T, 4> EluTestCommon(
     {
         return (value >= 0) ? value : a * (expf(value) - 1);
     };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -1118,7 +1120,7 @@ LayerTestResult<T, 4> EluTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           expectedOutput);
 }
 
 LayerTestResult<float, 4> EluTest(
@@ -1172,8 +1174,8 @@ LayerTestResult<T, 4> HardSwishTestCommon(
             float result = hardSwish_step1 / 6;
             return result;
         };
-    std::vector<float> outputExpectedData(inputData.size());
-    std::transform(inputData.begin(), inputData.end(), outputExpectedData.begin(), f);
+    std::vector<float> expectedOutput(inputData.size());
+    std::transform(inputData.begin(), inputData.end(), expectedOutput.begin(), f);
 
     return SimpleActivationTest<ArmnnType>(workloadFactory,
                                            memoryManager,
@@ -1186,7 +1188,7 @@ LayerTestResult<T, 4> HardSwishTestCommon(
                                            inputData,
                                            qScale,
                                            qOffset,
-                                           outputExpectedData);
+                                           expectedOutput);
 }
 
 LayerTestResult<float, 4> HardSwishTest(
@@ -1216,7 +1218,7 @@ LayerTestResult<int16_t, 4> HardSwishInt16Test(
 
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
-LayerTestResult<T,4> CompareActivationTestImpl(
+LayerTestResult<T, 4> CompareActivationTestImpl(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     armnn::IWorkloadFactory& refWorkloadFactory,
@@ -1224,7 +1226,7 @@ LayerTestResult<T,4> CompareActivationTestImpl(
     const armnn::ITensorHandleFactory& refTensorHandleFactory,
     armnn::ActivationFunction f,
     unsigned int batchSize = 5,
-    float qScale = 0.0f,
+    float qScale = 1.0f,
     int32_t qOffset = 0)
 {
     IgnoreUnused(memoryManager);
@@ -1258,17 +1260,9 @@ LayerTestResult<T,4> CompareActivationTestImpl(
         minVal = 0.f;
     }
 
-    boost::multi_array<T, 4> input = MakeRandomTensor<T, 4>(inputTensorInfo, 21453, minVal, 10.f);
-
-
-    LayerTestResult<T,4> ret(outputTensorInfo);
-    auto boostArrayExtents = boost::extents
-        [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(batchSize)]
-        [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(channels)]
-        [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(height)]
-        [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(width)];
-    ret.output.resize(boostArrayExtents);
-    ret.outputExpected.resize(boostArrayExtents);
+    std::vector<T> input = MakeRandomTensor<T>(inputTensorInfo, 21453, minVal, 10.f);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<T> expectedOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -1289,9 +1283,11 @@ LayerTestResult<T,4> CompareActivationTestImpl(
     SetWorkloadInput(refData, refInfo, 0, inputTensorInfo, inputHandleRef.get());
     SetWorkloadOutput(refData, refInfo, 0, outputTensorInfo, outputHandleRef.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                data, info);
     ARMNN_ASSERT(workload != nullptr);
-    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateActivation(refData, refInfo);
+    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateWorkload(armnn::LayerType::Activation,
+                                                                                      refData, refInfo);
     ARMNN_ASSERT(workloadRef != nullptr);
 
     inputHandle->Allocate();
@@ -1299,19 +1295,23 @@ LayerTestResult<T,4> CompareActivationTestImpl(
     inputHandleRef->Allocate();
     outputHandleRef->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
-    CopyDataToITensorHandle(inputHandleRef.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandleRef.get(), input.data());
 
     workload->Execute();
     workloadRef->Execute();
 
-    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
-    CopyDataFromITensorHandle(&ret.outputExpected[0][0][0][0], outputHandleRef.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(expectedOutput.data(), outputHandleRef.get());
 
-    return ret;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 expectedOutput,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
+
 }
 
-LayerTestResult<float,4> CompareActivationTest(
+LayerTestResult<float, 4> CompareActivationTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     armnn::IWorkloadFactory& refWorkloadFactory,
@@ -1325,7 +1325,7 @@ LayerTestResult<float,4> CompareActivationTest(
         refTensorHandleFactory, f, batchSize);
 }
 
-LayerTestResult<uint8_t,4> CompareActivationUint8Test(
+LayerTestResult<uint8_t, 4> CompareActivationUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     armnn::IWorkloadFactory& refWorkloadFactory,
@@ -1338,7 +1338,7 @@ LayerTestResult<uint8_t,4> CompareActivationUint8Test(
         tensorHandleFactory, refTensorHandleFactory, f, 5, 0.1f, 50);
 }
 
-LayerTestResult<int16_t,4> CompareActivationInt16Test(
+LayerTestResult<int16_t, 4> CompareActivationInt16Test(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
         armnn::IWorkloadFactory& refWorkloadFactory,

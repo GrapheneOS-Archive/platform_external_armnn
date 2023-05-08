@@ -8,15 +8,17 @@
 
 #include <armnn/Types.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
 #include <backendsCommon/test/WorkloadFactoryHelper.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
+
+#include <doctest/doctest.h>
 
 namespace
 {
@@ -148,30 +150,22 @@ void DetectionPostProcessImpl(const armnn::TensorInfo& boxEncodingsInfo,
                               const std::vector<float>& expectedNumDetections,
                               bool useRegularNms)
 {
-    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
+    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
     armnn::ProfilerManager::GetInstance().RegisterProfiler(profiler.get());
 
     auto memoryManager = WorkloadFactoryHelper<FactoryType>::GetMemoryManager();
     FactoryType workloadFactory = WorkloadFactoryHelper<FactoryType>::GetFactory(memoryManager);
     auto tensorHandleFactory = WorkloadFactoryHelper<FactoryType>::GetTensorHandleFactory(memoryManager);
 
-    auto boxEncodings = MakeTensor<T, 3>(boxEncodingsInfo, boxEncodingsData);
-    auto scores = MakeTensor<T, 3>(scoresInfo, scoresData);
-    auto anchors = MakeTensor<T, 2>(anchorsInfo, anchorsData);
-
     armnn::TensorInfo detectionBoxesInfo({ 1, 3, 4 }, armnn::DataType::Float32);
-    armnn::TensorInfo detectionScoresInfo({ 1, 3 }, armnn::DataType::Float32);
     armnn::TensorInfo detectionClassesInfo({ 1, 3 }, armnn::DataType::Float32);
+    armnn::TensorInfo detectionScoresInfo({ 1, 3 }, armnn::DataType::Float32);
     armnn::TensorInfo numDetectionInfo({ 1 }, armnn::DataType::Float32);
 
-    LayerTestResult<float, 3> detectionBoxesResult(detectionBoxesInfo);
-    detectionBoxesResult.outputExpected = MakeTensor<float, 3>(detectionBoxesInfo, expectedDetectionBoxes);
-    LayerTestResult<float, 2> detectionClassesResult(detectionClassesInfo);
-    detectionClassesResult.outputExpected = MakeTensor<float, 2>(detectionClassesInfo, expectedDetectionClasses);
-    LayerTestResult<float, 2> detectionScoresResult(detectionScoresInfo);
-    detectionScoresResult.outputExpected = MakeTensor<float, 2>(detectionScoresInfo, expectedDetectionScores);
-    LayerTestResult<float, 1> numDetectionsResult(numDetectionInfo);
-    numDetectionsResult.outputExpected = MakeTensor<float, 1>(numDetectionInfo, expectedNumDetections);
+    std::vector<float> actualDetectionBoxesOutput(detectionBoxesInfo.GetNumElements());
+    std::vector<float> actualDetectionClassesOutput(detectionClassesInfo.GetNumElements());
+    std::vector<float> actualDetectionScoresOutput(detectionScoresInfo.GetNumElements());
+    std::vector<float> actualNumDetectionOutput(numDetectionInfo.GetNumElements());
 
     auto boxedHandle = tensorHandleFactory.CreateTensorHandle(boxEncodingsInfo);
     auto scoreshandle = tensorHandleFactory.CreateTensorHandle(scoresInfo);
@@ -181,8 +175,8 @@ void DetectionPostProcessImpl(const armnn::TensorInfo& boxEncodingsInfo,
     auto outputScoresHandle = tensorHandleFactory.CreateTensorHandle(detectionScoresInfo);
     auto numDetectionHandle = tensorHandleFactory.CreateTensorHandle(numDetectionInfo);
 
-    armnn::ScopedCpuTensorHandle anchorsTensor(anchorsInfo);
-    AllocateAndCopyDataToITensorHandle(&anchorsTensor, &anchors[0][0]);
+    armnn::ScopedTensorHandle anchorsTensor(anchorsInfo);
+    AllocateAndCopyDataToITensorHandle(&anchorsTensor, anchorsData.data());
 
     armnn::DetectionPostProcessQueueDescriptor data;
     data.m_Parameters.m_UseRegularNms = useRegularNms;
@@ -200,13 +194,15 @@ void DetectionPostProcessImpl(const armnn::TensorInfo& boxEncodingsInfo,
 
     armnn::WorkloadInfo info;
     AddInputToWorkload(data,  info, boxEncodingsInfo, boxedHandle.get());
-    AddInputToWorkload(data, info, scoresInfo, scoreshandle.get());
+    AddInputToWorkload(data,  info, scoresInfo, scoreshandle.get());
     AddOutputToWorkload(data, info, detectionBoxesInfo, outputBoxesHandle.get());
     AddOutputToWorkload(data, info, detectionClassesInfo, classesHandle.get());
     AddOutputToWorkload(data, info, detectionScoresInfo, outputScoresHandle.get());
     AddOutputToWorkload(data, info, numDetectionInfo, numDetectionHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateDetectionPostProcess(data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::DetectionPostProcess,
+                                                                                data,
+                                                                                info);
 
     boxedHandle->Allocate();
     scoreshandle->Allocate();
@@ -215,20 +211,39 @@ void DetectionPostProcessImpl(const armnn::TensorInfo& boxEncodingsInfo,
     outputScoresHandle->Allocate();
     numDetectionHandle->Allocate();
 
-    CopyDataToITensorHandle(boxedHandle.get(), boxEncodings.origin());
-    CopyDataToITensorHandle(scoreshandle.get(), scores.origin());
+    CopyDataToITensorHandle(boxedHandle.get(), boxEncodingsData.data());
+    CopyDataToITensorHandle(scoreshandle.get(), scoresData.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(detectionBoxesResult.output.origin(), outputBoxesHandle.get());
-    CopyDataFromITensorHandle(detectionClassesResult.output.origin(), classesHandle.get());
-    CopyDataFromITensorHandle(detectionScoresResult.output.origin(), outputScoresHandle.get());
-    CopyDataFromITensorHandle(numDetectionsResult.output.origin(), numDetectionHandle.get());
+    CopyDataFromITensorHandle(actualDetectionBoxesOutput.data(), outputBoxesHandle.get());
+    CopyDataFromITensorHandle(actualDetectionClassesOutput.data(), classesHandle.get());
+    CopyDataFromITensorHandle(actualDetectionScoresOutput.data(), outputScoresHandle.get());
+    CopyDataFromITensorHandle(actualNumDetectionOutput.data(), numDetectionHandle.get());
 
-    BOOST_TEST(CompareTensors(detectionBoxesResult.output, detectionBoxesResult.outputExpected));
-    BOOST_TEST(CompareTensors(detectionClassesResult.output, detectionClassesResult.outputExpected));
-    BOOST_TEST(CompareTensors(detectionScoresResult.output, detectionScoresResult.outputExpected));
-    BOOST_TEST(CompareTensors(numDetectionsResult.output, numDetectionsResult.outputExpected));
+    auto result = CompareTensors(actualDetectionBoxesOutput,
+                                 expectedDetectionBoxes,
+                                 outputBoxesHandle->GetShape(),
+                                 detectionBoxesInfo.GetShape());
+    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
+
+    result = CompareTensors(actualDetectionClassesOutput,
+                            expectedDetectionClasses,
+                            classesHandle->GetShape(),
+                            detectionClassesInfo.GetShape());
+    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
+
+    result = CompareTensors(actualDetectionScoresOutput,
+                            expectedDetectionScores,
+                            outputScoresHandle->GetShape(),
+                            detectionScoresInfo.GetShape());
+    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
+
+    result = CompareTensors(actualNumDetectionOutput,
+                            expectedNumDetections,
+                            numDetectionHandle->GetShape(),
+                            numDetectionInfo.GetShape());
+    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
 }
 
 template<armnn::DataType QuantizedType, typename RawType = armnn::ResolveType<QuantizedType>>

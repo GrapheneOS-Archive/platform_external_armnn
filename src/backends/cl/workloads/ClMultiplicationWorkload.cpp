@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClMultiplicationWorkload.hpp"
 
 #include <aclCommon/ArmComputeUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <cl/ClTensorHandle.hpp>
 
@@ -45,8 +45,9 @@ arm_compute::Status ClMultiplicationWorkloadValidate(const TensorInfo& input0,
 
 
 ClMultiplicationWorkload::ClMultiplicationWorkload(const MultiplicationQueueDescriptor& descriptor,
-                                                   const WorkloadInfo& info)
-    : BaseWorkload<MultiplicationQueueDescriptor>(descriptor, info)
+                                                   const WorkloadInfo& info,
+                                                   const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<MultiplicationQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("ClMultiplicationWorkload", 2, 1);
 
@@ -61,19 +62,23 @@ ClMultiplicationWorkload::ClMultiplicationWorkload(const MultiplicationQueueDesc
 
     const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
 
-    // Construct
-    m_PixelWiseMultiplication.configure(&input0,
-                                        &input1,
-                                        &output,
-                                        1.0f,
-                                        convertPolicy,
-                                        arm_compute::RoundingPolicy::TO_NEAREST_EVEN,
-                                        activationInfo);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClMultiplicationWorkload_configure");
+        // Construct
+        m_PixelWiseMultiplication.configure(clCompileContext,
+                                            &input0,
+                                            &input1,
+                                            &output,
+                                            1.0f,
+                                            convertPolicy,
+                                            arm_compute::RoundingPolicy::TO_NEAREST_EVEN,
+                                            activationInfo);
+    }
 }
 
 void ClMultiplicationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClMultiplicationWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClMultiplicationWorkload_Execute", this->GetGuid());
     RunClFunction(m_PixelWiseMultiplication, CHECK_LOCATION());
 }
 

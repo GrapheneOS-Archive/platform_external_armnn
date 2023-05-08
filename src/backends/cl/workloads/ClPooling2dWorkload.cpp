@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -28,9 +28,17 @@ arm_compute::Status ClPooling2dWorkloadValidate(const TensorInfo& input,
 }
 
 ClPooling2dWorkload::ClPooling2dWorkload(
-    const Pooling2dQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<Pooling2dQueueDescriptor>(descriptor, info)
+    const Pooling2dQueueDescriptor& descriptor,
+    const WorkloadInfo& info,
+    const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<Pooling2dQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClPooling2dWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClPooling2dWorkload", 1, 1);
 
     arm_compute::ICLTensor& input = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -47,13 +55,16 @@ ClPooling2dWorkload::ClPooling2dWorkload(
 
     arm_compute::PoolingLayerInfo layerInfo = BuildArmComputePoolingLayerInfo(m_Data.m_Parameters, fpMixedPrecision);
 
-    // Run the layer.
-    m_PoolingLayer.configure(&input, &output, layerInfo);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClPooling2dWorkload_configure");
+        // Run the layer.
+        m_PoolingLayer.configure(clCompileContext, &input, &output, layerInfo);
+    }
 }
 
 void ClPooling2dWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClPooling2dWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClPooling2dWorkload_Execute", this->GetGuid());
     RunClFunction(m_PoolingLayer, CHECK_LOCATION());
 }
 

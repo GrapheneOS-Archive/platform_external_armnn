@@ -3,6 +3,7 @@
 import os
 
 import pytest
+import warnings
 import numpy as np
 
 import pyarmnn as ann
@@ -26,6 +27,7 @@ def random_runtime(shared_data_folder):
     input_tensor_id = input_binding_info[0]
 
     input_tensor_info = input_binding_info[1]
+    input_tensor_info.SetConstant()
 
     output_names = parser.GetSubgraphOutputTensorNames(graph_id)
 
@@ -96,6 +98,7 @@ def test_python_disowns_network(random_runtime):
 
     assert not opt_network.thisown
 
+
 def test_load_network(random_runtime):
     preferred_backends = random_runtime[0]
     network = random_runtime[1]
@@ -107,6 +110,7 @@ def test_load_network(random_runtime):
     net_id, messages = runtime.LoadNetwork(opt_network)
     assert "" == messages
     assert net_id == 0
+
 
 def test_create_runtime_with_external_profiling_enabled():
 
@@ -123,6 +127,7 @@ def test_create_runtime_with_external_profiling_enabled():
     runtime = ann.IRuntime(options)
 
     assert runtime is not None
+
 
 def test_create_runtime_with_external_profiling_enabled_invalid_options():
 
@@ -151,7 +156,31 @@ def test_load_network_properties_provided(random_runtime):
     opt_network, _ = ann.Optimize(network, preferred_backends,
                                   runtime.GetDeviceSpec(), ann.OptimizerOptions())
 
-    properties = ann.INetworkProperties(True, True)
+    inputSource = ann.MemorySource_Undefined
+    outputSource = ann.MemorySource_Undefined
+    properties = ann.INetworkProperties(False, inputSource, outputSource)
+    net_id, messages = runtime.LoadNetwork(opt_network, properties)
+    assert "" == messages
+    assert net_id == 0
+
+
+def test_network_properties_constructor(random_runtime):
+    preferred_backends = random_runtime[0]
+    network = random_runtime[1]
+    runtime = random_runtime[2]
+
+    opt_network, _ = ann.Optimize(network, preferred_backends,
+                                  runtime.GetDeviceSpec(), ann.OptimizerOptions())
+
+    inputSource = ann.MemorySource_Undefined
+    outputSource = ann.MemorySource_Undefined
+    properties = ann.INetworkProperties(True, inputSource, outputSource)
+    assert properties.m_AsyncEnabled == True
+    assert properties.m_ProfilingEnabled == False
+    assert properties.m_OutputNetworkDetailsMethod == ann.ProfilingDetailsMethod_Undefined
+    assert properties.m_InputSource == ann.MemorySource_Undefined
+    assert properties.m_OutputSource == ann.MemorySource_Undefined
+
     net_id, messages = runtime.LoadNetwork(opt_network, properties)
     assert "" == messages
     assert net_id == 0

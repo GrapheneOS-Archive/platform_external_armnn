@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 #include <backendsCommon/MemImportWorkload.hpp>
 
 namespace armnn
@@ -49,9 +49,9 @@ void MemImportLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "MemImportLayer");
 }
 
-void MemImportLayer::Accept(ILayerVisitor& visitor) const
+void MemImportLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    IgnoreUnused(visitor);
+    IgnoreUnused(strategy);
     throw armnn::Exception("MemImportLayer should not appear in an input graph");
 }
 

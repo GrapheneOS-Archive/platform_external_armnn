@@ -26,9 +26,9 @@ public:
     /// @param [in] IsMemoryManaged Determine whether or not to assign a memory manager during creation
     virtual void CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
                                      const IWorkloadFactory& factory,
-                                     const bool IsMemoryManaged = true) override
+                                     const bool isMemoryManaged = true) override
     {
-        IgnoreUnused(registry, factory, IsMemoryManaged);
+        IgnoreUnused(registry, factory, isMemoryManaged);
     }
 
     /// Creates a dynamically-allocated copy of this layer.
@@ -40,7 +40,8 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
+
 
 protected:
     /// Constructor to create an OutputLayer.

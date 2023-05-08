@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -12,15 +12,26 @@ namespace armnn
 
 RefStridedSliceWorkload::RefStridedSliceWorkload(const StridedSliceQueueDescriptor& descriptor,
                                                  const WorkloadInfo& info)
-    : BaseWorkload(descriptor, info)
+    : RefBaseWorkload(descriptor, info)
 {}
 
 void RefStridedSliceWorkload::Execute() const
 {
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefStridedSliceWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefStridedSliceWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
+{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefStridedSliceWorkload_Execute");
 
-    const TensorInfo& inputInfo  = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
+    const TensorInfo& inputInfo  = GetTensorInfo(inputs[0]);
+    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
 
     DataType inputDataType  = inputInfo.GetDataType();
     DataType outputDataType = outputInfo.GetDataType();
@@ -30,8 +41,8 @@ void RefStridedSliceWorkload::Execute() const
 
     StridedSlice(inputInfo,
                  m_Data.m_Parameters,
-                 m_Data.m_Inputs[0]->Map(),
-                 m_Data.m_Outputs[0]->Map(),
+                 inputs[0]->Map(),
+                 outputs[0]->Map(),
                  GetDataTypeSize(inputDataType));
 }
 

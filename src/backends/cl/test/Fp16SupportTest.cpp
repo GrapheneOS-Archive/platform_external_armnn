@@ -10,25 +10,25 @@
 
 #include <Graph.hpp>
 #include <Optimizer.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <set>
 
 using namespace armnn;
 
-BOOST_AUTO_TEST_SUITE(Fp16Support)
-
-BOOST_AUTO_TEST_CASE(Fp16DataTypeSupport)
+TEST_SUITE("Fp16Support")
+{
+TEST_CASE("Fp16DataTypeSupport")
 {
     Graph graph;
 
     Layer* const inputLayer1 = graph.AddLayer<InputLayer>(1, "input1");
     Layer* const inputLayer2 = graph.AddLayer<InputLayer>(2, "input2");
 
-    Layer* const additionLayer = graph.AddLayer<AdditionLayer>("addition");
+    Layer* const additionLayer = graph.AddLayer<ElementwiseBinaryLayer>(BinaryOperation::Add, "addition");
     Layer* const outputLayer = graph.AddLayer<armnn::OutputLayer>(0, "output");
 
     TensorInfo fp16TensorInfo({1, 2, 3, 5}, armnn::DataType::Float16);
@@ -40,12 +40,12 @@ BOOST_AUTO_TEST_CASE(Fp16DataTypeSupport)
     inputLayer2->GetOutputSlot().SetTensorInfo(fp16TensorInfo);
     additionLayer->GetOutputSlot().SetTensorInfo(fp16TensorInfo);
 
-    BOOST_CHECK(inputLayer1->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
-    BOOST_CHECK(inputLayer2->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
-    BOOST_CHECK(additionLayer->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
+    CHECK(inputLayer1->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
+    CHECK(inputLayer2->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
+    CHECK(additionLayer->GetOutputSlot(0).GetTensorInfo().GetDataType() == armnn::DataType::Float16);
 }
 
-BOOST_AUTO_TEST_CASE(Fp16AdditionTest)
+TEST_CASE("Fp16AdditionTest")
 {
    using namespace half_float::literal;
    // Create runtime in which test will run
@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(Fp16AdditionTest)
 
    IConnectableLayer* inputLayer1 = net->AddInputLayer(0);
    IConnectableLayer* inputLayer2 = net->AddInputLayer(1);
-   IConnectableLayer* additionLayer = net->AddAdditionLayer();
+   IConnectableLayer* additionLayer = net->AddElementwiseBinaryLayer(BinaryOperation::Add);
    IConnectableLayer* outputLayer = net->AddOutputLayer(0);
 
    inputLayer1->GetOutputSlot(0).Connect(additionLayer->GetInputSlot(0));
@@ -88,10 +88,12 @@ BOOST_AUTO_TEST_CASE(Fp16AdditionTest)
        100.0_h, 200.0_h, 300.0_h, 400.0_h
    };
 
+   TensorInfo inputTensorInfo = runtime->GetInputTensorInfo(netId, 0);
+   inputTensorInfo.SetConstant(true);
    InputTensors inputTensors
    {
-       {0,ConstTensor(runtime->GetInputTensorInfo(netId, 0), input1Data.data())},
-       {1,ConstTensor(runtime->GetInputTensorInfo(netId, 0), input2Data.data())}
+       {0,ConstTensor(inputTensorInfo, input1Data.data())},
+       {1,ConstTensor(inputTensorInfo, input2Data.data())}
    };
 
    std::vector<Half> outputData(input1Data.size());
@@ -104,7 +106,7 @@ BOOST_AUTO_TEST_CASE(Fp16AdditionTest)
    runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
    // Checks the results.
-   BOOST_TEST(outputData == std::vector<Half>({ 101.0_h, 202.0_h, 303.0_h, 404.0_h})); // Add
+   CHECK(outputData == std::vector<Half>({ 101.0_h, 202.0_h, 303.0_h, 404.0_h})); // Add
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}
