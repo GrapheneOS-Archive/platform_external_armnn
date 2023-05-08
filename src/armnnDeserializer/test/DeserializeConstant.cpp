@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("DeserializeParser_Constant")
-{
+BOOST_AUTO_TEST_SUITE(DeserializeParser)
+
 struct ConstantAddFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit ConstantAddFixture(const std::string & shape,
@@ -121,10 +123,7 @@ struct ConstantAddFixture : public ParserFlatbuffersSerializeFixture
                                         },
                                 }],
                             }}},
-                }],
-                featureVersions: {
-                    weightsLayoutScheme: 1,
-                }
+                }]
          }
         )";
         SetupSingleInputSingleOutput("InputLayer1", "OutputLayer");
@@ -142,7 +141,7 @@ struct SimpleConstantAddFixture : ConstantAddFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleConstantAddFixture, "SimpleConstantAddQuantisedAsymm8")
+BOOST_FIXTURE_TEST_CASE(SimpleConstantAddQuantisedAsymm8, SimpleConstantAddFixture)
 {
     RunTest<2, armnn::DataType::QAsymmU8>(
             0,
@@ -150,4 +149,4 @@ TEST_CASE_FIXTURE(SimpleConstantAddFixture, "SimpleConstantAddQuantisedAsymm8")
             { 2, 4, 6, 8, 10, 12 });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

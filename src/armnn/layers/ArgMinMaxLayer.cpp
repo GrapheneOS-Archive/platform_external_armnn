@@ -10,8 +10,8 @@
 
 #include <armnnUtils/TensorUtils.hpp>
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -26,7 +26,7 @@ std::unique_ptr<IWorkload> ArgMinMaxLayer::CreateWorkload(const IWorkloadFactory
     ArgMinMaxQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::ArgMinMax, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateArgMinMax(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ArgMinMaxLayer* ArgMinMaxLayer::Clone(Graph& graph) const
@@ -86,9 +86,9 @@ void ArgMinMaxLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ArgMinMaxLayer");
 }
 
-void ArgMinMaxLayer::ExecuteStrategy(IStrategy& strategy) const
+void ArgMinMaxLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitArgMinMaxLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

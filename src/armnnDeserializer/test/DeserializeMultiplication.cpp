@@ -4,14 +4,17 @@
 //
 
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <string>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("Deserializer_Multiplication")
-{
+#include <string>
+#include <iostream>
+
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct MultiplicationFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit MultiplicationFixture(const std::string & inputShape1,
@@ -141,7 +144,7 @@ struct SimpleMultiplicationFixture2 : MultiplicationFixture
                                                            "Float32") {}
 };
 
-TEST_CASE_FIXTURE(SimpleMultiplicationFixture, "MultiplicationQuantisedAsymm8")
+BOOST_FIXTURE_TEST_CASE(MultiplicationQuantisedAsymm8, SimpleMultiplicationFixture)
 {
   RunTest<2, armnn::DataType::QAsymmU8>(
       0,
@@ -150,7 +153,7 @@ TEST_CASE_FIXTURE(SimpleMultiplicationFixture, "MultiplicationQuantisedAsymm8")
       {{"OutputLayer", { 0, 5, 12, 21 }}});
 }
 
-TEST_CASE_FIXTURE(SimpleMultiplicationFixture2, "MultiplicationFloat32")
+BOOST_FIXTURE_TEST_CASE(MultiplicationFloat32, SimpleMultiplicationFixture2)
 {
     RunTest<4, armnn::DataType::Float32>(
     0,
@@ -159,4 +162,4 @@ TEST_CASE_FIXTURE(SimpleMultiplicationFixture2, "MultiplicationFloat32")
     {{"OutputLayer", { 500, 320, 226, 108 }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

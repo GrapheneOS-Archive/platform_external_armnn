@@ -13,7 +13,7 @@ std::unique_ptr<armnn::IWorkload> CreateWorkload<armnn::SubtractionQueueDescript
     const armnn::WorkloadInfo& info,
     const armnn::SubtractionQueueDescriptor& descriptor)
 {
-    return workloadFactory.CreateWorkload(armnn::LayerType::Subtraction, descriptor, info);
+    return workloadFactory.CreateSubtraction(descriptor, info);
 }
 
 LayerTestResult<uint8_t, 4> SubtractionUint8Test(

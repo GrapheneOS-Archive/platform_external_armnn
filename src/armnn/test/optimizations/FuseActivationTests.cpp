@@ -1,24 +1,28 @@
 //
-// Copyright © 2020-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "LayersFwd.hpp"
 
+#include <Network.hpp>
 #include <ResolveType.hpp>
 #include <armnn/INetwork.hpp>
-#include <GraphUtils.hpp>
-#include <TestUtils.hpp>
+#include <test/TestUtils.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <string>
 
 using namespace armnn;
 
+BOOST_AUTO_TEST_SUITE(Optimizer)
+
 namespace
 {
+const float   g_qScale  = 1.0f;
+const int32_t g_qOffset = 0;
 
 template<typename T>
 std::vector<T> GetVector(unsigned int size, float initial, float increment)
@@ -36,12 +40,12 @@ std::vector<T> GetVector(unsigned int size, float initial, float increment)
     return vector;
 }
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct Convolution2dTest
 {
-    using LayerType = Convolution2dLayer;
+    using LayerType = armnn::Convolution2dLayer;
+    static std::string GetReceiverLayerName() { return "Convolution2d"; };
     static const bool isElementWise = false;
-    static const bool isConstTensorAsInputSupported = true;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 3, 3, 4}); }  // NHWCout
@@ -51,101 +55,71 @@ struct Convolution2dTest
     constexpr static const unsigned int outputSize = 36; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
         Convolution2dDescriptor descriptor;
+        descriptor.m_BiasEnabled = false;
         descriptor.m_DataLayout  = DataLayout::NHWC;
         descriptor.m_StrideX     = 1;
         descriptor.m_StrideY     = 1;
 
-        return network->AddConvolution2dLayer(descriptor, name);
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-
         std::vector<float> weightsData   = {  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12,
                                              11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
                                              21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                                             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
-        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, scale, offset);
-        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, scale, offset, true);
+                                             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
+        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, g_qScale, g_qOffset);
+        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, g_qScale, g_qOffset);
         ConstTensor        weights(weightsInfo, weightsVector);
+        Optional<ConstTensor> optionalBias;
 
-        IConnectableLayer* weightsLayer = network->AddConstantLayer(weights, "Weights");
-        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-
-        std::vector<IConnectableLayer*> layers = { weightsLayer };
-        return layers;
+        return network->AddConvolution2dLayer(descriptor, weights, optionalBias, name);
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
-struct DWConvolution2dTest
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
+struct DepthwiseConvolution2dTest
 {
 public:
-    using LayerType = DepthwiseConvolution2dLayer;
+    using LayerType = armnn::DepthwiseConvolution2dLayer;
+    static std::string GetReceiverLayerName() { return "DepthwiseConvolution2d"; };
     static const bool isElementWise = false;
-    static const bool isConstTensorAsInputSupported = true;
 
-    static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }   // [N,H,W,Cin]
-    static TensorShape GetOutputShape()  { return TensorShape( {1, 3, 3, 12}); }  // [N,H,W,Cout]
-    static TensorShape GetWeightsShape() { return TensorShape( {1, 2, 2, 12}); }  // [1,H,W,Cout]
+    static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }   // NHWCin
+    static TensorShape GetOutputShape()  { return TensorShape( {1, 3, 3, 12}); }  // NHWCout
+    static TensorShape GetWeightsShape() { return TensorShape( {4, 3, 2, 2}); }   // MCinHW
 
     constexpr static const unsigned int inputSize  = 48; //batchIn * heightIn * widthIn * channelIn;
     constexpr static const unsigned int outputSize = 108; //batchOut * heightOut * widthOut * channelOut;
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
         DepthwiseConvolution2dDescriptor descriptor;
         descriptor.m_BiasEnabled = false;
         descriptor.m_DataLayout  = DataLayout::NHWC;
         descriptor.m_StrideX     = 1;
         descriptor.m_StrideY     = 1;
 
-        return network->AddDepthwiseConvolution2dLayer(descriptor, name);
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
         std::vector<float> weightsData   = { 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12,
-                                             11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                                             21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                                             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
-        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, scale, offset);
-        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, scale, offset, true);
+                                            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                                            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+                                            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
+        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, g_qScale, g_qOffset);
+        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, g_qScale, g_qOffset);
         ConstTensor        weights(weightsInfo, weightsVector);
+        Optional<ConstTensor> optionalBias;
 
-        IConnectableLayer* weightsLayer = network->AddConstantLayer(weights, "Weights");
-        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-
-        std::vector<IConnectableLayer*> layers = { weightsLayer };
-        return layers;
+        return network->AddDepthwiseConvolution2dLayer(descriptor, weights, optionalBias, name);
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct FullyConnectedTest
 {
 public:
-    using LayerType = FullyConnectedLayer;
+    using LayerType = armnn::FullyConnectedLayer;
+    static std::string GetReceiverLayerName() { return "FullyConnected"; };
     static const bool isElementWise = false;
-    static const bool isConstTensorAsInputSupported = true;
 
     static TensorShape GetInputShape()   { return TensorShape( {2, 5, 1, 1}); } // NCinHW
     static TensorShape GetOutputShape()  { return TensorShape( {2, 3}); }       // NCout
@@ -155,45 +129,30 @@ public:
     constexpr static const unsigned int outputSize = 6;  // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
         FullyConnectedDescriptor descriptor;
         descriptor.m_BiasEnabled = false;
 
-        return network->AddFullyConnectedLayer(descriptor, name);
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
         std::vector<float> weightsData   = { 1,  2,  3,  4,  5,
                                              6,  7,  8,  9, 10,
-                                             11, 12, 13, 14, 15};
-        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, scale, offset);
-        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, scale, offset, true);
+                                            11, 12, 13, 14, 15};
+        std::vector<T>     weightsVector = armnnUtils::QuantizedVector<T>(weightsData, g_qScale, g_qOffset);
+        TensorInfo         weightsInfo(GetWeightsShape(), ArmnnType, g_qScale, g_qOffset);
         ConstTensor        weights(weightsInfo, weightsVector);
+        Optional<ConstTensor> optionalBias;
 
-        IConnectableLayer* weightsLayer = network->AddConstantLayer(weights, "Weights");
-        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-
-        std::vector<IConnectableLayer*> layers = { weightsLayer };
-        return layers;
+        return network->AddFullyConnectedLayer(descriptor, weights, optionalBias, name);
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct BatchNormTest
 {
 public:
-    using LayerType = BatchNormalizationLayer;
+    using LayerType = armnn::BatchNormalizationLayer;
+    static std::string GetReceiverLayerName() { return "BatchNorm"; };
     static const bool isElementWise = false;
-    static const bool isConstTensorAsInputSupported = false;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 4, 4, 3}); }  // NHWCout
@@ -202,13 +161,8 @@ public:
     constexpr static const unsigned int outputSize = 48; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
         BatchNormalizationDescriptor descriptor;
         descriptor.m_DataLayout = DataLayout::NHWC;
 
@@ -218,31 +172,21 @@ public:
         std::vector<T> varianceVector = GetVector<T>(GetOutputShape()[3], 1.0f, 0.1f);
 
         const unsigned int outputChannelSize[] = { GetOutputShape()[3] };
-        ConstTensor beta(TensorInfo(1, outputChannelSize, ArmnnType, 0.0f, 0, true), betaVector);
-        ConstTensor gamma(TensorInfo(1, outputChannelSize, ArmnnType, 0.0f, 0, true), gammaVector);
-        ConstTensor mean(TensorInfo(1, outputChannelSize, ArmnnType, 0.0f, 0, true), meanVector);
-        ConstTensor variance(TensorInfo(1, outputChannelSize, ArmnnType, 0.0f, 0, true), varianceVector);
+        ConstTensor beta(TensorInfo(1, outputChannelSize, ArmnnType), betaVector);
+        ConstTensor gamma(TensorInfo(1, outputChannelSize, ArmnnType), gammaVector);
+        ConstTensor mean(TensorInfo(1, outputChannelSize, ArmnnType), meanVector);
+        ConstTensor variance(TensorInfo(1, outputChannelSize, ArmnnType), varianceVector);
 
         return network->AddBatchNormalizationLayer(descriptor, mean, variance, beta, gamma, name);
     }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-        IgnoreUnused(network);
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-        return {};
-    }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct MultiplicationTest
 {
-    using LayerType = MultiplicationLayer;
+    using LayerType = armnn::MultiplicationLayer;
+    static std::string GetReceiverLayerName() { return "Multiplication"; };
     static const bool isElementWise = true;
-    static const bool isConstTensorAsInputSupported = false;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 4, 4, 3}); }  // NHWCout
@@ -251,35 +195,18 @@ struct MultiplicationTest
     constexpr static const unsigned int outputSize = 48; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
         return network->AddMultiplicationLayer(name);
-        ARMNN_NO_DEPRECATE_WARN_END
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-        IgnoreUnused(network);
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-        return {};
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct AdditionTest
 {
-    using LayerType = AdditionLayer;
+    using LayerType = armnn::AdditionLayer;
+    static std::string GetReceiverLayerName() { return "Addition"; };
     static const bool isElementWise = true;
-    static const bool isConstTensorAsInputSupported = false;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 4, 4, 3}); }  // NHWCout
@@ -288,35 +215,18 @@ struct AdditionTest
     constexpr static const unsigned int outputSize = 48; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
         return network->AddAdditionLayer(name);
-        ARMNN_NO_DEPRECATE_WARN_END
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-        IgnoreUnused(network);
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-        return {};
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct SubtractionTest
 {
-    using LayerType = SubtractionLayer;
+    using LayerType = armnn::SubtractionLayer;
+    static std::string GetReceiverLayerName() { return "Subtraction"; };
     static const bool isElementWise = true;
-    static const bool isConstTensorAsInputSupported = false;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 4, 4, 3}); }  // NHWCout
@@ -325,35 +235,18 @@ struct SubtractionTest
     constexpr static const unsigned int outputSize = 48; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
         return network->AddSubtractionLayer(name);
-        ARMNN_NO_DEPRECATE_WARN_END
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-        IgnoreUnused(network);
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-        return {};
     }
 };
 
-template<DataType ArmnnType, typename T = ResolveType<ArmnnType>>
+template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 struct DivisionTest
 {
-    using LayerType = DivisionLayer;
+    using LayerType = armnn::DivisionLayer;
+    static std::string GetReceiverLayerName() { return "Division"; };
     static const bool isElementWise = true;
-    static const bool isConstTensorAsInputSupported = false;
 
     static TensorShape GetInputShape()   { return TensorShape( {1, 4, 4, 3}); }  // NHWCin
     static TensorShape GetOutputShape()  { return TensorShape( {1, 4, 4, 3}); }  // NHWCout
@@ -362,33 +255,17 @@ struct DivisionTest
     constexpr static const unsigned int outputSize = 48; // batchOut * heightOut * widthOut * channelOut
 
     static IConnectableLayer* AddReceiverLayer(INetwork* network,
-                                               const char* name,
-                                               float scale = 1.f,
-                                               int32_t offset = 0)
+                                               const char* name)
     {
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
         return network->AddDivisionLayer(name);
-        ARMNN_NO_DEPRECATE_WARN_END
-    }
-
-    static std::vector<IConnectableLayer*> AddConstantLayers(INetwork* network,
-                                                             float scale = 1.f,
-                                                             int32_t offset = 0)
-    {
-        IgnoreUnused(network);
-        IgnoreUnused(scale);
-        IgnoreUnused(offset);
-        return {};
     }
 };
 
+} // namespace
+
 template<typename LayerTest,
-         DataType ArmnnType>
-INetworkPtr CreateNetwork(ActivationDescriptor activationDescriptor, bool preventFusing,
-                         float scale, int32_t offset)
+         armnn::DataType ArmnnType>
+INetworkPtr CreatNetwork(ActivationDescriptor activationDescriptor, bool preventFusing)
 {
     // Create a network
     INetworkPtr network = INetwork::Create();
@@ -396,33 +273,17 @@ INetworkPtr CreateNetwork(ActivationDescriptor activationDescriptor, bool preven
     IConnectableLayer* inputLayer = network->AddInputLayer(0);
 
     IConnectableLayer* receiverLayer = LayerTest::AddReceiverLayer(network.get(),
-                                                                   "receiverLayer",
-                                                                   scale,
-                                                                   offset);
+                                                                   "receiverLayer");
 
     IConnectableLayer* activationLayer = network->AddActivationLayer(activationDescriptor,
                                                                      "activation");
 
     IConnectableLayer* outputLayer  = network->AddOutputLayer(0);
-    IConnectableLayer* output2Layer = preventFusing ? network->AddOutputLayer(1) : nullptr;
-
-    // If ConstTensorAsInputs is supported weights and bias are stored as constant layers.
-    if (LayerTest::isConstTensorAsInputSupported)
-    {
-        std::vector<IConnectableLayer*> constantLayers = LayerTest::AddConstantLayers(network.get(),
-                                                                                      scale,
-                                                                                      offset);
-
-        // Connect constant layers to receiverLayer.
-        for (unsigned int i = 0; i < constantLayers.size(); ++i)
-        {
-            constantLayers[i]->GetOutputSlot(0).Connect(receiverLayer->GetInputSlot(i + 1));
-        }
-    }
+    IConnectableLayer* output2Layer = preventFusing?network->AddOutputLayer(1):nullptr;
 
     // Define layers information
-    TensorInfo inputInfo(LayerTest::GetInputShape(), ArmnnType, scale, offset);
-    TensorInfo outputInfo(LayerTest::GetOutputShape(), ArmnnType, scale, offset);
+    TensorInfo inputInfo(LayerTest::GetInputShape(), ArmnnType, g_qScale, g_qOffset);
+    TensorInfo outputInfo(LayerTest::GetOutputShape(), ArmnnType, g_qScale, g_qOffset);
 
     // Set layer information
     inputLayer->GetOutputSlot(0).SetTensorInfo(inputInfo);
@@ -447,15 +308,15 @@ INetworkPtr CreateNetwork(ActivationDescriptor activationDescriptor, bool preven
 }
 
 template<typename LayerTest,
-         DataType ArmnnType,
+         armnn::DataType ArmnnType,
          typename LayerType = typename LayerTest::LayerType,
-         typename T = ResolveType<ArmnnType>>
-void FuseActivationIntoPreviousLayerTest(ActivationDescriptor activationDescriptor, float tolerance, Compute backendId, 
-                                         float scale = 1.f, int32_t offset=0)
+         typename T = armnn::ResolveType<ArmnnType>>
+void FuseActivationIntoPreviousLayerTest(ActivationDescriptor activationDescriptor, float tolerance, armnn::Compute
+backendId)
 {
     // FIRST NETWORK: Fused
     // Construct ArmNN network
-    INetworkPtr networkFused = CreateNetwork<LayerTest, ArmnnType>(activationDescriptor, false, scale, offset);
+    INetworkPtr networkFused = CreatNetwork<LayerTest, ArmnnType>(activationDescriptor, false);
 
     // Create ArmNN runtime
     IRuntimePtr run = IRuntime::Create(IRuntime::CreationOptions()); // default options
@@ -463,62 +324,40 @@ void FuseActivationIntoPreviousLayerTest(ActivationDescriptor activationDescript
     // Optimise ArmNN network
     IOptimizedNetworkPtr optNetFused = Optimize(*networkFused, {backendId}, run->GetDeviceSpec());
 
-    Graph& graphFused = GetGraphForTesting(optNetFused.get());
+    Graph graphFused = PolymorphicDowncast<OptimizedNetwork*>(optNetFused.get())->GetGraph();
 
-    auto checkFusedConv2d = [](const Layer* const layer)->bool {
+    auto checkFusedConv2d = [](const armnn::Layer* const layer)->bool {
         return IsLayerOfType<LayerType>(layer) &&
             (layer->GetNameStr() == "fused-activation-into-receiverLayer");
     };
 
-    // If ConstTensorAsInputs is supported, weights and bias are stored as constant layers.
-    if(LayerTest::isConstTensorAsInputSupported)
-    {
-        CHECK(4 == graphFused.GetNumLayers());
-        CHECK(CheckSequence(graphFused.cbegin(),
-                            graphFused.cend(),
-                            &IsLayerOfType<InputLayer>,
-                            &IsLayerOfType<ConstantLayer>,
-                            checkFusedConv2d,
-                            &IsLayerOfType<OutputLayer>));
-
-        // Check if new constant layer is connected to fused receiver layer.
-        Layer* fusedReceiverLayer = GetFirstLayerWithName(graphFused, "fused-activation-into-receiverLayer");
-        CHECK(fusedReceiverLayer);
-        CHECK(fusedReceiverLayer->GetInputSlot(1).GetConnection() != nullptr);
-    }
-    else
-    {
-        CHECK(3 == graphFused.GetNumLayers());
-        CHECK(CheckSequence(graphFused.cbegin(),
-                            graphFused.cend(),
-                            &IsLayerOfType<InputLayer>,
-                            checkFusedConv2d,
-                            &IsLayerOfType<OutputLayer>));
-    }
+    BOOST_CHECK_MESSAGE(3 == graphFused.GetNumLayers(), LayerTest::GetReceiverLayerName());
+    BOOST_TEST(CheckSequence(graphFused.cbegin(),
+                             graphFused.cend(),
+                             &IsLayerOfType<InputLayer>,
+                             checkFusedConv2d,
+                             &IsLayerOfType<OutputLayer>));
 
     // Load network into runtime
     NetworkId networkIdentifier;
-    CHECK(run->LoadNetwork(networkIdentifier, std::move(optNetFused)) == Status::Success);
+    BOOST_TEST(run->LoadNetwork(networkIdentifier, std::move(optNetFused)) == Status::Success);
 
     //Creates structures for inputs and outputs.
     std::vector<float> data = GetVector<float>(LayerTest::inputSize, 1.0f, 0.1f);
-    std::vector<T> inputDataFused = armnnUtils::QuantizedVector<T>(data, scale, offset);
+    std::vector<T> inputDataFused = armnnUtils::QuantizedVector<T>(data, g_qScale, g_qOffset);
     std::vector<T> outputDataFused(LayerTest::outputSize);
 
-    armnn::TensorInfo inputTensorInfo = run->GetInputTensorInfo(networkIdentifier, 0);
-    inputTensorInfo.SetConstant(true);
-
     InputTensors  inputTensorsFused{
-        {0, ConstTensor(inputTensorInfo, inputDataFused.data())}};
+        {0, ConstTensor(run->GetInputTensorInfo(networkIdentifier, 0), inputDataFused.data())}};
     OutputTensors outputTensorsFused{
         {0, Tensor(run->GetOutputTensorInfo(networkIdentifier, 0), outputDataFused.data())}};
 
     // Execute network
-    CHECK(run->EnqueueWorkload(networkIdentifier, inputTensorsFused, outputTensorsFused) == Status::Success);
+    run->EnqueueWorkload(networkIdentifier, inputTensorsFused, outputTensorsFused);
 
     // SECOND NETWORK: NotFused
     // Construct ArmNN network
-    INetworkPtr networkNotFused = CreateNetwork<LayerTest, ArmnnType>(activationDescriptor, true, scale, offset);
+    INetworkPtr networkNotFused = CreatNetwork<LayerTest, ArmnnType>(activationDescriptor, true);
 
     // Create ArmNN runtime
     IRuntimePtr runNotFused = IRuntime::Create(IRuntime::CreationOptions()); // default options
@@ -526,154 +365,80 @@ void FuseActivationIntoPreviousLayerTest(ActivationDescriptor activationDescript
     // Optimise ArmNN network
     IOptimizedNetworkPtr optNetNotFused = Optimize(*networkNotFused, {backendId}, runNotFused->GetDeviceSpec());
 
-    Graph& graphNotFused = GetGraphForTesting(optNetNotFused.get());
+    Graph graphNotFused = PolymorphicDowncast<OptimizedNetwork*>(optNetNotFused.get())->GetGraph();
 
-    // If ConstTensorAsInputs is supported, weights and bias are stored as constant layers.
-    if(LayerTest::isConstTensorAsInputSupported)
-    {
-        CHECK(6 == graphNotFused.GetNumLayers());
-        CHECK(CheckSequence(graphNotFused.cbegin(),
-                            graphNotFused.cend(),
-                            &IsLayerOfType<InputLayer>,
-                            &IsLayerOfType<ConstantLayer>,
-                            &IsLayerOfType<LayerType>,
-                            &IsLayerOfType<ActivationLayer>,
-                            &IsLayerOfType<OutputLayer>,
-                            &IsLayerOfType<OutputLayer>));
-    }
-    else
-    {
-        CHECK(5 == graphNotFused.GetNumLayers());
-        CHECK(CheckSequence(graphNotFused.cbegin(),
-                            graphNotFused.cend(),
-                            &IsLayerOfType<InputLayer>,
-                            &IsLayerOfType<LayerType>,
-                            &IsLayerOfType<ActivationLayer>,
-                            &IsLayerOfType<OutputLayer>,
-                            &IsLayerOfType<OutputLayer>));
-    }
+    BOOST_CHECK(5 == graphNotFused.GetNumLayers());
+    BOOST_TEST(CheckSequence(graphNotFused.cbegin(),
+                             graphNotFused.cend(),
+                             &IsLayerOfType<armnn::InputLayer>,
+                             &IsLayerOfType<LayerType>,
+                             &IsLayerOfType<armnn::ActivationLayer>,
+                             &IsLayerOfType<armnn::OutputLayer>,
+                             &IsLayerOfType<armnn::OutputLayer>));
 
     // Load network into runtime
     NetworkId networkIdentifierNotFused;
-    CHECK(runNotFused->LoadNetwork(networkIdentifierNotFused, std::move(optNetNotFused)) == Status::Success);
+    BOOST_TEST(runNotFused->LoadNetwork(networkIdentifierNotFused, std::move(optNetNotFused)) == Status::Success);
 
     //Creates structures for inputs and outputs.
-    std::vector<T> inputDataNotFused = armnnUtils::QuantizedVector<T>(data, scale, offset);
+    std::vector<T> inputDataNotFused = armnnUtils::QuantizedVector<T>(data, g_qScale, g_qOffset);
     std::vector<T> outputDataNotFused(LayerTest::outputSize);
     std::vector<T> outputData2NotFused(LayerTest::outputSize);
 
-    TensorInfo inputTensorInfoNotFused = runNotFused->GetInputTensorInfo(networkIdentifierNotFused, 0);
-    inputTensorInfoNotFused.SetConstant(true);
-
     InputTensors  inputTensorsNotFused{
-        {0, ConstTensor(inputTensorInfoNotFused, inputDataNotFused.data())}};
+        {0, ConstTensor(runNotFused->GetInputTensorInfo(networkIdentifierNotFused, 0), inputDataNotFused.data())}};
     OutputTensors outputTensorsNotFused{
         {0, Tensor(runNotFused->GetOutputTensorInfo(networkIdentifierNotFused, 0), outputDataNotFused.data())},
         {1, Tensor(runNotFused->GetOutputTensorInfo(networkIdentifierNotFused, 1), outputData2NotFused.data())}};
 
     // Execute network
-    CHECK(runNotFused->EnqueueWorkload(networkIdentifierNotFused, inputTensorsNotFused, outputTensorsNotFused)
-               == Status::Success);
+    runNotFused->EnqueueWorkload(networkIdentifierNotFused, inputTensorsNotFused, outputTensorsNotFused);
 
     // Check the output of the fused-activation matches with the output of the activation in the "NotFused" network
     for (unsigned int n = 0; n < outputDataFused.size(); ++n)
     {
-        auto outputNotFused = static_cast<float>(outputDataNotFused[n]);
-        CHECK(static_cast<float>(outputDataFused[n]) == doctest::Approx(outputNotFused).epsilon(tolerance));
+        BOOST_CHECK_CLOSE(static_cast<float>(outputDataFused[n]), static_cast<float>(outputDataNotFused[n]),
+                          T(tolerance));
     }
-}
-
-template<typename LayerTest,
-         DataType ArmnnType,
-         typename LayerType = typename LayerTest::LayerType,
-         typename T = ResolveType<ArmnnType>>
-bool FuseActivationSimpleTest(ActivationDescriptor activationDescriptor, Compute backendId, 
-                              float scale = 1.f, int32_t offset = 0)
-{
-    bool success;
-    try
-    {
-        // Construct ArmNN network
-        INetworkPtr networkFused = CreateNetwork<LayerTest, ArmnnType>(activationDescriptor, false, scale, offset);
-
-        // Create ArmNN runtime
-        IRuntimePtr run = IRuntime::Create(IRuntime::CreationOptions()); // default options
-
-        // Optimise ArmNN network
-        IOptimizedNetworkPtr optNetFused = Optimize(*networkFused, {backendId}, run->GetDeviceSpec());
-
-        // Load network into runtime
-        NetworkId networkIdentifier;
-        CHECK(run->LoadNetwork(networkIdentifier, std::move(optNetFused)) == Status::Success);
-
-        //Creates structures for inputs and outputs.
-        std::vector<float> data           = GetVector<float>(LayerTest::inputSize, 1.0f, 0.1f);
-        std::vector<T>     inputDataFused = armnnUtils::QuantizedVector<T>(data, scale, offset);
-        std::vector<T>     outputDataFused(LayerTest::outputSize);
-
-        TensorInfo inputTensorInfo = run->GetInputTensorInfo(networkIdentifier, 0);
-        inputTensorInfo.SetConstant(true);
-
-        InputTensors  inputTensorsFused{
-            {0, ConstTensor(inputTensorInfo, inputDataFused.data())}};
-        OutputTensors outputTensorsFused{
-            {0, Tensor(run->GetOutputTensorInfo(networkIdentifier, 0), outputDataFused.data())}};
-
-        // Execute network
-        run->EnqueueWorkload(networkIdentifier, inputTensorsFused, outputTensorsFused);
-
-        success = true;
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << e.what() << std::endl;
-        success = false;
-    }
-
-    return success;
-}
-
 }
 
 #if defined(ARMCOMPUTENEON_ENABLED)
-TEST_SUITE("Optimizer")
-{
 // ReLu fused into Receiver Layers Float32
-TEST_CASE("FuseReLUIntoConvFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseReLUIntoDWConvFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoDWConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+    FuseActivationIntoPreviousLayerTest<DepthwiseConvolution2dTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseReLUIntoFullyConnectedFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoFullyConnectedFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseReLUIntoBatchNormFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoBatchNormFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
 
 // BoundedReLu fused into Receiver Layers Float32
-TEST_CASE("FuseBoundedReLUIntoConvFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -681,19 +446,19 @@ TEST_CASE("FuseBoundedReLUIntoConvFloat32CpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoDWConvFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoDWConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
     activationDescriptor.m_A = 1.0f;
     activationDescriptor.m_B = -1.0f;
 
-    FuseActivationIntoPreviousLayerTest < DWConvolution2dTest < DataType::Float32 > , DataType::Float32 >
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+    FuseActivationIntoPreviousLayerTest < DepthwiseConvolution2dTest < DataType::Float32 > , DataType::Float32 >
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoFullyConnectedFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoFullyConnectedFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -701,9 +466,9 @@ TEST_CASE("FuseBoundedReLUIntoFullyConnectedFloat32CpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoBatchNormFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoBatchNormFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -711,244 +476,125 @@ TEST_CASE("FuseBoundedReLUIntoBatchNormFloat32CpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
 
 // ReLU fused into Receiver Layers QAsymmU8
-TEST_CASE("FuseReLUIntoConvQAsymmU8CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoConvQAsymmU8CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseReLUIntoDWConvQAsymmU8CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoDWConvQAsymmU8CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+    FuseActivationIntoPreviousLayerTest<DepthwiseConvolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
-TEST_CASE("FuseReLUIntoFullyConnectedQAsymmU8CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoFullyConnectedQAsymmU8CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
-}
-
-// BoundedReLu fused into Receiver Layers QAsymmS8
-TEST_CASE("FuseBoundedReLUIntoConvQASymmS8CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::QAsymmS8>, DataType::QAsymmS8>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
-}
-TEST_CASE("FuseBoundedReLUIntoDWConvQASymmS8CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest < DWConvolution2dTest < DataType::QAsymmS8 > , DataType::QAsymmS8 >
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
-}
-TEST_CASE("FuseBoundedReLUIntoFullyConnectedQASymmS8CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::QAsymmS8>, DataType::QAsymmS8>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
-}
-
-// TanH fused into Receiver Layers Float32
-TEST_CASE("FuseTanHIntoConvFloat32CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
 
 // HardSwish fused into Receiver Layers Float32
-TEST_CASE("FuseHardSwishIntoConvFloat32CpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::CpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
 
-// Test that all receiver layers follow by all activation layers work, either fused or not fused
-TEST_CASE("LayerFollowedByActivationFloat32CpuAccTest")
+// TanH fused into Receiver Layers Float32
+BOOST_AUTO_TEST_CASE(FuseTanHIntoConvFloat32CpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
-    for (int i = 0; i != 12; ++i)
-    {
-        activationDescriptor.m_Function = static_cast<ActivationFunction>(i);
-        activationDescriptor.m_A = 1.0f;
-        activationDescriptor.m_B = -1.0f;
-        CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-            (activationDescriptor, Compute::CpuAcc)), "Convolution + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<DWConvolution2dTest<DataType::Float32>, DataType::Float32>
-            (activationDescriptor, Compute::CpuAcc)), "DepthwiseConvolution + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-            (activationDescriptor, Compute::CpuAcc)), "FullyConnected + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-            (activationDescriptor, Compute::CpuAcc)), "BatchNorm + Activation function " << i);
-    }
-}
-TEST_CASE("LayerFollowedByActivationFloat16CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    for (int i = 0; i != 12; ++i)
-    {
-        activationDescriptor.m_Function = static_cast<ActivationFunction>(i);
-        activationDescriptor.m_A = 1.0f;
-        activationDescriptor.m_B = -1.0f;
-        CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::Float16>, DataType::Float16>
-            (activationDescriptor, Compute::CpuAcc)), "Convolution + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<DWConvolution2dTest<DataType::Float16>, DataType::Float16>
-            (activationDescriptor, Compute::CpuAcc)), "DepthwiseConvolution + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::Float16>, DataType::Float16>
-            (activationDescriptor, Compute::CpuAcc)), "FullyConnected + Activation function " << i);
-        CHECK_MESSAGE((FuseActivationSimpleTest<BatchNormTest<DataType::Float16>, DataType::Float16>
-            (activationDescriptor, Compute::CpuAcc)), "BatchNorm + Activation function " << i);
-    }
-}
-TEST_CASE("LayerFollowedByActivationQAsymmU8CpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-
-    activationDescriptor.m_Function = ActivationFunction::Sigmoid;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc, 1.f / 256.f, 0)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc, 1.f / 256.f, 0)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
     activationDescriptor.m_Function = ActivationFunction::TanH;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc, 1.f / 128.f, 128)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc, 1.f / 128.f, 128)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
 
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 1.0f;
-    activationDescriptor.m_B = -1.0f;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
-    activationDescriptor.m_Function = ActivationFunction::HardSwish;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::CpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-}
+    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::CpuAcc);
 }
 #endif
 
 #if defined(ARMCOMPUTECL_ENABLED)
-TEST_SUITE("Optimizer")
-{
 // ReLu fused into Receiver Layers Float32
-TEST_CASE("FuseReLUIntoConvFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoDWConvFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoDWConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+    FuseActivationIntoPreviousLayerTest<DepthwiseConvolution2dTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoFullyConnectedFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoFullyConnectedFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoBatchNormFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoBatchNormFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoMulFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoMulFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoAddFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoAddFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoSubFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoSubFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUIntoDivFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUIntoDivFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
 
 // BoundedReLu fused into Receiver Layers Float32
-TEST_CASE("FuseBoundedReLUIntoConvFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -956,19 +602,19 @@ TEST_CASE("FuseBoundedReLUIntoConvFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoDWConvFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoDWConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
     activationDescriptor.m_A = 1.0f;
     activationDescriptor.m_B = -1.0f;
 
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+    FuseActivationIntoPreviousLayerTest<DepthwiseConvolution2dTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoFullyConnectedFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoFullyConnectedFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -976,9 +622,9 @@ TEST_CASE("FuseBoundedReLUIntoFullyConnectedFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoBatchNormFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoBatchNormFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -986,9 +632,9 @@ TEST_CASE("FuseBoundedReLUIntoBatchNormFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoMulFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoMulFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -996,9 +642,9 @@ TEST_CASE("FuseBoundedReLUIntoMulFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoAddFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoAddFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -1006,9 +652,9 @@ TEST_CASE("FuseBoundedReLUIntoAddFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoSubFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoSubFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -1016,9 +662,9 @@ TEST_CASE("FuseBoundedReLUIntoSubFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseBoundedReLUIntoDivFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseBoundedReLUIntoDivFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
@@ -1026,321 +672,118 @@ TEST_CASE("FuseBoundedReLUIntoDivFloat32GpuAccTest")
     activationDescriptor.m_B = -1.0f;
 
     FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-
-// ReLu fused into Receiver Layers Float16
-TEST_CASE("FuseReLUIntoConvFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoDWConvFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoFullyConnectedFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoBatchNormFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<BatchNormTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoMulFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoAddFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoSubFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseReLUIntoDivFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-
-    FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float16>, DataType::Float16>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
 
 // ReLU fused into Receiver Layers QAsymmU8
-TEST_CASE("FuseReLUQIntoConvAsymmU8GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUQIntoConvAsymmU8GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUQIntoDWConvAsymmU8GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUQIntoDWConvAsymmU8GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
-    FuseActivationIntoPreviousLayerTest<DWConvolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+    FuseActivationIntoPreviousLayerTest<DepthwiseConvolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseReLUQIntoFullyConnectedAsymmU8GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseReLUQIntoFullyConnectedAsymmU8GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::ReLu;
 
     FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-
-// BoundedReLu fused into Receiver Layers QAsymmS8
-TEST_CASE("FuseBoundedReLUIntoConvQASymmS8GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::QAsymmS8>, DataType::QAsymmS8>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseBoundedReLUIntoDWConvQASymmS8GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest < DWConvolution2dTest < DataType::QAsymmS8 > , DataType::QAsymmS8 >
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseBoundedReLUIntoFullyConnectedQASymmS8GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 6.0f;
-    activationDescriptor.m_B = 0.0f;
-
-    FuseActivationIntoPreviousLayerTest<FullyConnectedTest<DataType::QAsymmS8>, DataType::QAsymmS8>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-
-// TanH fused into Receiver Layers Float32
-TEST_CASE("FuseTanHIntoConvFloat32GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseTanHIntoMulFloat32GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseTanHIntoAddFloat32GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseTanHIntoSubFloat32GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
-}
-TEST_CASE("FuseTanHIntoDivFloat32GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    activationDescriptor.m_Function = ActivationFunction::TanH;
-
-    FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
 
 // HardSwish fused into Receiver Layers Float32
-TEST_CASE("FuseHardSwishIntoConvFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseHardSwishIntoMulFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoMulFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseHardSwishIntoAddFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoAddFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseHardSwishIntoSubFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoSubFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
-TEST_CASE("FuseHardSwishIntoDivFloat32GpuAccTest")
+BOOST_AUTO_TEST_CASE(FuseHardSwishIntoDivFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
     activationDescriptor.m_Function = ActivationFunction::HardSwish;
 
     FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float32>, DataType::Float32>
-        (activationDescriptor, 0.0001f, Compute::GpuAcc);
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
 
-// Test that all receiver layers follow by all activation layers work, either fused or not fused
-TEST_CASE("LayerFollowedByActivationFloat32GpuAccTest")
+// TanH fused into Receiver Layers Float32
+BOOST_AUTO_TEST_CASE(FuseTanHIntoConvFloat32GpuAccTest)
 {
     ActivationDescriptor activationDescriptor;
-    for (int i = 0; i != 12; ++i)
-    {
-        activationDescriptor.m_Function = static_cast<ActivationFunction>(i);
-        activationDescriptor.m_A = 1.0f;
-        activationDescriptor.m_B = -1.0f;
-        if (activationDescriptor.m_Function != ActivationFunction::Elu)
-        {
-            CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "Convolution + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<DWConvolution2dTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "DepthwiseConvolution + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "FullyConnected + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<BatchNormTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "BatchNorm + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "Multiplication + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<AdditionTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "Addition + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<SubtractionTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "Subtraction + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<DivisionTest<DataType::Float32>, DataType::Float32>
-                (activationDescriptor, Compute::GpuAcc)), "Division + Activation function " << i);
-        }
-    }
-}
-TEST_CASE("LayerFollowedByActivationFloat16GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-    for (int i = 0; i != 12; ++i)
-    {
-        activationDescriptor.m_Function = static_cast<ActivationFunction>(i);
-        activationDescriptor.m_A = 1.0f;
-        activationDescriptor.m_B = -1.0f;
-        if (activationDescriptor.m_Function != ActivationFunction::Elu)
-        {
-            CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Convolution + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<DWConvolution2dTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Depthwise + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "FullyConnected + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<BatchNormTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "BatchNorm + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<MultiplicationTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Multiplication + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<AdditionTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Addition + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<SubtractionTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Subtraction + Activation function " << i);
-            CHECK_MESSAGE((FuseActivationSimpleTest<DivisionTest<DataType::Float16>, DataType::Float16>
-                (activationDescriptor, Compute::GpuAcc)), "Division + Activation function " << i);
-        }
-    }
-}
-TEST_CASE("LayerFollowedByActivationQAsymmU8GpuAccTest")
-{
-    ActivationDescriptor activationDescriptor;
-
-    activationDescriptor.m_Function = ActivationFunction::Sigmoid;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc, 1.f / 256.f, 0)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc, 1.f / 256.f, 0)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
     activationDescriptor.m_Function = ActivationFunction::TanH;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc, 1.f / 128.f, 128)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc, 1.f / 128.f, 128)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
 
-    activationDescriptor.m_Function = ActivationFunction::ReLu;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
-    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
-    activationDescriptor.m_A = 1.0f;
-    activationDescriptor.m_B = -1.0f;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-
-    activationDescriptor.m_Function = ActivationFunction::HardSwish;
-    CHECK_MESSAGE((FuseActivationSimpleTest<Convolution2dTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "Convolution + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
-    CHECK_MESSAGE((FuseActivationSimpleTest<FullyConnectedTest<DataType::QAsymmU8>, DataType::QAsymmU8>
-        (activationDescriptor, Compute::GpuAcc)), "FullyConnected + Activation function " <<
-        static_cast<int>(activationDescriptor.m_Function));
+    FuseActivationIntoPreviousLayerTest<Convolution2dTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
+BOOST_AUTO_TEST_CASE(FuseTanHIntoMulFloat32GpuAccTest)
+{
+    ActivationDescriptor activationDescriptor;
+    activationDescriptor.m_Function = ActivationFunction::TanH;
+
+    FuseActivationIntoPreviousLayerTest<MultiplicationTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
+}
+BOOST_AUTO_TEST_CASE(FuseTanHIntoAddFloat32GpuAccTest)
+{
+    ActivationDescriptor activationDescriptor;
+    activationDescriptor.m_Function = ActivationFunction::TanH;
+
+    FuseActivationIntoPreviousLayerTest<AdditionTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
+}
+BOOST_AUTO_TEST_CASE(FuseTanHIntoSubFloat32GpuAccTest)
+{
+    ActivationDescriptor activationDescriptor;
+    activationDescriptor.m_Function = ActivationFunction::TanH;
+
+    FuseActivationIntoPreviousLayerTest<SubtractionTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
+}
+BOOST_AUTO_TEST_CASE(FuseTanHIntoDivFloat32GpuAccTest)
+{
+    ActivationDescriptor activationDescriptor;
+    activationDescriptor.m_Function = ActivationFunction::TanH;
+
+    FuseActivationIntoPreviousLayerTest<DivisionTest<DataType::Float32>, DataType::Float32>
+        (activationDescriptor, 0.0001f, armnn::Compute::GpuAcc);
 }
 #endif
+
+BOOST_AUTO_TEST_SUITE_END()

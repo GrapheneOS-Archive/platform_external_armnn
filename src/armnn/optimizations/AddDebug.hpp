@@ -22,7 +22,7 @@ public:
         {
             // if the inputs/outputs of this layer do not have a debug layer
             // insert the debug layer after them
-            InsertDebugLayerAfter(graph, layer, false);
+            InsertDebugLayerAfter(graph, layer);
         }
     }
 
@@ -31,27 +31,7 @@ protected:
     ~AddDebugImpl() = default;
 };
 
-class AddDebugToFileImpl
-{
-public:
-
-    void Run(Graph& graph, Layer& layer) const
-    {
-        if (layer.GetType() != LayerType::Debug && layer.GetType() != LayerType::Output)
-        {
-            // if the inputs/outputs of this layer do not have a debug layer
-            // insert the debug layer after them
-            InsertDebugLayerAfter(graph, layer, true);
-        }
-    }
-
-protected:
-    AddDebugToFileImpl() = default;
-    ~AddDebugToFileImpl() = default;
-};
-
 using InsertDebugLayer = OptimizeForType<Layer, AddDebugImpl>;
-using InsertDebugToFileLayer = OptimizeForType<Layer, AddDebugToFileImpl>;
 
 } // namespace optimizations
 } // namespace armnn

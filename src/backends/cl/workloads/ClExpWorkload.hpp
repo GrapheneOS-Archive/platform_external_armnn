@@ -1,26 +1,24 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
-#include <arm_compute/runtime/CL/functions/CLElementwiseUnaryLayer.h>
+#include <arm_compute/runtime/CL/functions/CLElementWiseUnaryLayer.h>
 
 namespace armnn
 {
 
 arm_compute::Status ClExpWorkloadValidate(const TensorInfo& input, const TensorInfo& output);
 
-class ClExpWorkload : public ClBaseWorkload<ElementwiseUnaryQueueDescriptor>
+class ClExpWorkload : public BaseWorkload<ElementwiseUnaryQueueDescriptor>
 {
 public:
-    ClExpWorkload(const ElementwiseUnaryQueueDescriptor& descriptor,
-                  const WorkloadInfo& info,
-                  const arm_compute::CLCompileContext& clCompileContext);
+    ClExpWorkload(const ElementwiseUnaryQueueDescriptor& descriptor, const WorkloadInfo& info);
     virtual void Execute() const override;
 
 private:

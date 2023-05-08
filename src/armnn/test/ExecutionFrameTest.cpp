@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <ExecutionFrame.hpp>
 
@@ -14,9 +14,7 @@
 // B
 // |
 // C
-TEST_SUITE("NextExecutionFrameTestSuite")
-{
-TEST_CASE("NextExecutionFrameTest")
+BOOST_AUTO_TEST_CASE(NextExecutionFrameTest)
 {
     armnn::ExecutionFrame executionFrameA;
     armnn::ExecutionFrame executionFrameB;
@@ -30,12 +28,11 @@ TEST_CASE("NextExecutionFrameTest")
     auto nextExecutionFrameB = executionFrameB.ExecuteWorkloads(&executionFrameA);
     auto nextExecutionFrameC = executionFrameC.ExecuteWorkloads(&executionFrameB);
 
-    CHECK_EQ(nextExecutionFrameA, &executionFrameB);
-    CHECK_EQ(nextExecutionFrameB, &executionFrameC);
+    BOOST_CHECK_EQUAL(nextExecutionFrameA, &executionFrameB);
+    BOOST_CHECK_EQUAL(nextExecutionFrameB, &executionFrameC);
 
-    CHECK(!nextExecutionFrameC);
+    BOOST_CHECK(!nextExecutionFrameC);
 
-    CHECK_NE(nextExecutionFrameA, &executionFrameC);
-}
+    BOOST_CHECK_NE(nextExecutionFrameA, &executionFrameC);
 }
 

@@ -5,12 +5,10 @@
 
 #pragma once
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 
 #include <armnn/INetwork.hpp>
 #include <ResolveType.hpp>
-
-#include <doctest/doctest.h>
 
 namespace{
 
@@ -42,8 +40,6 @@ void GatherEndToEnd(const std::vector<BackendId>& backends)
 
     paramsInfo.SetQuantizationScale(1.0f);
     paramsInfo.SetQuantizationOffset(0);
-    paramsInfo.SetConstant(true);
-    indicesInfo.SetConstant(true);
     outputInfo.SetQuantizationScale(1.0f);
     outputInfo.SetQuantizationOffset(0);
 
@@ -63,7 +59,7 @@ void GatherEndToEnd(const std::vector<BackendId>& backends)
     // Builds up the structure of the network
     armnn::INetworkPtr net = CreateGatherNetwork(paramsInfo, indicesInfo, outputInfo, indicesData);
 
-    CHECK(net);
+    BOOST_TEST_CHECKPOINT("create a network");
 
     std::map<int, std::vector<T>> inputTensorData = {{ 0, paramsData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0, expectedOutput }};
@@ -80,8 +76,6 @@ void GatherMultiDimEndToEnd(const std::vector<BackendId>& backends)
 
     paramsInfo.SetQuantizationScale(1.0f);
     paramsInfo.SetQuantizationOffset(0);
-    paramsInfo.SetConstant(true);
-    indicesInfo.SetConstant(true);
     outputInfo.SetQuantizationScale(1.0f);
     outputInfo.SetQuantizationOffset(0);
 
@@ -120,6 +114,8 @@ void GatherMultiDimEndToEnd(const std::vector<BackendId>& backends)
 
     // Builds up the structure of the network
     armnn::INetworkPtr net = CreateGatherNetwork(paramsInfo, indicesInfo, outputInfo, indicesData);
+
+    BOOST_TEST_CHECKPOINT("create a network");
 
     std::map<int, std::vector<T>> inputTensorData = {{ 0, paramsData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0, expectedOutput }};

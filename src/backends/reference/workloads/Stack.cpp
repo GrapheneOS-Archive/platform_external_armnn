@@ -11,10 +11,11 @@ namespace armnn
 
 void Stack(const StackQueueDescriptor& data,
            std::vector<std::unique_ptr<Decoder<float>>>& inputs,
-           Encoder<float>& output,
-           const TensorInfo& inputInfo,
-           const TensorInfo& outputInfo)
+           Encoder<float>& output)
 {
+    const TensorInfo& outputInfo = GetTensorInfo(data.m_Outputs[0]);
+    const TensorInfo& inputInfo = GetTensorInfo(data.m_Inputs[0]);
+
     unsigned int outputNumDims = outputInfo.GetNumDimensions();
     unsigned int inputNumDims = inputInfo.GetNumDimensions();
 
@@ -23,22 +24,11 @@ void Stack(const StackQueueDescriptor& data,
 
     unsigned int axis = data.m_Parameters.m_Axis;
 
-    // Can perform a simple concatenation when axis == 0
-    if (!axis)
+    // Initialise output data
+    unsigned int numOutputElements = 1;
+    for (unsigned int i=0; i<outputNumDims; ++i)
     {
-        unsigned int numInputs = data.m_Parameters.m_NumInputs;
-        unsigned int inputLength = inputInfo.GetNumElements();
-
-        for (unsigned int inputIdx=0; inputIdx<numInputs; ++inputIdx)
-        {
-            for (unsigned int elmt=0; elmt<inputLength; ++elmt)
-            {
-                (*inputs[inputIdx])[elmt];
-                output[(inputIdx * inputLength) + elmt];
-                output.Set(inputs[inputIdx]->Get());
-            }
-        }
-        return;
+        numOutputElements *= outputDims[i];
     }
 
     const unsigned int iNumTensors = static_cast<unsigned int>(data.m_Inputs.size());

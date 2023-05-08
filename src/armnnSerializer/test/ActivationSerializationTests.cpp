@@ -11,30 +11,25 @@
 #include <armnnDeserializer/IDeserializer.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <sstream>
 
-TEST_SUITE("SerializerTests")
-{
-class VerifyActivationName : public armnn::IStrategy
+BOOST_AUTO_TEST_SUITE(SerializerTests)
+
+class VerifyActivationName : public armnn::LayerVisitorBase<armnn::VisitorNoThrowPolicy>
 {
 public:
-    void ExecuteStrategy(const armnn::IConnectableLayer* layer,
-                         const armnn::BaseDescriptor& descriptor,
-                         const std::vector<armnn::ConstTensor>& constants,
-                         const char* name,
-                         const armnn::LayerBindingId id = 0) override
+    void VisitActivationLayer(const armnn::IConnectableLayer* layer,
+                              const armnn::ActivationDescriptor& activationDescriptor,
+                              const char* name) override
     {
-        IgnoreUnused(layer, descriptor, constants, id);
-        if (layer->GetType() == armnn::LayerType::Activation)
-        {
-            CHECK(std::string(name) == "activation");
-        }
+        IgnoreUnused(layer, activationDescriptor);
+        BOOST_TEST(name == "activation");
     }
 };
 
-TEST_CASE("ActivationSerialization")
+BOOST_AUTO_TEST_CASE(ActivationSerialization)
 {
     armnnDeserializer::IDeserializerPtr parser = armnnDeserializer::IDeserializer::Create();
 
@@ -59,12 +54,11 @@ TEST_CASE("ActivationSerialization")
     activationLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
     activationLayer->GetOutputSlot(0).SetTensorInfo(outputInfo);
 
-    armnnSerializer::ISerializerPtr serializer = armnnSerializer::ISerializer::Create();
-
-    serializer->Serialize(*network);
+    armnnSerializer::Serializer serializer;
+    serializer.Serialize(*network);
 
     std::stringstream stream;
-    serializer->SaveSerializedToStream(stream);
+    serializer.SaveSerializedToStream(stream);
 
     std::string const serializerString{stream.str()};
     std::vector<std::uint8_t> const serializerVector{serializerString.begin(), serializerString.end()};
@@ -72,7 +66,7 @@ TEST_CASE("ActivationSerialization")
     armnn::INetworkPtr deserializedNetwork = parser->CreateNetworkFromBinary(serializerVector);
 
     VerifyActivationName visitor;
-    deserializedNetwork->ExecuteStrategy(visitor);
+    deserializedNetwork->Accept(visitor);
 
     armnn::IRuntime::CreationOptions options; // default options
     armnn::IRuntimePtr run = armnn::IRuntime::Create(options);
@@ -84,11 +78,9 @@ TEST_CASE("ActivationSerialization")
     run->LoadNetwork(networkIdentifier, std::move(deserializedOptimized));
 
     std::vector<float> inputData {0.0f, -5.3f, 42.0f, -42.0f};
-    armnn::TensorInfo inputTensorInfo = run->GetInputTensorInfo(networkIdentifier, 0);
-    inputTensorInfo.SetConstant(true);
     armnn::InputTensors inputTensors
     {
-        {0, armnn::ConstTensor(inputTensorInfo, inputData.data())}
+        {0, armnn::ConstTensor(run->GetInputTensorInfo(networkIdentifier, 0), inputData.data())}
     };
 
     std::vector<float> expectedOutputData {0.0f, 0.0f, 42.0f, 0.0f};
@@ -99,7 +91,8 @@ TEST_CASE("ActivationSerialization")
         {0, armnn::Tensor(run->GetOutputTensorInfo(networkIdentifier, 0), outputData.data())}
     };
     run->EnqueueWorkload(networkIdentifier, inputTensors, outputTensors);
-    CHECK(std::equal(outputData.begin(), outputData.end(), expectedOutputData.begin(), expectedOutputData.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(outputData.begin(), outputData.end(),
+    expectedOutputData.begin(), expectedOutputData.end());
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

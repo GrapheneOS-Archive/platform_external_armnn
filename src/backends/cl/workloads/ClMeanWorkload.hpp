@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLReduceMean.h>
 
@@ -14,14 +14,12 @@ namespace armnn
 
 arm_compute::Status ClMeanValidate(const TensorInfo& input,
                                    const TensorInfo& output,
-                                   const MeanDescriptor& descriptor);
+                                   const MeanDescriptor& desc);
 
-class ClMeanWorkload : public ClBaseWorkload<MeanQueueDescriptor>
+class ClMeanWorkload : public BaseWorkload<MeanQueueDescriptor>
 {
 public:
-    ClMeanWorkload(const MeanQueueDescriptor& descriptor,
-                   const WorkloadInfo& info,
-                   const arm_compute::CLCompileContext& clCompileContext);
+    ClMeanWorkload(const MeanQueueDescriptor& descriptor, const WorkloadInfo& info);
 
     void Execute() const override;
 

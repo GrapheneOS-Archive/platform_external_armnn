@@ -5,11 +5,11 @@
 
 #include <reference/workloads/ArgMinMax.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("RefArgMinMax")
-{
-TEST_CASE("ArgMinTest")
+BOOST_AUTO_TEST_SUITE(RefArgMinMax)
+
+BOOST_AUTO_TEST_CASE(ArgMinTest)
 {
     const armnn::TensorInfo inputInfo({ 1, 2, 3 } , armnn::DataType::Float32);
     const armnn::TensorInfo outputInfo({ 1, 3 }, armnn::DataType::Signed64);
@@ -25,11 +25,14 @@ TEST_CASE("ArgMinTest")
                armnn::ArgMinMaxFunction::Min,
                -2);
 
-    CHECK(std::equal(outputValues.begin(), outputValues.end(), expectedValues.begin(), expectedValues.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(outputValues.begin(),
+                                  outputValues.end(),
+                                  expectedValues.begin(),
+                                  expectedValues.end());
 
 }
 
-TEST_CASE("ArgMaxTest")
+BOOST_AUTO_TEST_CASE(ArgMaxTest)
 {
     const armnn::TensorInfo inputInfo({ 1, 2, 3 } , armnn::DataType::Float32);
     const armnn::TensorInfo outputInfo({ 1, 3 }, armnn::DataType::Signed64);
@@ -45,8 +48,11 @@ TEST_CASE("ArgMaxTest")
                armnn::ArgMinMaxFunction::Max,
                -2);
 
-    CHECK(std::equal(outputValues.begin(), outputValues.end(), expectedValues.begin(), expectedValues.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(outputValues.begin(),
+                                  outputValues.end(),
+                                  expectedValues.begin(),
+                                  expectedValues.end());
 
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

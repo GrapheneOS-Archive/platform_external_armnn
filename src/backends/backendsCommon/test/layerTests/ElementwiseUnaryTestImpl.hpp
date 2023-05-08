@@ -5,22 +5,22 @@
 
 #pragma once
 
-#include <armnnTestUtils/LayerTestResult.hpp>
+#include "LayerTestResult.hpp"
 
 #include <armnn/ArmNN.hpp>
 
 #include <ResolveType.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/Workload.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
-#include <DataTypeUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataTypeUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 #include <memory>
 
@@ -55,9 +55,9 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
     outputTensorInfo.SetQuantizationScale(outQuantScale);
     outputTensorInfo.SetQuantizationOffset(outQuantOffset);
 
-    std::vector<T> input = ConvertToDataType<ArmnnType>(values, inputTensorInfo);
-    std::vector<T> expectedOutput = ConvertToDataType<ArmnnType>(outValues, inputTensorInfo);
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    auto input = MakeTensor<T, NumDims>(inputTensorInfo, ConvertToDataType<ArmnnType>(values, inputTensorInfo));
+
+    LayerTestResult<T, NumDims> ret(outputTensorInfo);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -73,18 +73,16 @@ LayerTestResult<T, NumDims> ElementwiseUnaryTestHelper(
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     workload->PostAllocationConfigure();
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
 
-    return LayerTestResult<T, NumDims>(actualOutput,
-                                       expectedOutput,
-                                       outputHandle->GetShape(),
-                                       outputTensorInfo.GetShape());
-
+    ret.outputExpected = MakeTensor<T, NumDims>(outputTensorInfo, ConvertToDataType<ArmnnType>(outValues,
+        inputTensorInfo));
+    return ret;
 }
 
 template <std::size_t NumDims,

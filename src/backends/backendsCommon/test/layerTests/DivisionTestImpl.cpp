@@ -13,7 +13,7 @@ std::unique_ptr<armnn::IWorkload> CreateWorkload<armnn::DivisionQueueDescriptor>
     const armnn::WorkloadInfo& info,
     const armnn::DivisionQueueDescriptor& descriptor)
 {
-    return workloadFactory.CreateWorkload(armnn::LayerType::Division, descriptor, info);
+    return workloadFactory.CreateDivision(descriptor, info);
 }
 
 LayerTestResult<float, 4> DivisionByZeroTest(

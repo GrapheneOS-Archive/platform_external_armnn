@@ -13,8 +13,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <armnn/backends/Workload.hpp>
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 namespace armnn
 {

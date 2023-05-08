@@ -5,16 +5,16 @@
 
 #include "SoftmaxTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 #include <algorithm>
 
@@ -82,10 +82,10 @@ LayerTestResult<T, n> SimpleSoftmaxBaseTestImpl(
     outputTensorInfo.SetQuantizationScale(qScale);
     outputTensorInfo.SetQuantizationOffset(qOffset);
 
+    LayerTestResult<T, n> ret(outputTensorInfo);
+
     // Each row is independently softmax'd.
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset);
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(outputData, qScale, qOffset);
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    auto input = MakeTensor<T, n>(inputTensorInfo, armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -98,22 +98,22 @@ LayerTestResult<T, n> SimpleSoftmaxBaseTestImpl(
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Softmax, data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSoftmax(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     ARMNN_ASSERT(workload);
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
 
-    return LayerTestResult<T, n>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(outputData, qScale, qOffset);
+    ret.outputExpected = MakeTensor<T, n>(outputTensorInfo, expectedOutput);
+
+    return ret;
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -259,9 +259,9 @@ LayerTestResult<T, 2> CompareSoftmaxTestImpl(
     outputTensorInfo.SetQuantizationScale(qScale);
     outputTensorInfo.SetQuantizationOffset(qOffset);
 
-    auto input = MakeRandomTensor<T>(inputTensorInfo, 0xF00D, 0.0f, 1.0f);
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<T> expectedOutput(outputTensorInfo.GetNumElements());
+
+    LayerTestResult<T, 2> ret(outputTensorInfo);
+    auto input = MakeRandomTensor<T, 2>(inputTensorInfo, 0xF00D, 0.0f, 1.0f);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -283,10 +283,8 @@ LayerTestResult<T, 2> CompareSoftmaxTestImpl(
     SetWorkloadInput(refData, refInfo, 0, inputTensorInfo, inputHandleRef.get());
     SetWorkloadOutput(refData, refInfo, 0, outputTensorInfo, outputHandleRef.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Softmax, data, info);
-    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateWorkload(armnn::LayerType::Softmax,
-                                                                                      refData,
-                                                                                      refInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSoftmax(data, info);
+    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateSoftmax(refData, refInfo);
 
     outputHandleRef->Allocate();
     inputHandleRef->Allocate();
@@ -294,20 +292,17 @@ LayerTestResult<T, 2> CompareSoftmaxTestImpl(
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
-    CopyDataToITensorHandle(inputHandleRef.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0]);
+    CopyDataToITensorHandle(inputHandleRef.get(), &input[0][0]);
 
     ExecuteWorkload(*workload, memoryManager);
 
     workloadRef->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-    CopyDataFromITensorHandle(expectedOutput.data(), outputHandleRef.get());
+    CopyDataFromITensorHandle(&ret.output[0][0], outputHandle.get());
+    CopyDataFromITensorHandle(&ret.outputExpected[0][0], outputHandleRef.get());
 
-    return LayerTestResult<T, 2>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 } // anonymous namespace

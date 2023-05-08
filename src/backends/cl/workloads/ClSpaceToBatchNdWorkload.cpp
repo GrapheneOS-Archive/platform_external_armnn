@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -11,7 +11,7 @@
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
@@ -45,17 +45,9 @@ arm_compute::Status ClSpaceToBatchNdWorkloadValidate(const TensorInfo& input,
 }
 
 ClSpaceToBatchNdWorkload::ClSpaceToBatchNdWorkload(
-    const SpaceToBatchNdQueueDescriptor& descriptor,
-    const WorkloadInfo& info,
-    const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<SpaceToBatchNdQueueDescriptor>(descriptor, info)
+    const SpaceToBatchNdQueueDescriptor& descriptor, const WorkloadInfo& info)
+    : BaseWorkload<SpaceToBatchNdQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClSpaceToBatchNdWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("ClSpaceToBatchNdWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  =
@@ -76,21 +68,17 @@ ClSpaceToBatchNdWorkload::ClSpaceToBatchNdWorkload(
     input.info()->set_data_layout(aclDataLayout);
     output.info()->set_data_layout(aclDataLayout);
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClSpaceToBatchNdWorkload_configure");
-        m_SpaceToBatchLayer.configure(clCompileContext,
-                                      &input,
-                                      blockWidth,
-                                      blockHeight,
-                                      paddingLeftTop,
-                                      paddingRightBottom,
-                                      &output);
-    }
+    m_SpaceToBatchLayer.configure(&input,
+                                  blockWidth,
+                                  blockHeight,
+                                  paddingLeftTop,
+                                  paddingRightBottom,
+                                  &output);
 }
 
 void ClSpaceToBatchNdWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClSpaceToBatchNdWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClSpaceToBatchNdWorkload_Execute");
     RunClFunction(m_SpaceToBatchLayer, CHECK_LOCATION());
 }
 

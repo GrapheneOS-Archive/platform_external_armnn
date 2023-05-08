@@ -137,6 +137,12 @@ class TimeoutException : public Exception
     using Exception::Exception;
 };
 
+class BackendProfilingException : public Exception
+{
+public:
+    using Exception::Exception;
+};
+
 class PolymorphicDowncastException : public Exception
 {
 public:
@@ -144,18 +150,6 @@ public:
 };
 
 class NullPointerException : public Exception
-{
-public:
-    using Exception::Exception;
-};
-
-class BackendCapabilityException : public Exception
-{
-public:
-    using Exception::Exception;
-};
-
-class MemoryValidationException : public Exception
 {
 public:
     using Exception::Exception;

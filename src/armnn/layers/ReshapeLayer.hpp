@@ -45,8 +45,7 @@ public:
                m_Param.m_TargetShape == PolymorphicDowncast<const ReshapeLayer*>(&other)->m_Param.m_TargetShape;
     }
 
-    void ExecuteStrategy(IStrategy& strategy) const override;
-
+    void Accept(ILayerVisitor& visitor) const override;
 
 protected:
     /// Constructor to create a ReshapeLayer.

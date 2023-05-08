@@ -16,14 +16,6 @@ namespace arm
 namespace pipe
 {
 
-#if defined(__clang__) &&((__clang_major__>=3)||(__clang_major__==3 && __clang_minor__ >= 5))
-#   define ARM_PIPE_FALLTHROUGH [[clang::fallthrough]]
-#elif defined(__GNUC__) && (__GNUC__ >= 7)
-#   define ARM_PIPE_FALLTHROUGH __attribute__((fallthrough))
-#else
-#   define ARM_PIPE_FALLTHROUGH ((void)0)
-#endif
-
 enum class LogSeverity
 {
     Trace,
@@ -54,13 +46,6 @@ inline std::string LevelToString(LogSeverity level)
             return "Log";
     }
 }
-
-/// Configures the logging behaviour of the ARMNN library.
-///     printToStandardOutput: Set to true if log messages should be printed to the standard output.
-///     printToDebugOutput: Set to true if log messages be printed to a platform-specific debug output
-///       (where supported).
-///     severity: All log messages that are at this severity level or higher will be printed, others will be ignored.
-void ConfigureLogging(bool printToStandardOutput, bool printToDebugOutput, LogSeverity severity);
 
 class LogSink
 {
@@ -139,7 +124,7 @@ public:
     {
     }
 
-    static SimpleLogger<Level>& Get()
+    static SimpleLogger& Get()
     {
         static SimpleLogger<Level> logger;
         return logger;

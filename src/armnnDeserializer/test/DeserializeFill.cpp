@@ -1,15 +1,16 @@
 //
-// Copyright © 2020, 2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
 
-TEST_SUITE("Deserializer_Fill")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct FillFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit FillFixture()
@@ -34,7 +35,7 @@ struct FillFixture : public ParserFlatbuffersSerializeFixture
                             4
                           ],
                           dataType: "Signed32",
-                          quantizationScale: 1.0
+                          quantizationScale: 0.0
                         }
                       }
                     ]
@@ -122,7 +123,7 @@ struct SimpleFillFixture : FillFixture
     SimpleFillFixture() : FillFixture() {}
 };
 
-TEST_CASE_FIXTURE(SimpleFillFixture, "Fill")
+BOOST_FIXTURE_TEST_CASE(Fill, SimpleFillFixture)
 {
     RunTest<4, armnn::DataType::Signed32, armnn::DataType::Float32>(
             0,
@@ -130,4 +131,4 @@ TEST_CASE_FIXTURE(SimpleFillFixture, "Fill")
             {{"OutputLayer",{ 1, 1, 1, 1, 1, 1, 1, 1, 1}}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

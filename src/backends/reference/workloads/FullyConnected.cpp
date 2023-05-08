@@ -5,8 +5,6 @@
 
 #include "FullyConnected.hpp"
 
-#include <armnn/utility/Assert.hpp>
-
 #include "RefWorkloadUtils.hpp"
 
 namespace armnn
@@ -18,7 +16,7 @@ void FullyConnected(const TensorShape& rInputShape,
                     Encoder<float>& rOutputEncoder,
                     const TensorShape& rWeightsShape,
                     Decoder<float>& rWeightDecoder,
-                    Decoder<float>* pBiasDecoder,
+                    Decoder<float>& rBiasDecoder,
                     const bool biasEnabled,
                     const unsigned int K,
                     const bool transposeWeights)
@@ -30,9 +28,7 @@ void FullyConnected(const TensorShape& rInputShape,
     const std::vector<float> decodedWeights = rWeightDecoder.DecodeTensor(rWeightsShape);
 
     const TensorShape biasShape{outputSize};
-
-    ARMNN_ASSERT(!biasEnabled || pBiasDecoder != nullptr);
-    const std::vector<float> decodedBiases = biasEnabled ? pBiasDecoder->DecodeTensor(biasShape) : std::vector<float>();
+    const std::vector<float> decodedBiases = biasEnabled ? rBiasDecoder.DecodeTensor(biasShape) : std::vector<float>();
 
 
     for (unsigned int n = 0; n < rInputShape[0]; n++)

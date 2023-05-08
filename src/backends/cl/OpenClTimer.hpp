@@ -29,9 +29,6 @@ public:
     /// Stop the OpenCl timer
     void Stop() override;
 
-    /// Return true if this Instrument has kernels for recording measurements
-    bool HasKernelMeasurements() const override;
-
     /// Get the name of the timer
     /// \return Name of the timer
     const char* GetName() const override { return "OpenClKernelTimer"; }

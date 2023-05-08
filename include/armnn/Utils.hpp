@@ -1,10 +1,10 @@
 //
-// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include <string>
+#include "armnn/TypesUtils.hpp"
 
 namespace armnn
 {
@@ -34,9 +34,5 @@ void ConfigureLogging(bool printToStandardOutput, bool printToDebugOutput, LogSe
 #else
 #   define ARMNN_FALLTHROUGH ((void)0)
 #endif
-
-bool NeonDetected();
-
-const std::string GetVersion();
 
 } // namespace armnn

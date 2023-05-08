@@ -1,5 +1,5 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,25 +7,22 @@
 
 #include "BaseIterator.hpp"
 
-#include "RefBaseWorkload.hpp"
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 namespace armnn
 {
 
-class RefComparisonWorkload : public RefBaseWorkload<ComparisonQueueDescriptor>
+class RefComparisonWorkload : public BaseWorkload<ComparisonQueueDescriptor>
 {
 public:
-    using RefBaseWorkload<ComparisonQueueDescriptor>::m_Data;
+    using BaseWorkload<ComparisonQueueDescriptor>::m_Data;
 
     RefComparisonWorkload(const ComparisonQueueDescriptor& descriptor, const WorkloadInfo& info);
     void PostAllocationConfigure() override;
     void Execute() const override;
-    void ExecuteAsync(ExecutionData& executionData)  override;
 
 private:
-    void PostAllocationConfigure(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs);
-    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
     using InType  = float;
     using OutType = bool;
 

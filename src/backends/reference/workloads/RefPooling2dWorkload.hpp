@@ -1,26 +1,23 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "RefBaseWorkload.hpp"
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 #include "Decoders.hpp"
 #include "Encoders.hpp"
 
 namespace armnn
 {
-class RefPooling2dWorkload : public RefBaseWorkload<Pooling2dQueueDescriptor>
+class RefPooling2dWorkload : public BaseWorkload<Pooling2dQueueDescriptor>
 {
 public:
-    using RefBaseWorkload<Pooling2dQueueDescriptor>::RefBaseWorkload;
+    using BaseWorkload<Pooling2dQueueDescriptor>::BaseWorkload;
 
-    void Execute() const override;
-    void ExecuteAsync(ExecutionData& executionData)  override;
-private:
-    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
+    virtual void Execute() const override;
 };
 } //namespace armnn

@@ -1,8 +1,3 @@
-//
-// Copyright (c) MapBox All rights reserved.
-// SPDX-License-Identifier: BSD-3-Clause
-//
-
 #ifndef VARIANT_CAST_HPP
 #define VARIANT_CAST_HPP
 

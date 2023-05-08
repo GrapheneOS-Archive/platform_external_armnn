@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_Gather")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct GatherFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit GatherFixture(const std::string& inputShape,
@@ -119,10 +121,7 @@ struct GatherFixture : public ParserFlatbuffersSerializeFixture
                                         },
                                 }],
                             }}},
-                }],
-                featureVersions: {
-                    weightsLayoutScheme: 1,
-                }
+                }]
                  } )";
 
         Setup();
@@ -135,7 +134,7 @@ struct SimpleGatherFixtureFloat32 : GatherFixture
                                                  "[ 2, 3, 2, 3 ]", "0", "Float32", "IntData") {}
 };
 
-TEST_CASE_FIXTURE(SimpleGatherFixtureFloat32, "GatherFloat32")
+BOOST_FIXTURE_TEST_CASE(GatherFloat32, SimpleGatherFixtureFloat32)
 {
     RunTest<4, armnn::DataType::Float32>(0,
                                          {{"InputLayer", {  1,  2,  3,
@@ -158,5 +157,5 @@ TEST_CASE_FIXTURE(SimpleGatherFixtureFloat32, "GatherFloat32")
                                                             4,  5,  6 }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()
 

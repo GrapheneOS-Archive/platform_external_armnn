@@ -1,10 +1,10 @@
 //
-// Copyright © 2020-2021, 2023 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 
 #include <ResolveType.hpp>
 
@@ -12,7 +12,7 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <vector>
 
@@ -33,7 +33,7 @@ INetworkPtr CreateElementwiseUnaryNetwork(const TensorShape& inputShape,
     ElementwiseUnaryDescriptor descriptor(operation);
     IConnectableLayer* elementwiseUnaryLayer = net->AddElementwiseUnaryLayer(descriptor, "elementwiseUnary");
 
-    TensorInfo inputTensorInfo(inputShape, ArmnnTypeInput, qScale, qOffset, true);
+    TensorInfo inputTensorInfo(inputShape, ArmnnTypeInput, qScale, qOffset);
     IConnectableLayer* input = net->AddInputLayer(armnn::numeric_cast<LayerBindingId>(0));
     Connect(input, elementwiseUnaryLayer, inputTensorInfo, 0, 0);
 
@@ -47,7 +47,8 @@ INetworkPtr CreateElementwiseUnaryNetwork(const TensorShape& inputShape,
 template<armnn::DataType ArmnnInType,
          typename TInput = armnn::ResolveType<ArmnnInType>>
 void ElementwiseUnarySimpleEndToEnd(const std::vector<BackendId>& backends,
-                                    UnaryOperation operation)
+                                    UnaryOperation operation,
+                                    const std::vector<float> expectedOutput)
 {
     using namespace armnn;
 
@@ -60,32 +61,10 @@ void ElementwiseUnarySimpleEndToEnd(const std::vector<BackendId>& backends,
     // Builds up the structure of the network
     INetworkPtr net = CreateElementwiseUnaryNetwork<ArmnnInType>(inputShape, outputShape, operation, qScale, qOffset);
 
-    CHECK(net);
+    BOOST_TEST_CHECKPOINT("create a network");
 
-    std::vector<float> input;
-    std::vector<float> expectedOutput;
-    switch(operation)
-    {
-        case UnaryOperation::Abs:
-            input = { 1, -1, 1, 1,  5, -5, 5, 5,
-                      -3, 3, 3, 3,  4, 4, -4, 4 };
-            expectedOutput = { 1.f, 1.f, 1.f, 1.f, 5.f, 5.f, 5.f, 5.f,
-                               3.f, 3.f, 3.f, 3.f, 4.f, 4.f, 4.f, 4.f };
-            break;
-        case UnaryOperation::Rsqrt:
-            input = { 1, 1, 1, 1,  5, 5, 5, 5,
-                      3, 3, 3, 3,  4, 4, 4, 4 };
-            expectedOutput = { 1.f, 1.f, 1.f, 1.f, 0.447214f, 0.447214f, 0.447214f, 0.447214f,
-                               0.57735f, 0.57735f, 0.57735f, 0.57735f, 0.5f, 0.5f, 0.5f, 0.5f };
-            break;
-        default:
-            input = { 1, -1, 1, 1,  5, -5, 5, 5,
-                      -3, 3, 3, 3,  4, 4, -4, 4 };
-            expectedOutput = { 1.f, 1.f, 1.f, 1.f, 5.f, 5.f, 5.f, 5.f,
-                               3.f, 3.f, 3.f, 3.f, 4.f, 4.f, 4.f, 4.f };
-            break;
-    }
-
+    const std::vector<float> input({ 1, -1, 1, 1,  5, -5, 5, 5,
+                                       -3, 3, 3, 3,  4, 4, -4, 4 });
 
     // quantize data
     std::vector<TInput> qInputData      = armnnUtils::QuantizedVector<TInput>(input, qScale, qOffset);

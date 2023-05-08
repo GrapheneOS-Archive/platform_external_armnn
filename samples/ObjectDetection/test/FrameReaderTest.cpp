@@ -20,7 +20,7 @@ SCENARIO("Read frames from video file using CV frame reader", "[framereader]") {
         std::string file =  testResources + "/" + "Megamind.avi";
         WHEN("Frame reader is initialised") {
 
-            common::CvVideoFrameReader reader;
+            od::CvVideoFrameReader reader;
             THEN("no exception is thrown") {
                 reader.Init(file);
 
@@ -92,7 +92,7 @@ SCENARIO("Read frames from video file using CV frame reader", "[framereader]") {
 
         WHEN("Frame reader is initialised") {
 
-            common::CvVideoFrameReader reader;
+            od::CvVideoFrameReader reader;
 
             THEN("exception is thrown") {
                 REQUIRE_THROWS(reader.Init(file));

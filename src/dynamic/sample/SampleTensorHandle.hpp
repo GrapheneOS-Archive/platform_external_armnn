@@ -4,7 +4,7 @@
 //
 #pragma once
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 #include "SampleMemoryManager.hpp"
 

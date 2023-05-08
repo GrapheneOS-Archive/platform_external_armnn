@@ -6,7 +6,7 @@
 #pragma once
 
 #include "LayerWithParameters.hpp"
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #include <armnn/Descriptors.hpp>
 
@@ -33,13 +33,13 @@ public:
 
     void SetPreCompiledObject(PreCompiledObjectPtr preCompiledObject);
 
-    void ExecuteStrategy(IStrategy& strategy) const override;
+    void Accept(ILayerVisitor& visitor) const override;
 
 private:
     PreCompiledLayer(const PreCompiledLayer& other) = delete;
     PreCompiledLayer& operator=(const PreCompiledLayer& other) = delete;
 
-    std::shared_ptr<void> m_PreCompiledObject;
+    PreCompiledObjectPtr m_PreCompiledObject;
 };
 
 } // namespace armnn
