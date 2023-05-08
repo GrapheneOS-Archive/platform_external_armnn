@@ -8,10 +8,10 @@
 
 #include <armnn/INetwork.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/test/CommonTestUtils.hpp>
-#include <ResolveType.hpp>
 
-#include <boost/test/unit_test_log.hpp>
+#include <CommonTestUtils.hpp>
+
+#include <ResolveType.hpp>
 
 namespace
 {
@@ -129,7 +129,7 @@ void EluEndToEndTest(const std::vector<BackendId>& backends)
 
     float qScale = 1.0f;
     int32_t qOffset = 0;
-    armnn::TensorInfo inputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset);
+    armnn::TensorInfo inputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset, true);
     armnn::TensorInfo outputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset);
 
     armnn::ActivationDescriptor descriptor(ActivationFunction::Elu, 1.0);
@@ -158,7 +158,7 @@ void HardSwishEndToEndTest(const std::vector<BackendId>& backends)
 
     float qScale = 1.0f;
     int32_t qOffset = 0;
-    armnn::TensorInfo inputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset);
+    armnn::TensorInfo inputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset, true);
     armnn::TensorInfo outputInfo({ 2, 2, 2, 1 }, ArmnnType, qScale, qOffset);
 
     armnn::ActivationDescriptor descriptor(ActivationFunction::HardSwish, 1.0);

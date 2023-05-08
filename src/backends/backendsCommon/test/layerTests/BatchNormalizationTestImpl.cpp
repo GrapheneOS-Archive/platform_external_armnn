@@ -5,21 +5,21 @@
 
 #include "BatchNormalizationTestImpl.hpp"
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 #include <armnn/utility/IgnoreUnused.hpp>
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 #include <reference/test/RefWorkloadFactoryHelper.hpp>
 
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 namespace
 {
@@ -58,26 +58,24 @@ LayerTestResult<T, 4> BatchNormTestImpl(
         tensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    auto inputTensor = MakeTensor<T, 4>(inputTensorInfo, QuantizedVector<T>(inputValues, qScale, qOffset));
+    auto inputTensor = QuantizedVector<T>(inputValues, qScale, qOffset);
 
     // These values are per-channel of the input.
-    auto mean     = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 3, -2 }, qScale, qOffset));
-    auto variance = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 4,  9 }, qScale, qOffset));
-    auto beta     = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 3,  2 }, qScale, qOffset));
-    auto gamma    = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 2,  1 }, qScale, qOffset));
+    auto mean     = QuantizedVector<T>({ 3, -2 }, qScale, qOffset);
+    auto variance = QuantizedVector<T>({ 4,  9 }, qScale, qOffset);
+    auto beta     = QuantizedVector<T>({ 3,  2 }, qScale, qOffset);
+    auto gamma    = QuantizedVector<T>({ 2,  1 }, qScale, qOffset);
 
-    LayerTestResult<T, 4> result(outputTensorInfo);
-
-    result.outputExpected = MakeTensor<T, 4>(inputTensorInfo,
-                                             QuantizedVector<T>(expectedOutputValues, qScale, qOffset));
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<T> expectedOutput = QuantizedVector<T>(expectedOutputValues, qScale, qOffset);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
-    armnn::ScopedCpuTensorHandle meanTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle varianceTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle betaTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle gammaTensor(tensorInfo);
+    armnn::ScopedTensorHandle meanTensor(tensorInfo);
+    armnn::ScopedTensorHandle varianceTensor(tensorInfo);
+    armnn::ScopedTensorHandle betaTensor(tensorInfo);
+    armnn::ScopedTensorHandle gammaTensor(tensorInfo);
 
     armnn::BatchNormalizationQueueDescriptor descriptor;
     descriptor.m_Mean                    = &meanTensor;
@@ -88,26 +86,30 @@ LayerTestResult<T, 4> BatchNormTestImpl(
     descriptor.m_Parameters.m_DataLayout = dataLayout;
     armnn::WorkloadInfo info;
 
-    AllocateAndCopyDataToITensorHandle(&meanTensor, &mean[0]);
-    AllocateAndCopyDataToITensorHandle(&varianceTensor, &variance[0]);
-    AllocateAndCopyDataToITensorHandle(&betaTensor, &beta[0]);
-    AllocateAndCopyDataToITensorHandle(&gammaTensor, &gamma[0]);
+    AllocateAndCopyDataToITensorHandle(&meanTensor, mean.data());
+    AllocateAndCopyDataToITensorHandle(&varianceTensor, variance.data());
+    AllocateAndCopyDataToITensorHandle(&betaTensor, beta.data());
+    AllocateAndCopyDataToITensorHandle(&gammaTensor, gamma.data());
 
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateBatchNormalization(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload
+            = workloadFactory.CreateWorkload(armnn::LayerType::BatchNormalization, descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), inputTensor.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 expectedOutput,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -140,30 +142,29 @@ LayerTestResult<T,4> BatchNormTestNhwcImpl(
         tensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    auto input = MakeTensor<T, 4>(inputTensorInfo,
-        QuantizedVector<T>(
+    auto input = QuantizedVector<T>(
         {
             1.f, 1.f, 4.f, 1.f,
             4.f, 4.f, 2.f, 1.f,
             1.f, -2.f, 6.f, 4.f
         },
-        qScale, qOffset));
+        qScale, qOffset);
+
     // These values are per-channel of the input.
-    auto mean     = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 3, -2 }, qScale, qOffset));
-    auto variance = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 4,  9 }, qScale, qOffset));
-    auto beta     = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 3,  2 }, qScale, qOffset));
-    auto gamma    = MakeTensor<T, 1>(tensorInfo, QuantizedVector<T>({ 2,  1 }, qScale, qOffset));
-    LayerTestResult<T,4> ret(outputTensorInfo);
+    auto mean     = QuantizedVector<T>({ 3, -2 }, qScale, qOffset);
+    auto variance = QuantizedVector<T>({ 4,  9 }, qScale, qOffset);
+    auto beta     = QuantizedVector<T>({ 3,  2 }, qScale, qOffset);
+    auto gamma    = QuantizedVector<T>({ 2,  1 }, qScale, qOffset);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::BatchNormalizationQueueDescriptor data;
     armnn::WorkloadInfo info;
-    armnn::ScopedCpuTensorHandle meanTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle varianceTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle betaTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle gammaTensor(tensorInfo);
+    armnn::ScopedTensorHandle meanTensor(tensorInfo);
+    armnn::ScopedTensorHandle varianceTensor(tensorInfo);
+    armnn::ScopedTensorHandle betaTensor(tensorInfo);
+    armnn::ScopedTensorHandle gammaTensor(tensorInfo);
 
     AllocateAndCopyDataToITensorHandle(&meanTensor, &mean[0]);
     AllocateAndCopyDataToITensorHandle(&varianceTensor, &variance[0]);
@@ -179,30 +180,35 @@ LayerTestResult<T,4> BatchNormTestNhwcImpl(
     data.m_Parameters.m_Eps = 0.0f;
     data.m_Parameters.m_DataLayout = armnn::DataLayout::NHWC;
 
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+
     // For each channel:
     // substract mean, divide by standard deviation (with an epsilon to avoid div by 0),
     // multiply by gamma and add beta
-    ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo,
-        QuantizedVector<T>(
+    std::vector<T> expectedOutput = QuantizedVector<T>(
         {
             1.f, 3.f, 4.f, 3.f,
             4.f, 4.f, 2.f, 3.f,
             1.f, 2.f, 6.f, 4.f
         },
-        qScale, qOffset));
+        qScale, qOffset);
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateBatchNormalization(data, info);
+    std::unique_ptr<armnn::IWorkload> workload
+            = workloadFactory.CreateWorkload(armnn::LayerType::BatchNormalization, data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return ret;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 expectedOutput,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 } // anonymous namespace
@@ -627,14 +633,15 @@ LayerTestResult<float,4> CompareBatchNormTest(
     outputTensorInfo = armnn::TensorInfo(4, shape, armnn::DataType::Float32);
     tensorInfo = armnn::TensorInfo(1, tensorShape, armnn::DataType::Float32);
 
-    auto input = MakeRandomTensor<float, 4>(inputTensorInfo, 21312);
+    auto input = MakeRandomTensor<float>(inputTensorInfo, 21312);
 
-    auto mean     = MakeRandomTensor<float, 1>(tensorInfo, 123);
-    auto variance = MakeRandomTensor<float, 1>(tensorInfo, 234, 0.0f);
-    auto beta     = MakeRandomTensor<float, 1>(tensorInfo, 123);
-    auto gamma    = MakeRandomTensor<float, 1>(tensorInfo, 345);
+    auto mean     = MakeRandomTensor<float>(tensorInfo, 123);
+    auto variance = MakeRandomTensor<float>(tensorInfo, 234, 0.0f);
+    auto beta     = MakeRandomTensor<float>(tensorInfo, 123);
+    auto gamma    = MakeRandomTensor<float>(tensorInfo, 345);
 
-    LayerTestResult<float,4> ret(outputTensorInfo);
+    std::vector<float> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<float> expectedOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -644,10 +651,10 @@ LayerTestResult<float,4> CompareBatchNormTest(
 
     armnn::BatchNormalizationQueueDescriptor data;
     armnn::WorkloadInfo info;
-    armnn::ScopedCpuTensorHandle meanTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle varianceTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle betaTensor(tensorInfo);
-    armnn::ScopedCpuTensorHandle gammaTensor(tensorInfo);
+    armnn::ScopedTensorHandle meanTensor(tensorInfo);
+    armnn::ScopedTensorHandle varianceTensor(tensorInfo);
+    armnn::ScopedTensorHandle betaTensor(tensorInfo);
+    armnn::ScopedTensorHandle gammaTensor(tensorInfo);
 
     AllocateAndCopyDataToITensorHandle(&meanTensor, &mean[0]);
     AllocateAndCopyDataToITensorHandle(&varianceTensor, &variance[0]);
@@ -667,24 +674,29 @@ LayerTestResult<float,4> CompareBatchNormTest(
     SetWorkloadInput(refData, refInfo, 0, inputTensorInfo, inputHandleRef.get());
     SetWorkloadOutput(refData, refInfo, 0, outputTensorInfo, outputHandleRef.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateBatchNormalization(data, info);
-    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateBatchNormalization(refData, refInfo);
+    std::unique_ptr<armnn::IWorkload> workload
+            = workloadFactory.CreateWorkload(armnn::LayerType::BatchNormalization, data, info);
+    std::unique_ptr<armnn::IWorkload> workloadRef
+            = refWorkloadFactory.CreateWorkload(armnn::LayerType::BatchNormalization, refData, refInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
     inputHandleRef->Allocate();
     outputHandleRef->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
-    CopyDataToITensorHandle(inputHandleRef.get(), &input[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandleRef.get(), input.data());
 
     workload->PostAllocationConfigure();
     workload->Execute();
     workloadRef->PostAllocationConfigure();
     workloadRef->Execute();
 
-    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
-    CopyDataFromITensorHandle(&ret.outputExpected[0][0][0][0], outputHandleRef.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(expectedOutput.data(), outputHandleRef.get());
 
-    return ret;
+    return LayerTestResult<float, 4>(actualOutput,
+                                     expectedOutput,
+                                     outputHandle->GetShape(),
+                                     outputTensorInfo.GetShape());
 }

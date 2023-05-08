@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <armnn/Tensor.hpp>
 #include <armnn/Types.hpp>
@@ -23,11 +23,12 @@ namespace armnn
 /// float32 helpers
 ////////////////////////////////////////////
 
+template <typename TensorHandleType = RefTensorHandle>
 inline const TensorInfo& GetTensorInfo(const ITensorHandle* tensorHandle)
 {
     // We know that reference workloads use RefTensorHandles for inputs and outputs
-    const RefTensorHandle* refTensorHandle =
-        PolymorphicDowncast<const RefTensorHandle*>(tensorHandle);
+    const TensorHandleType* refTensorHandle =
+        PolymorphicDowncast<const TensorHandleType*>(tensorHandle);
     return refTensorHandle->GetTensorInfo();
 }
 
@@ -42,6 +43,12 @@ template <typename DataType, typename PayloadType>
 DataType* GetOutputTensorData(unsigned int idx, const PayloadType& data)
 {
     ITensorHandle* tensorHandle = data.m_Outputs[idx];
+    return reinterpret_cast<DataType*>(tensorHandle->Map());
+}
+
+template <typename DataType>
+DataType* GetOutputTensorData(ITensorHandle* tensorHandle)
+{
     return reinterpret_cast<DataType*>(tensorHandle->Map());
 }
 

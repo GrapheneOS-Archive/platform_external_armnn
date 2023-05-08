@@ -6,8 +6,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -35,9 +35,9 @@ void InputLayer::ValidateTensorShapesFromInputs()
                                                "InputLayer should already have the TensorInfo set.");
 }
 
-void InputLayer::Accept(ILayerVisitor& visitor) const
+void InputLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitInputLayer(this, this->GetBindingId(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName(), GetBindingId());
 }
 
 } // namespace

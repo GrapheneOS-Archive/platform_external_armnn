@@ -5,6 +5,7 @@
 #pragma once
 
 #include <armnn/backends/IBackendInternal.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 namespace armnn
 {
@@ -40,7 +41,6 @@ public:
     IBackendInternal::IBackendProfilingContextPtr CreateBackendProfilingContext(
         const IRuntime::CreationOptions& creationOptions, IBackendProfilingPtr& backendProfiling) override;
 
-    IBackendInternal::Optimizations GetOptimizations() const override;
     IBackendInternal::ILayerSupportSharedPtr GetLayerSupport() const override;
 
     OptimizationViews OptimizeSubgraphView(const SubgraphView& subgraph) const override;

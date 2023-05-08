@@ -1,13 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2019-2021,2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include "TestLayerVisitor.hpp"
 
-
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 namespace
 {
@@ -30,15 +29,31 @@ public: \
         : armnn::TestLayerVisitor(layerName) \
         , m_Descriptor(descriptor) {}; \
     \
-    void Visit##name##Layer(const armnn::IConnectableLayer* layer, \
-                            const Descriptor& descriptor, \
-                            const char* layerName = nullptr) override \
+    void ExecuteStrategy(const armnn::IConnectableLayer* layer, \
+                         const armnn::BaseDescriptor& descriptor, \
+                         const std::vector<armnn::ConstTensor>& constants, \
+                         const char* layerName, \
+                         const armnn::LayerBindingId id = 0) override \
     { \
-        CheckLayerPointer(layer); \
-        CheckDescriptor(descriptor); \
-        CheckLayerName(layerName); \
+        armnn::IgnoreUnused(descriptor, constants, id); \
+        switch (layer->GetType()) \
+        { \
+            case armnn::LayerType::Input: break; \
+            case armnn::LayerType::Output: break; \
+            case armnn::LayerType::name: break; \
+            { \
+                CheckLayerPointer(layer); \
+                CheckDescriptor(static_cast<const Descriptor&>(descriptor)); \
+                CheckLayerName(layerName); \
+                break; \
+            } \
+            default: \
+            { \
+                m_DefaultStrategy.Apply(GetLayerTypeAsCString(layer->GetType())); \
+            } \
+        } \
     } \
-};
+}; \
 
 } // anonymous namespace
 
@@ -48,6 +63,7 @@ DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(BatchToSpaceNd)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Comparison)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Concat)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(DepthToSpace)
+DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(ElementwiseBinary)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(ElementwiseUnary)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Fill)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Gather)
@@ -60,6 +76,7 @@ DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Normalization)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Pad)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Permute)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Pooling2d)
+DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Reduce)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Reshape)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Resize)
 DECLARE_TEST_NAME_AND_DESCRIPTOR_LAYER_VISITOR_CLASS(Slice)

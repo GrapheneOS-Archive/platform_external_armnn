@@ -4,8 +4,11 @@
 //
 #include "InferenceTest.hpp"
 
+#include <armnn/Utils.hpp>
 #include <armnn/utility/Assert.hpp>
 #include <armnn/utility/NumericCast.hpp>
+#include <armnnUtils/TContainer.hpp>
+
 #include "CxxoptsUtils.hpp"
 
 #include <cxxopts/cxxopts.hpp>
@@ -26,8 +29,6 @@ namespace armnn
 namespace test
 {
 
-using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
-
 template <typename TTestCaseDatabase, typename TModel>
 ClassifierTestCase<TTestCaseDatabase, TModel>::ClassifierTestCase(
     int& numInferencesRef,
@@ -39,7 +40,7 @@ ClassifierTestCase<TTestCaseDatabase, TModel>::ClassifierTestCase(
     unsigned int label,
     std::vector<typename TModel::DataType> modelInput)
     : InferenceModelTestCase<TModel>(
-            model, testCaseId, std::vector<TContainer>{ modelInput }, { model.GetOutputSize() })
+            model, testCaseId, std::vector<armnnUtils::TContainer>{ modelInput }, { model.GetOutputSize() })
     , m_Label(label)
     , m_QuantizationParams(model.GetQuantizationParams())
     , m_NumInferencesRef(numInferencesRef)
@@ -64,6 +65,14 @@ struct ClassifierResultProcessor
                                 {
                                     return value;
                                 });
+    }
+
+    void operator()(const std::vector<int8_t>& values)
+    {
+        SortPredictions(values, [](int8_t value)
+        {
+            return value;
+        });
     }
 
     void operator()(const std::vector<uint8_t>& values)

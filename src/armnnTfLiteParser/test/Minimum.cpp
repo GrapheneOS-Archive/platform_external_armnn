@@ -1,17 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 
-#include <string>
-#include <iostream>
 
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_Minimum")
+{
 struct MinimumFixture : public ParserFlatbuffersFixture
 {
     explicit MinimumFixture(const std::string & inputShape1,
@@ -90,7 +86,7 @@ struct MinimumFixture4D : MinimumFixture
                                         "[ 1, 2, 2, 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseMinimum4D, MinimumFixture4D)
+TEST_CASE_FIXTURE(MinimumFixture4D, "ParseMinimum4D")
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -115,7 +111,7 @@ struct MinimumBroadcastFixture4D : MinimumFixture
                                                  "[ 1, 2, 2, 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseMinimumBroadcast4D, MinimumBroadcastFixture4D)
+TEST_CASE_FIXTURE(MinimumBroadcastFixture4D, "ParseMinimumBroadcast4D")
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -136,7 +132,7 @@ struct MinimumBroadcastFixture4D1D : MinimumFixture
                                                    "[ 1, 2, 2, 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseMinimumBroadcast4D1D, MinimumBroadcastFixture4D1D)
+TEST_CASE_FIXTURE(MinimumBroadcastFixture4D1D, "ParseMinimumBroadcast4D1D")
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -158,7 +154,7 @@ struct MinimumBroadcastFixture1D4D : MinimumFixture
                                                    "[ 1, 2, 2, 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseMinimumBroadcast1D4D, MinimumBroadcastFixture1D4D)
+TEST_CASE_FIXTURE(MinimumBroadcastFixture1D4D, "ParseMinimumBroadcast1D4D")
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -242,7 +238,7 @@ struct MinimumBroadcastFixture2D0D : public ParserFlatbuffersFixture
     }
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseMinimumBroadcast2D0D, MinimumBroadcastFixture2D0D)
+TEST_CASE_FIXTURE(MinimumBroadcastFixture2D0D, "ParseMinimumBroadcast2D0D")
 {
     RunTest<2, armnn::DataType::Float32>(
             0,
@@ -250,4 +246,4 @@ BOOST_FIXTURE_TEST_CASE(ParseMinimumBroadcast2D0D, MinimumBroadcastFixture2D0D)
             {{"output", { 1.0f, 2.0f }}});
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

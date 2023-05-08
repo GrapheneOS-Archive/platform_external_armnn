@@ -8,8 +8,8 @@
 
 #include <armnn/LstmParams.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -75,7 +75,7 @@ std::unique_ptr<IWorkload> QLstmLayer::CreateWorkload(const IWorkloadFactory& fa
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateQLstm(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::QLstm, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 QLstmLayer* QLstmLayer::Clone(Graph& graph) const
@@ -83,68 +83,68 @@ QLstmLayer* QLstmLayer::Clone(Graph& graph) const
     auto layer = CloneBase<QLstmLayer>(graph, m_Param, GetName());
 
     layer->m_BasicParameters.m_InputToForgetWeights = m_BasicParameters.m_InputToForgetWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_InputToForgetWeights) : nullptr;
+            m_BasicParameters.m_InputToForgetWeights : nullptr;
     layer->m_BasicParameters.m_InputToCellWeights = m_BasicParameters.m_InputToCellWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_InputToCellWeights) : nullptr;
+            m_BasicParameters.m_InputToCellWeights : nullptr;
     layer->m_BasicParameters.m_InputToOutputWeights = m_BasicParameters.m_InputToOutputWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_InputToOutputWeights) : nullptr;
+            m_BasicParameters.m_InputToOutputWeights : nullptr;
     layer->m_BasicParameters.m_RecurrentToForgetWeights = m_BasicParameters.m_RecurrentToForgetWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_RecurrentToForgetWeights) : nullptr;
+            m_BasicParameters.m_RecurrentToForgetWeights : nullptr;
     layer->m_BasicParameters.m_RecurrentToCellWeights = m_BasicParameters.m_RecurrentToCellWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_RecurrentToCellWeights) : nullptr;
+            m_BasicParameters.m_RecurrentToCellWeights : nullptr;
     layer->m_BasicParameters.m_RecurrentToOutputWeights = m_BasicParameters.m_RecurrentToOutputWeights ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_RecurrentToOutputWeights) : nullptr;
+            m_BasicParameters.m_RecurrentToOutputWeights : nullptr;
     layer->m_BasicParameters.m_ForgetGateBias = m_BasicParameters.m_ForgetGateBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_ForgetGateBias) : nullptr;
+            m_BasicParameters.m_ForgetGateBias : nullptr;
     layer->m_BasicParameters.m_CellBias = m_BasicParameters.m_CellBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_CellBias) : nullptr;
+            m_BasicParameters.m_CellBias : nullptr;
     layer->m_BasicParameters.m_OutputGateBias = m_BasicParameters.m_OutputGateBias ?
-            std::make_unique<ScopedCpuTensorHandle>(*m_BasicParameters.m_OutputGateBias) : nullptr;
+            m_BasicParameters.m_OutputGateBias : nullptr;
 
     if (!m_Param.m_CifgEnabled)
     {
         layer->m_CifgParameters.m_InputToInputWeights = m_CifgParameters.m_InputToInputWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_InputToInputWeights) : nullptr;
+                m_CifgParameters.m_InputToInputWeights : nullptr;
         layer->m_CifgParameters.m_RecurrentToInputWeights = m_CifgParameters.m_RecurrentToInputWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_RecurrentToInputWeights) : nullptr;
+                m_CifgParameters.m_RecurrentToInputWeights : nullptr;
         layer->m_CifgParameters.m_InputGateBias = m_CifgParameters.m_InputGateBias ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_CifgParameters.m_InputGateBias) : nullptr;
+                m_CifgParameters.m_InputGateBias : nullptr;
     }
 
     if (m_Param.m_ProjectionEnabled)
     {
         layer->m_ProjectionParameters.m_ProjectionWeights = m_ProjectionParameters.m_ProjectionWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_ProjectionParameters.m_ProjectionWeights) : nullptr;
+                m_ProjectionParameters.m_ProjectionWeights : nullptr;
         layer->m_ProjectionParameters.m_ProjectionBias = m_ProjectionParameters.m_ProjectionBias ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_ProjectionParameters.m_ProjectionBias) : nullptr;
+                m_ProjectionParameters.m_ProjectionBias : nullptr;
     }
 
     if (m_Param.m_PeepholeEnabled)
     {
         if (!m_Param.m_CifgEnabled) {
             layer->m_PeepholeParameters.m_CellToInputWeights = m_PeepholeParameters.m_CellToInputWeights ?
-                    std::make_unique<ScopedCpuTensorHandle>(*m_PeepholeParameters.m_CellToInputWeights) : nullptr;
+                    m_PeepholeParameters.m_CellToInputWeights : nullptr;
         }
 
         layer->m_PeepholeParameters.m_CellToForgetWeights = m_PeepholeParameters.m_CellToForgetWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_PeepholeParameters.m_CellToForgetWeights) : nullptr;
+                m_PeepholeParameters.m_CellToForgetWeights : nullptr;
         layer->m_PeepholeParameters.m_CellToOutputWeights = m_PeepholeParameters.m_CellToOutputWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_PeepholeParameters.m_CellToOutputWeights) : nullptr;
+                m_PeepholeParameters.m_CellToOutputWeights : nullptr;
     }
 
     if (m_Param.m_LayerNormEnabled)
     {
         if (!m_Param.m_CifgEnabled) {
             layer->m_LayerNormParameters.m_InputLayerNormWeights = m_LayerNormParameters.m_InputLayerNormWeights ?
-                    std::make_unique<ScopedCpuTensorHandle>(*m_LayerNormParameters.m_InputLayerNormWeights) : nullptr;
+                    m_LayerNormParameters.m_InputLayerNormWeights : nullptr;
         }
 
         layer->m_LayerNormParameters.m_ForgetLayerNormWeights = m_LayerNormParameters.m_ForgetLayerNormWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_LayerNormParameters.m_ForgetLayerNormWeights) : nullptr;
+                m_LayerNormParameters.m_ForgetLayerNormWeights : nullptr;
         layer->m_LayerNormParameters.m_CellLayerNormWeights = m_LayerNormParameters.m_CellLayerNormWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_LayerNormParameters.m_CellLayerNormWeights) : nullptr;
+                m_LayerNormParameters.m_CellLayerNormWeights : nullptr;
         layer->m_LayerNormParameters.m_OutputLayerNormWeights = m_LayerNormParameters.m_OutputLayerNormWeights ?
-                std::make_unique<ScopedCpuTensorHandle>(*m_LayerNormParameters.m_OutputLayerNormWeights) : nullptr;
+                m_LayerNormParameters.m_OutputLayerNormWeights : nullptr;
     }
 
     return std::move(layer);
@@ -269,8 +269,9 @@ void QLstmLayer::ValidateTensorShapesFromInputs()
     }
 }
 
-Layer::ConstantTensors QLstmLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors QLstmLayer::GetConstantTensorsByRef() const
 {
+    // For API stability DO NOT ALTER order and add new members to the end of vector
     return {m_BasicParameters.m_InputToForgetWeights,
             m_BasicParameters.m_InputToCellWeights,
             m_BasicParameters.m_InputToOutputWeights,
@@ -302,205 +303,159 @@ Layer::ConstantTensors QLstmLayer::GetConstantTensorsByRef()
             m_LayerNormParameters.m_OutputLayerNormWeights};
 }
 
-void QLstmLayer::Accept(ILayerVisitor& visitor) const
+
+void QLstmLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    LstmInputParams inputParams;
+    std::vector<ConstTensor> constTensors;
+    ManagedConstTensorHandle managedInputToForgetWeights(m_BasicParameters.m_InputToForgetWeights);
+    ManagedConstTensorHandle managedInputToCellWeights(m_BasicParameters.m_InputToCellWeights);
+    ManagedConstTensorHandle managedInputToOutputWeights(m_BasicParameters.m_InputToOutputWeights);
+    ManagedConstTensorHandle managedRecurrentToForgetWeights(m_BasicParameters.m_RecurrentToForgetWeights);
+    ManagedConstTensorHandle managedRecurrentToCellWeights(m_BasicParameters.m_RecurrentToCellWeights);
+    ManagedConstTensorHandle managedRecurrentToOutputWeights(m_BasicParameters.m_RecurrentToOutputWeights);
+    ManagedConstTensorHandle managedForgetGateBias(m_BasicParameters.m_ForgetGateBias);
+    ManagedConstTensorHandle managedCellBias(m_BasicParameters.m_CellBias);
+    ManagedConstTensorHandle managedOutputGateBias(m_BasicParameters.m_OutputGateBias);
 
-    ConstTensor inputToInputWeightsTensor;
-    if (m_CifgParameters.m_InputToInputWeights != nullptr)
-    {
-        ConstTensor inputToInputWeightsTensorCopy(m_CifgParameters.m_InputToInputWeights->GetTensorInfo(),
-                                                  m_CifgParameters.m_InputToInputWeights->Map(true));
-        inputToInputWeightsTensor = inputToInputWeightsTensorCopy;
-        inputParams.m_InputToInputWeights = &inputToInputWeightsTensor;
-    }
+    // Cifg parameters
+    ManagedConstTensorHandle managedInputToInputWeights(m_CifgParameters.m_InputToInputWeights);
+    ManagedConstTensorHandle managedRecurrentToInputWeights(m_CifgParameters.m_RecurrentToInputWeights);
+    ManagedConstTensorHandle managedInputGateBias(m_CifgParameters.m_InputGateBias);
 
-    ConstTensor inputToForgetWeightsTensor;
+    // Projection parameters
+    ManagedConstTensorHandle managedProjectionWeights(m_ProjectionParameters.m_ProjectionWeights);
+    ManagedConstTensorHandle managedProjectionBias(m_ProjectionParameters.m_ProjectionBias);
+
+    // Peephole parameters
+    ManagedConstTensorHandle managedCellToInputWeights(m_PeepholeParameters.m_CellToInputWeights);
+    ManagedConstTensorHandle managedCellToForgetWeights(m_PeepholeParameters.m_CellToForgetWeights);
+    ManagedConstTensorHandle managedCellToOutputWeights(m_PeepholeParameters.m_CellToOutputWeights);
+
+    // Layer normalisation parameters
+    ManagedConstTensorHandle managedInputLayerNormWeights(m_LayerNormParameters.m_InputLayerNormWeights);
+    ManagedConstTensorHandle managedForgetLayerNormWeights(m_LayerNormParameters.m_ForgetLayerNormWeights);
+    ManagedConstTensorHandle managedCellLayerNormWeights(m_LayerNormParameters.m_CellLayerNormWeights);
+    ManagedConstTensorHandle managedOutputLayerNormWeights(m_LayerNormParameters.m_OutputLayerNormWeights);
+
+    // First add mandatory/basic parameters
     if (m_BasicParameters.m_InputToForgetWeights != nullptr)
     {
-        ConstTensor inputToForgetWeightsTensorCopy(m_BasicParameters.m_InputToForgetWeights->GetTensorInfo(),
-                                                   m_BasicParameters.m_InputToForgetWeights->Map(true));
-        inputToForgetWeightsTensor = inputToForgetWeightsTensorCopy;
-        inputParams.m_InputToForgetWeights = &inputToForgetWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToForgetWeights.GetTensorInfo(),
+                                              managedInputToForgetWeights.Map()));
     }
-
-    ConstTensor inputToCellWeightsTensor;
     if (m_BasicParameters.m_InputToCellWeights != nullptr)
     {
-        ConstTensor inputToCellWeightsTensorCopy(m_BasicParameters.m_InputToCellWeights->GetTensorInfo(),
-                                                 m_BasicParameters.m_InputToCellWeights->Map(true));
-        inputToCellWeightsTensor = inputToCellWeightsTensorCopy;
-        inputParams.m_InputToCellWeights = &inputToCellWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToCellWeights.GetTensorInfo(),
+                                              managedInputToCellWeights.Map()));
     }
-
-    ConstTensor inputToOutputWeightsTensor;
     if (m_BasicParameters.m_InputToOutputWeights != nullptr)
     {
-        ConstTensor inputToOutputWeightsTensorCopy(m_BasicParameters.m_InputToOutputWeights->GetTensorInfo(),
-                                                   m_BasicParameters.m_InputToOutputWeights->Map(true));
-        inputToOutputWeightsTensor = inputToOutputWeightsTensorCopy;
-        inputParams.m_InputToOutputWeights = &inputToOutputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedInputToOutputWeights.GetTensorInfo(),
+                                              managedInputToOutputWeights.Map()));
     }
-
-    ConstTensor recurrentToInputWeightsTensor;
-    if (m_CifgParameters.m_RecurrentToInputWeights != nullptr)
-    {
-        ConstTensor recurrentToInputWeightsTensorCopy(
-                m_CifgParameters.m_RecurrentToInputWeights->GetTensorInfo(),
-                m_CifgParameters.m_RecurrentToInputWeights->Map(true));
-        recurrentToInputWeightsTensor = recurrentToInputWeightsTensorCopy;
-        inputParams.m_RecurrentToInputWeights = &recurrentToInputWeightsTensor;
-    }
-
-    ConstTensor recurrentToForgetWeightsTensor;
     if (m_BasicParameters.m_RecurrentToForgetWeights != nullptr)
     {
-        ConstTensor recurrentToForgetWeightsTensorCopy(
-                m_BasicParameters.m_RecurrentToForgetWeights->GetTensorInfo(),
-                m_BasicParameters.m_RecurrentToForgetWeights->Map(true));
-        recurrentToForgetWeightsTensor = recurrentToForgetWeightsTensorCopy;
-        inputParams.m_RecurrentToForgetWeights = &recurrentToForgetWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToForgetWeights.GetTensorInfo(),
+                managedRecurrentToForgetWeights.Map()));
     }
-
-    ConstTensor recurrentToCellWeightsTensor;
     if (m_BasicParameters.m_RecurrentToCellWeights != nullptr)
     {
-        ConstTensor recurrentToCellWeightsTensorCopy(
-                m_BasicParameters.m_RecurrentToCellWeights->GetTensorInfo(),
-                m_BasicParameters.m_RecurrentToCellWeights->Map(true));
-        recurrentToCellWeightsTensor = recurrentToCellWeightsTensorCopy;
-        inputParams.m_RecurrentToCellWeights = &recurrentToCellWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToCellWeights.GetTensorInfo(),
+                managedRecurrentToCellWeights.Map()));
     }
-
-    ConstTensor recurrentToOutputWeightsTensor;
     if (m_BasicParameters.m_RecurrentToOutputWeights != nullptr)
     {
-        ConstTensor recurrentToOutputWeightsTensorCopy(
-                m_BasicParameters.m_RecurrentToOutputWeights->GetTensorInfo(),
-                m_BasicParameters.m_RecurrentToOutputWeights->Map(true));
-        recurrentToOutputWeightsTensor = recurrentToOutputWeightsTensorCopy;
-        inputParams.m_RecurrentToOutputWeights = &recurrentToOutputWeightsTensor;
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToOutputWeights.GetTensorInfo(),
+                managedRecurrentToOutputWeights.Map()));
     }
-
-    ConstTensor cellToInputWeightsTensor;
-    if (m_PeepholeParameters.m_CellToInputWeights != nullptr)
-    {
-        ConstTensor cellToInputWeightsTensorCopy(m_PeepholeParameters.m_CellToInputWeights->GetTensorInfo(),
-                                                 m_PeepholeParameters.m_CellToInputWeights->Map(true));
-        cellToInputWeightsTensor = cellToInputWeightsTensorCopy;
-        inputParams.m_CellToInputWeights = &cellToInputWeightsTensor;
-    }
-
-    ConstTensor cellToForgetWeightsTensor;
-    if (m_PeepholeParameters.m_CellToForgetWeights != nullptr)
-    {
-        ConstTensor cellToForgetWeightsTensorCopy(m_PeepholeParameters.m_CellToForgetWeights->GetTensorInfo(),
-                                                  m_PeepholeParameters.m_CellToForgetWeights->Map(true));
-        cellToForgetWeightsTensor = cellToForgetWeightsTensorCopy;
-        inputParams.m_CellToForgetWeights = &cellToForgetWeightsTensor;
-    }
-
-    ConstTensor cellToOutputWeightsTensor;
-    if (m_PeepholeParameters.m_CellToOutputWeights != nullptr)
-    {
-        ConstTensor cellToOutputWeightsTensorCopy(m_PeepholeParameters.m_CellToOutputWeights->GetTensorInfo(),
-                                                  m_PeepholeParameters.m_CellToOutputWeights->Map(true));
-        cellToOutputWeightsTensor = cellToOutputWeightsTensorCopy;
-        inputParams.m_CellToOutputWeights = &cellToOutputWeightsTensor;
-    }
-
-    ConstTensor inputGateBiasTensor;
-    if (m_CifgParameters.m_InputGateBias != nullptr)
-    {
-        ConstTensor inputGateBiasTensorCopy(m_CifgParameters.m_InputGateBias->GetTensorInfo(),
-                                            m_CifgParameters.m_InputGateBias->Map(true));
-        inputGateBiasTensor = inputGateBiasTensorCopy;
-        inputParams.m_InputGateBias = &inputGateBiasTensor;
-    }
-
-    ConstTensor forgetGateBiasTensor;
     if (m_BasicParameters.m_ForgetGateBias != nullptr)
     {
-        ConstTensor forgetGateBiasTensorCopy(m_BasicParameters.m_ForgetGateBias->GetTensorInfo(),
-                                             m_BasicParameters.m_ForgetGateBias->Map(true));
-        forgetGateBiasTensor = forgetGateBiasTensorCopy;
-        inputParams.m_ForgetGateBias = &forgetGateBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedForgetGateBias.GetTensorInfo(),
+                                              managedForgetGateBias.Map()));
     }
-
-    ConstTensor cellBiasTensor;
     if (m_BasicParameters.m_CellBias != nullptr)
     {
-        ConstTensor cellBiasTensorCopy(m_BasicParameters.m_CellBias->GetTensorInfo(),
-                                       m_BasicParameters.m_CellBias->Map(true));
-        cellBiasTensor = cellBiasTensorCopy;
-        inputParams.m_CellBias = &cellBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedCellBias.GetTensorInfo(),
+                                              managedCellBias.Map()));
     }
-
-    ConstTensor outputGateBias;
     if (m_BasicParameters.m_OutputGateBias != nullptr)
     {
-        ConstTensor outputGateBiasCopy(m_BasicParameters.m_OutputGateBias->GetTensorInfo(),
-                                       m_BasicParameters.m_OutputGateBias->Map(true));
-        outputGateBias = outputGateBiasCopy;
-        inputParams.m_OutputGateBias = &outputGateBias;
+        constTensors.emplace_back(ConstTensor(managedOutputGateBias.GetTensorInfo(),
+                                              managedOutputGateBias.Map()));
     }
 
-    ConstTensor projectionWeightsTensor;
+    // Add cifig parameters
+    if (m_CifgParameters.m_InputToInputWeights != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(managedInputToInputWeights.GetTensorInfo(),
+                                              managedInputToInputWeights.Map()));
+    }
+    if (m_CifgParameters.m_RecurrentToInputWeights != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(
+                managedRecurrentToInputWeights.GetTensorInfo(),
+                managedRecurrentToInputWeights.Map()));
+    }
+    if (m_CifgParameters.m_InputGateBias != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(managedInputGateBias.GetTensorInfo(),
+                                              managedInputGateBias.Map()));
+    }
+
+    // Add peephole parameters
+    if (m_PeepholeParameters.m_CellToInputWeights != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(managedCellToInputWeights.GetTensorInfo(),
+                                              managedCellToInputWeights.Map()));
+    }
+    if (m_PeepholeParameters.m_CellToForgetWeights != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(managedCellToForgetWeights.GetTensorInfo(),
+                                              managedCellToForgetWeights.Map()));
+    }
+    if (m_PeepholeParameters.m_CellToOutputWeights != nullptr)
+    {
+        constTensors.emplace_back(ConstTensor(managedCellToOutputWeights.GetTensorInfo(),
+                                              managedCellToOutputWeights.Map()));
+    }
+
+    // Add projection parameters
     if (m_ProjectionParameters.m_ProjectionWeights != nullptr)
     {
-        ConstTensor projectionWeightsTensorCopy(m_ProjectionParameters.m_ProjectionWeights->GetTensorInfo(),
-                                                m_ProjectionParameters.m_ProjectionWeights->Map(true));
-        projectionWeightsTensor = projectionWeightsTensorCopy;
-        inputParams.m_ProjectionWeights = &projectionWeightsTensor;
+        constTensors.emplace_back(ConstTensor(managedProjectionWeights.GetTensorInfo(),
+                                              managedProjectionWeights.Map()));
     }
-
-    ConstTensor projectionBiasTensor;
     if (m_ProjectionParameters.m_ProjectionBias != nullptr)
     {
-        ConstTensor projectionBiasTensorCopy(m_ProjectionParameters.m_ProjectionBias->GetTensorInfo(),
-                                             m_ProjectionParameters.m_ProjectionBias->Map(true));
-        projectionBiasTensor = projectionBiasTensorCopy;
-        inputParams.m_ProjectionBias = &projectionBiasTensor;
+        constTensors.emplace_back(ConstTensor(managedProjectionBias.GetTensorInfo(),
+                                              managedProjectionBias.Map()));
     }
 
-    ConstTensor inputLayerNormTensor;
+    // Add norm parameters
     if (m_LayerNormParameters.m_InputLayerNormWeights != nullptr)
     {
-        ConstTensor inputLayerNormTensorCopy(m_LayerNormParameters.m_InputLayerNormWeights->GetTensorInfo(),
-                                             m_LayerNormParameters.m_InputLayerNormWeights->Map(true));
-        inputLayerNormTensor = inputLayerNormTensorCopy;
-        inputParams.m_InputLayerNormWeights = &inputLayerNormTensor;
+        constTensors.emplace_back(ConstTensor(managedInputLayerNormWeights.GetTensorInfo(),
+                                              managedInputLayerNormWeights.Map()));
     }
-
-    ConstTensor forgetLayerNormTensor;
     if (m_LayerNormParameters.m_ForgetLayerNormWeights != nullptr)
     {
-        ConstTensor forgetLayerNormTensorCopy(m_LayerNormParameters.m_ForgetLayerNormWeights->GetTensorInfo(),
-                                              m_LayerNormParameters.m_ForgetLayerNormWeights->Map(true));
-        forgetLayerNormTensor = forgetLayerNormTensorCopy;
-        inputParams.m_ForgetLayerNormWeights = &forgetLayerNormTensor;
+        constTensors.emplace_back(ConstTensor(managedForgetLayerNormWeights.GetTensorInfo(),
+                                              managedForgetLayerNormWeights.Map()));
     }
-
-    ConstTensor cellLayerNormTensor;
     if (m_LayerNormParameters.m_CellLayerNormWeights != nullptr)
     {
-        ConstTensor cellLayerNormTensorCopy(m_LayerNormParameters.m_CellLayerNormWeights->GetTensorInfo(),
-                                            m_LayerNormParameters.m_CellLayerNormWeights->Map(true));
-        cellLayerNormTensor = cellLayerNormTensorCopy;
-        inputParams.m_CellLayerNormWeights = &cellLayerNormTensor;
+        constTensors.emplace_back(ConstTensor(managedCellLayerNormWeights.GetTensorInfo(),
+                                              managedCellLayerNormWeights.Map()));
     }
-
-    ConstTensor outputLayerNormTensor;
     if (m_LayerNormParameters.m_OutputLayerNormWeights != nullptr)
     {
-        ConstTensor outputLayerNormTensorCopy(m_LayerNormParameters.m_OutputLayerNormWeights->GetTensorInfo(),
-                                              m_LayerNormParameters.m_OutputLayerNormWeights->Map(true));
-        outputLayerNormTensor = outputLayerNormTensorCopy;
-        inputParams.m_OutputLayerNormWeights = &outputLayerNormTensor;
+        constTensors.emplace_back(ConstTensor(managedOutputLayerNormWeights.GetTensorInfo(),
+                                              managedOutputLayerNormWeights.Map()));
     }
-
-
-    visitor.VisitQLstmLayer(this, GetParameters(), inputParams, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), constTensors, GetName());
 }
 
 } // namespace armnn

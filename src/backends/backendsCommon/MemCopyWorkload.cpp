@@ -1,12 +1,14 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include <ResolveType.hpp>
 
-#include <backendsCommon/MemCopyWorkload.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include "WorkloadUtils.hpp"
+
+#include <armnn/backends/MemCopyWorkload.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
@@ -40,7 +42,7 @@ void GatherTensorHandlePairs(const MemCopyQueueDescriptor& descriptor,
 
 
 CopyMemGenericWorkload::CopyMemGenericWorkload(const MemCopyQueueDescriptor& descriptor,
-                                                         const WorkloadInfo& info)
+                                               const WorkloadInfo& info)
     : BaseWorkload<MemCopyQueueDescriptor>(descriptor, info)
 {
     GatherTensorHandlePairs(descriptor, m_TensorHandlePairs);
@@ -56,6 +58,26 @@ void CopyMemGenericWorkload::Execute() const
         };
 
     for (const auto& pair : m_TensorHandlePairs)
+    {
+        CopyTensorContentsGeneric(pair.first, pair.second, copyFunc);
+    }
+}
+
+void CopyMemGenericWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "CopyMemGeneric_Execute_WorkingMemDescriptor");
+
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    std::vector<TensorHandlePair> tensorHandlePairs;
+
+    GatherTensorHandlePairs(*workingMemDescriptor, tensorHandlePairs);
+
+    auto copyFunc = [](void* dst, const void* src, size_t size)
+    {
+        memcpy(dst, src, size);
+    };
+
+    for (const auto& pair : tensorHandlePairs)
     {
         CopyTensorContentsGeneric(pair.first, pair.second, copyFunc);
     }

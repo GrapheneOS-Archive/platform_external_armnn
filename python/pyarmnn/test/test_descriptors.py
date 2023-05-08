@@ -1,4 +1,4 @@
-# Copyright © 2020 Arm Ltd. All rights reserved.
+# Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 import inspect
 
@@ -88,18 +88,40 @@ def test_batchtospacend_descriptor_ctor():
     assert [(4, 5), (6, 7)] == desc.m_Crops
 
 
+def test_channelshuffle_descriptor_default_values():
+    desc = ann.ChannelShuffleDescriptor()
+    assert desc.m_Axis == 0
+    assert desc.m_NumGroups == 0
+
 def test_convolution2d_descriptor_default_values():
     desc = ann.Convolution2dDescriptor()
     assert desc.m_PadLeft == 0
     assert desc.m_PadTop == 0
     assert desc.m_PadRight == 0
     assert desc.m_PadBottom == 0
-    assert desc.m_StrideX == 0
-    assert desc.m_StrideY == 0
+    assert desc.m_StrideX == 1
+    assert desc.m_StrideY == 1
     assert desc.m_DilationX == 1
     assert desc.m_DilationY == 1
     assert desc.m_BiasEnabled == False
     assert desc.m_DataLayout == ann.DataLayout_NCHW
+
+def test_convolution3d_descriptor_default_values():
+    desc = ann.Convolution3dDescriptor()
+    assert desc.m_PadLeft == 0
+    assert desc.m_PadTop == 0
+    assert desc.m_PadRight == 0
+    assert desc.m_PadBottom == 0
+    assert desc.m_PadFront == 0
+    assert desc.m_PadBack == 0
+    assert desc.m_StrideX == 1
+    assert desc.m_StrideY == 1
+    assert desc.m_StrideZ == 1
+    assert desc.m_DilationX == 1
+    assert desc.m_DilationY == 1
+    assert desc.m_DilationZ == 1
+    assert desc.m_BiasEnabled == False
+    assert desc.m_DataLayout == ann.DataLayout_NDHWC
 
 
 def test_depthtospace_descriptor_default_values():
@@ -114,8 +136,8 @@ def test_depthwise_convolution2d_descriptor_default_values():
     assert desc.m_PadTop == 0
     assert desc.m_PadRight == 0
     assert desc.m_PadBottom == 0
-    assert desc.m_StrideX == 0
-    assert desc.m_StrideY == 0
+    assert desc.m_StrideX == 1
+    assert desc.m_StrideY == 1
     assert desc.m_DilationX == 1
     assert desc.m_DilationY == 1
     assert desc.m_BiasEnabled == False
@@ -232,6 +254,7 @@ def test_origin_descriptor_ctor():
 def test_pad_descriptor_default_values():
     desc = ann.PadDescriptor()
     assert desc.m_PadValue == 0
+    assert desc.m_PaddingMode == ann.PaddingMode_Constant
 
 
 def test_permute_descriptor_default_values():
@@ -259,12 +282,35 @@ def test_pooling_descriptor_default_values():
     assert desc.m_PaddingMethod == ann.PaddingMethod_Exclude
     assert desc.m_DataLayout == ann.DataLayout_NCHW
 
+def test_pooling_3d_descriptor_default_values():
+    desc = ann.Pooling3dDescriptor()
+    assert desc.m_PoolType == ann.PoolingAlgorithm_Max
+    assert desc.m_PadLeft == 0
+    assert desc.m_PadTop == 0
+    assert desc.m_PadRight == 0
+    assert desc.m_PadBottom == 0
+    assert desc.m_PadFront == 0
+    assert desc.m_PadBack == 0
+    assert desc.m_PoolHeight == 0
+    assert desc.m_PoolWidth == 0
+    assert desc.m_StrideX == 0
+    assert desc.m_StrideY == 0
+    assert desc.m_StrideZ == 0
+    assert desc.m_OutputShapeRounding == ann.OutputShapeRounding_Floor
+    assert desc.m_PaddingMethod == ann.PaddingMethod_Exclude
+    assert desc.m_DataLayout == ann.DataLayout_NCDHW
+
 
 def test_reshape_descriptor_default_values():
     desc = ann.ReshapeDescriptor()
     # check the empty Targetshape
     assert desc.m_TargetShape.GetNumDimensions() == 0
 
+def test_reduce_descriptor_default_values():
+    desc = ann.ReduceDescriptor()
+    assert desc.m_KeepDims == False
+    assert desc.m_vAxis == []
+    assert desc.m_ReduceOperation == ann.ReduceOperation_Sum
 
 def test_slice_descriptor_default_values():
     desc = ann.SliceDescriptor()
@@ -391,6 +437,15 @@ def test_transpose_convolution2d_descriptor_default_values():
     assert desc.m_DataLayout == ann.DataLayout_NCHW
     assert desc.m_OutputShapeEnabled == False
 
+def test_transpose_descriptor_default_values():
+    pv = ann.PermutationVector((0, 3, 2, 1, 4))
+    desc = ann.TransposeDescriptor(pv)
+    assert desc.m_DimMappings.GetSize() == 5
+    assert desc.m_DimMappings[0] == 0
+    assert desc.m_DimMappings[1] == 3
+    assert desc.m_DimMappings[2] == 2
+    assert desc.m_DimMappings[3] == 1
+    assert desc.m_DimMappings[4] == 4
 
 def test_view_descriptor_default_values():
     desc = ann.SplitterDescriptor()
@@ -402,6 +457,10 @@ def test_elementwise_unary_descriptor_default_values():
     desc = ann.ElementwiseUnaryDescriptor()
     assert desc.m_Operation == ann.UnaryOperation_Abs
 
+
+def test_logical_binary_descriptor_default_values():
+    desc = ann.LogicalBinaryDescriptor()
+    assert desc.m_Operation == ann.LogicalBinaryOperation_LogicalAnd
 
 def test_view_descriptor_incorrect_input():
     desc = ann.SplitterDescriptor(2, 3)
@@ -472,6 +531,7 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'Pooling2dDescriptor',
                                        'FullyConnectedDescriptor',
                                        'Convolution2dDescriptor',
+                                       'Convolution3dDescriptor',
                                        'DepthwiseConvolution2dDescriptor',
                                        'DetectionPostProcessDescriptor',
                                        'NormalizationDescriptor',
@@ -480,6 +540,7 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'InstanceNormalizationDescriptor',
                                        'BatchToSpaceNdDescriptor',
                                        'FakeQuantizationDescriptor',
+                                       'ReduceDescriptor',
                                        'ResizeDescriptor',
                                        'ReshapeDescriptor',
                                        'SpaceToBatchNdDescriptor',
@@ -491,9 +552,12 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'StackDescriptor',
                                        'StridedSliceDescriptor',
                                        'TransposeConvolution2dDescriptor',
+                                       'TransposeDescriptor',
                                        'ElementwiseUnaryDescriptor',
                                        'FillDescriptor',
-                                       'GatherDescriptor'])
+                                       'GatherDescriptor',
+                                       'LogicalBinaryDescriptor',
+                                       'ChannelShuffleDescriptor'])
 class TestDescriptorMassChecks:
 
     def test_desc_implemented(self, desc_name):
@@ -516,6 +580,7 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'Pooling2dDescriptor',
                                        'FullyConnectedDescriptor',
                                        'Convolution2dDescriptor',
+                                       'Convolution3dDescriptor',
                                        'DepthwiseConvolution2dDescriptor',
                                        'DetectionPostProcessDescriptor',
                                        'NormalizationDescriptor',
@@ -524,6 +589,7 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'InstanceNormalizationDescriptor',
                                        'BatchToSpaceNdDescriptor',
                                        'FakeQuantizationDescriptor',
+                                       'ReduceDescriptor',
                                        'ResizeDescriptor',
                                        'ReshapeDescriptor',
                                        'SpaceToBatchNdDescriptor',
@@ -535,9 +601,12 @@ generated_classes_names = list(map(lambda x: x[0], generated_classes))
                                        'StackDescriptor',
                                        'StridedSliceDescriptor',
                                        'TransposeConvolution2dDescriptor',
+                                       'TransposeDescriptor',
                                        'ElementwiseUnaryDescriptor',
                                        'FillDescriptor',
-                                       'GatherDescriptor'])
+                                       'GatherDescriptor',
+                                       'LogicalBinaryDescriptor',
+                                       'ChannelShuffleDescriptor'])
 class TestDescriptorMassChecks:
 
     def test_desc_implemented(self, desc_name):

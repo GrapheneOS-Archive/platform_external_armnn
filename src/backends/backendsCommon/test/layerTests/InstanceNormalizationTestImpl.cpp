@@ -1,23 +1,23 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "InstanceNormalizationTestImpl.hpp"
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/DataLayoutUtils.hpp>
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/DataLayoutUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 namespace
 {
@@ -32,38 +32,38 @@ LayerTestResult<T, 4> InstanceNormTestImpl(
     const std::vector<float>& inputValues,
     const std::vector<float>& expectedOutputValues,
     armnn::InstanceNormalizationQueueDescriptor descriptor,
-    float qScale = 0.0f,
+    float qScale = 1.0f,
     int32_t qOffset = 0)
 {
     IgnoreUnused(memoryManager);
-    auto inputTensor = MakeTensor<T, 4>(inputTensorInfo,
-                                        armnnUtils::QuantizedVector<T>(inputValues, qScale, qOffset));
-
-    LayerTestResult<T, 4> result(outputTensorInfo);
-    result.outputExpected = MakeTensor<T, 4>(outputTensorInfo,
-                                             armnnUtils::QuantizedVector<T>(expectedOutputValues, qScale, qOffset));
+    std::vector<T> inputTensor = armnnUtils::QuantizedVector<T>(inputValues, qScale, qOffset);
+    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(expectedOutputValues, qScale, qOffset);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
 
     armnn::WorkloadInfo info;
 
-
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateInstanceNormalization(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload
+            = workloadFactory.CreateWorkload(armnn::LayerType::InstanceNormalization, descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), inputTensor.data());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<T, 4>(actualOutput,
+                                 expectedOutput,
+                                 outputHandle->GetShape(),
+                                 outputTensorInfo.GetShape());
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <backendsCommon/WorkloadUtils.hpp>
 
 #include <armnn/utility/NumericCast.hpp>
@@ -53,9 +53,16 @@ arm_compute::Status ClStridedSliceWorkloadValidate(const TensorInfo& input,
 }
 
 ClStridedSliceWorkload::ClStridedSliceWorkload(const StridedSliceQueueDescriptor& descriptor,
-                                               const WorkloadInfo& info)
-    : BaseWorkload<StridedSliceQueueDescriptor>(descriptor, info)
+                                               const WorkloadInfo& info,
+                                               const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<StridedSliceQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClStridedSliceWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClStridedSliceWorkload", 1, 1);
 
     arm_compute::ICLTensor& input = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -78,19 +85,23 @@ ClStridedSliceWorkload::ClStridedSliceWorkload(const StridedSliceQueueDescriptor
     input.info()->set_data_layout(aclDataLayout);
     output.info()->set_data_layout(aclDataLayout);
 
-    m_StridedSliceLayer.configure(&input,
-                                  &output,
-                                  starts,
-                                  ends,
-                                  strides,
-                                  begin_mask,
-                                  end_mask,
-                                  shrink_axis_mask);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClStridedSliceWorkload_configure");
+        m_StridedSliceLayer.configure(clCompileContext,
+                                      &input,
+                                      &output,
+                                      starts,
+                                      ends,
+                                      strides,
+                                      begin_mask,
+                                      end_mask,
+                                      shrink_axis_mask);
+    }
 }
 
 void ClStridedSliceWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClStridedSliceWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClStridedSliceWorkload_Execute", this->GetGuid());
     RunClFunction(m_StridedSliceLayer, CHECK_LOCATION());
 }
 

@@ -20,11 +20,7 @@ namespace
 
 inline std::unique_ptr<Decoder<float>> MakeSigned32PerAxisDecoder(const TensorInfo& info, const void* data)
 {
-    auto params = armnnUtils::GetPerAxisParams(info);
-    return std::make_unique<ScaledInt32PerAxisDecoder>(
-        static_cast<const int32_t*>(data),
-        params.second,
-        params.first);
+    return std::make_unique<ScaledInt32PerAxisDecoder>(static_cast<const int32_t*>(data), info);
 }
 
 inline std::unique_ptr<Decoder<float>> MakeSigned32Decoder(const TensorInfo& info, const void* data)
@@ -71,16 +67,6 @@ inline std::unique_ptr<Decoder<float>> MakeDecoder(const TensorInfo& info, const
 {
     switch(info.GetDataType())
     {
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        case armnn::DataType::QuantizedSymm8PerAxis:
-        {
-            std::pair<unsigned int, std::vector<float>> params = armnnUtils::GetPerAxisParams(info);
-            return std::make_unique<QSymm8PerAxisDecoder>(
-                static_cast<const int8_t*>(data),
-                params.second,
-                params.first);
-        }
-        ARMNN_NO_DEPRECATE_WARN_END
         case DataType::QAsymmS8:
         {
             return std::make_unique<QASymmS8Decoder>(
@@ -102,10 +88,6 @@ inline std::unique_ptr<Decoder<float>> MakeDecoder(const TensorInfo& info, const
                 info.GetQuantizationScale(),
                 info.GetQuantizationOffset());
         }
-        case DataType::BFloat16:
-        {
-            return std::make_unique<BFloat16Decoder>(static_cast<const BFloat16*>(data));
-        }
         case DataType::Float16:
         {
             return std::make_unique<Float16Decoder>(static_cast<const Half*>(data));
@@ -123,10 +105,7 @@ inline std::unique_ptr<Decoder<float>> MakeDecoder(const TensorInfo& info, const
             if (info.HasPerAxisQuantization())
             {
                 std::pair<unsigned int, std::vector<float>> params = armnnUtils::GetPerAxisParams(info);
-                return std::make_unique<QSymm8PerAxisDecoder>(
-                    static_cast<const int8_t*>(data),
-                    params.second,
-                    params.first);
+                return std::make_unique<QSymm8PerAxisDecoder>(static_cast<const int8_t*>(data), info);
             }
             else
             {

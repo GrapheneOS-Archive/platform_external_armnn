@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,9 +7,9 @@
 
 #include <armnn/TypesUtils.hpp>
 #include <armnn/Types.hpp>
-#include <armnn/Descriptors.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/utility/NumericCast.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <LayerSupportCommon.hpp>
 #include <backendsCommon/LayerSupportRules.hpp>
@@ -58,13 +58,481 @@ std::string CreateIncorrectDimensionsErrorMsg(unsigned int expected,
 
 } // anonymous namespace
 
-bool RefLayerSupport::IsAbsSupported(const TensorInfo& input, const TensorInfo& output,
-                                     Optional<std::string&> reasonIfUnsupported) const
+bool RefLayerSupport::IsLayerSupported(const LayerType& type,
+                                       const std::vector<TensorInfo>& infos,
+                                       const BaseDescriptor& descriptor,
+                                       const Optional<LstmInputParamsInfo>& lstmParamsInfo,
+                                       const Optional<QuantizedLstmInputParamsInfo>& quantizedLstmInputParamsInfo,
+                                       Optional<std::string&> reasonIfUnsupported) const
 {
-    return IsElementwiseUnarySupported(input,
-                                       output,
-                                       ElementwiseUnaryDescriptor(UnaryOperation::Abs),
+    switch (type)
+    {
+        case LayerType::Activation:
+            return IsActivationSupported(infos[0],
+                                         infos[1],
+                                         *(PolymorphicDowncast<const ActivationDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Addition:
+            return IsAdditionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::ArgMinMax:
+            return IsArgMinMaxSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const ArgMinMaxDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::BatchMatMul:
+            return IsBatchMatMulSupported(infos[0],
+                                          infos[1],
+                                          infos[2],
+                                          *(PolymorphicDowncast<const BatchMatMulDescriptor*>(&descriptor)),
+                                          reasonIfUnsupported);
+        case LayerType::BatchNormalization:
+            return IsBatchNormalizationSupported(infos[0],
+                                                 infos[1],
+                                                 infos[2],
+                                                 infos[3],
+                                                 infos[4],
+                                                 infos[5],
+                                                 *(PolymorphicDowncast<const BatchNormalizationDescriptor*>
+                                                     (&descriptor)),
+                                                 reasonIfUnsupported);
+        case LayerType::BatchToSpaceNd:
+            return IsBatchToSpaceNdSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const BatchToSpaceNdDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Comparison:
+            return IsComparisonSupported(infos[0],
+                                         infos[1],
+                                         infos[2],
+                                         *(PolymorphicDowncast<const ComparisonDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Concat:
+        {
+            std::vector<const TensorInfo*> inputInfos;
+            for (uint32_t i = 0; i < (infos.size() - 1); i++)
+            {
+                inputInfos.push_back(&infos[i]);
+            }
+            return IsConcatSupported(inputInfos,
+                                     infos[infos.size() - 1],
+                                     *(PolymorphicDowncast<const OriginsDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        }
+        case LayerType::Constant:
+            return IsConstantSupported(infos[0], reasonIfUnsupported);
+        case LayerType::ConvertFp16ToFp32:
+            return IsConvertFp16ToFp32Supported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::ConvertFp32ToFp16:
+            return IsConvertFp32ToFp16Supported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Convolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of Convolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const Convolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsConvolution2dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                EmptyOptional(),
+                                                reasonIfUnsupported);
+            }
+            else
+            {
+                return IsConvolution2dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                infos[3],
+                                                reasonIfUnsupported);
+            }
+        }
+        case LayerType::DepthToSpace:
+            return IsDepthToSpaceSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const DepthToSpaceDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::DepthwiseConvolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of DepthwiseConvolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const DepthwiseConvolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsDepthwiseConvolutionSupported(infos[0],
+                                                       infos[1],
+                                                       desc,
+                                                       infos[2],
+                                                       EmptyOptional(),
+                                                       reasonIfUnsupported);
+            }
+            else
+            {
+                return IsDepthwiseConvolutionSupported(infos[0],
+                                                       infos[1],
+                                                       desc,
+                                                       infos[2],
+                                                       infos[3],
+                                                       reasonIfUnsupported);
+            }
+        }
+        case LayerType::Dequantize:
+            return IsDequantizeSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Division:
+            return IsDivisionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::ElementwiseBinary:
+        {
+            std::array<DataType, 7> supportedTypes =
+                    {
+                            DataType::Float32,
+                            DataType::Float16,
+                            DataType::QAsymmS8,
+                            DataType::QAsymmU8,
+                            DataType::QSymmS16,
+                            DataType::Signed32
+                    };
+
+            bool supported = true;
+            supported &= CheckSupportRule(TypeAnyOf(infos[0], supportedTypes), reasonIfUnsupported,
+                                          "Reference elementwise unary: input type not supported");
+
+            supported &= CheckSupportRule(TypeAnyOf(infos[1], supportedTypes), reasonIfUnsupported,
+                                          "Reference elementwise unary: input type not supported");
+
+            supported &= CheckSupportRule(TypeAnyOf(infos[2], supportedTypes), reasonIfUnsupported,
+                                          "Reference elementwise unary: output type not supported");
+
+            supported &= CheckSupportRule(TypesAreEqual(infos[0], infos[1]), reasonIfUnsupported,
+                                          "Reference elementwise unary: input types not matching");
+
+            supported &= CheckSupportRule(TypesAreEqual(infos[0], infos[2]), reasonIfUnsupported,
+                                          "Reference elementwise unary: input and output types not matching");
+
+            return supported;
+        }
+        case LayerType::ElementwiseUnary:
+            return IsElementwiseUnarySupported(infos[0],
+                                               infos[1],
+                                               *(PolymorphicDowncast<const ElementwiseUnaryDescriptor*>(&descriptor)),
+                                               reasonIfUnsupported);
+        case LayerType::Fill:
+            return IsFillSupported(infos[0],
+                                   infos[1],
+                                   *(PolymorphicDowncast<const FillDescriptor*>(&descriptor)),
+                                   reasonIfUnsupported);
+        case LayerType::Floor:
+            return IsFloorSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::FullyConnected:
+            return IsFullyConnectedSupported(infos[0],
+                                             infos[1],
+                                             infos[2],
+                                             infos[3],
+                                             *(PolymorphicDowncast<const FullyConnectedDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Gather:
+            return IsGatherSupported(infos[0],
+                                     infos[1],
+                                     infos[2],
+                                     *(PolymorphicDowncast<const GatherDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::GatherNd:
+            return IsGatherNdSupported(infos[0],
+                                       infos[1],
+                                       infos[2],
                                        reasonIfUnsupported);
+        case LayerType::Input:
+            return IsInputSupported(infos[0], reasonIfUnsupported);
+        case LayerType::InstanceNormalization:
+            return IsInstanceNormalizationSupported(infos[0],
+                                                    infos[1],
+                                                    *(PolymorphicDowncast<const InstanceNormalizationDescriptor*>
+                                                        (&descriptor)),
+                                                    reasonIfUnsupported);
+        case LayerType::L2Normalization:
+            return IsL2NormalizationSupported(infos[0],
+                                              infos[1],
+                                              *(PolymorphicDowncast<const L2NormalizationDescriptor*>(&descriptor)),
+                                              reasonIfUnsupported);
+        case LayerType::LogicalBinary:
+            return IsLogicalBinarySupported(infos[0],
+                                            infos[1],
+                                            infos[2],
+                                            *(PolymorphicDowncast<const LogicalBinaryDescriptor*>(&descriptor)),
+                                            reasonIfUnsupported);
+        case LayerType::LogSoftmax:
+            return IsLogSoftmaxSupported(infos[0],
+                                         infos[1],
+                                         *(PolymorphicDowncast<const LogSoftmaxDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Lstm:
+            return IsLstmSupported(infos[0],
+                                   infos[1],
+                                   infos[2],
+                                   infos[3],
+                                   infos[4],
+                                   infos[5],
+                                   infos[6],
+                                   *(PolymorphicDowncast<const LstmDescriptor*>(&descriptor)),
+                                   lstmParamsInfo.value(),
+                                   reasonIfUnsupported);
+        case LayerType::QLstm:
+            return IsQLstmSupported(infos[0],
+                                    infos[1],
+                                    infos[2],
+                                    infos[3],
+                                    infos[4],
+                                    infos[5],
+                                    *(PolymorphicDowncast<const QLstmDescriptor*>(&descriptor)),
+                                    lstmParamsInfo.value(),
+                                    reasonIfUnsupported);
+        case LayerType::Maximum:
+            return IsMaximumSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::Mean:
+            return IsMeanSupported(infos[0],
+                                   infos[1],
+                                   *(PolymorphicDowncast<const MeanDescriptor*>(&descriptor)),
+                                   reasonIfUnsupported);
+        case LayerType::Minimum:
+            return IsMinimumSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::Multiplication:
+            return IsMultiplicationSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::Normalization:
+            return IsNormalizationSupported(infos[0],
+                                            infos[1],
+                                            *(PolymorphicDowncast<const NormalizationDescriptor*>(&descriptor)),
+                                            reasonIfUnsupported);
+        case LayerType::Output:
+            return IsOutputSupported(infos[0], reasonIfUnsupported);
+        case LayerType::Pad:
+            return IsPadSupported(infos[0],
+                                  infos[1],
+                                  *(PolymorphicDowncast<const PadDescriptor*>(&descriptor)),
+                                  reasonIfUnsupported);
+        case LayerType::Permute:
+            return IsPermuteSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const PermuteDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::Pooling2d:
+            return IsPooling2dSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const Pooling2dDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::Prelu:
+            return IsPreluSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::Quantize:
+            return IsQuantizeSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Reshape:
+            return IsReshapeSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const ReshapeDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::Resize:
+            return IsResizeSupported(infos[0],
+                                     infos[1],
+                                     *(PolymorphicDowncast<const ResizeDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::Reduce:
+            return IsReduceSupported(infos[0],
+                                     infos[1],
+                                     *(PolymorphicDowncast<const ReduceDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::Slice:
+            return IsSliceSupported(infos[0],
+                                    infos[1],
+                                    *(PolymorphicDowncast<const SliceDescriptor*>(&descriptor)),
+                                    reasonIfUnsupported);
+        case LayerType::Softmax:
+            return IsSoftmaxSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const SoftmaxDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::SpaceToBatchNd:
+            return IsSpaceToBatchNdSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const SpaceToBatchNdDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::SpaceToDepth:
+            return IsSpaceToDepthSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const SpaceToDepthDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::Splitter:
+        {
+            std::vector<TensorInfo> outputInfos;
+            for (uint32_t i = 1; i < infos.size(); i++)
+            {
+                outputInfos.push_back(infos[i]);
+            }
+            return IsSplitterSupported(infos[0],
+                                       {outputInfos.begin(), outputInfos.end()},
+                                       *(PolymorphicDowncast<const ViewsDescriptor*>(&descriptor)),
+                                       reasonIfUnsupported);
+        }
+        case LayerType::Stack:
+        {
+            std::vector<const TensorInfo*> inputInfos;
+            for (uint32_t i = 0; i < infos.size() - 1; i++)
+            {
+                inputInfos.push_back(&infos[i]);
+            }
+            return IsStackSupported(inputInfos,
+                                    infos[infos.size() - 1],
+                                    *(PolymorphicDowncast<const StackDescriptor*>(&descriptor)),
+                                    reasonIfUnsupported);
+        }
+        case LayerType::StridedSlice:
+            return IsStridedSliceSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const StridedSliceDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::Subtraction:
+            return IsSubtractionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::Transpose:
+            return IsTransposeSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const TransposeDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::TransposeConvolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of TransposeConvolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const TransposeConvolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsTransposeConvolution2dSupported(infos[0],
+                                                         infos[1],
+                                                         desc,
+                                                         infos[2],
+                                                         EmptyOptional(),
+                                                         reasonIfUnsupported);
+            }
+            else
+            {
+                return IsTransposeConvolution2dSupported(infos[0],
+                                                         infos[1],
+                                                         desc,
+                                                         infos[2],
+                                                         infos[3],
+                                                         reasonIfUnsupported);
+            }
+        }
+        case LayerType::Cast:
+            return IsCastSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::ChannelShuffle:
+            return IsChannelShuffleSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const ChannelShuffleDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Convolution3d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of Convolution3d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const Convolution3dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsConvolution3dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                EmptyOptional(),
+                                                reasonIfUnsupported);
+            }
+            else
+            {
+                return IsConvolution3dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                infos[3],
+                                                reasonIfUnsupported);
+            }
+        }
+        case LayerType::Debug:
+            return IsDebugSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::DetectionPostProcess:
+            return IsDetectionPostProcessSupported(infos[0],
+                                                   infos[1],
+                                                   infos[2],
+                                                   infos[3],
+                                                   infos[4],
+                                                   infos[5],
+                                                   infos[6],
+                                                   *(PolymorphicDowncast<const DetectionPostProcessDescriptor*>
+                                                       (&descriptor)),
+                                                   reasonIfUnsupported);
+        case LayerType::FakeQuantization:
+            return IsFakeQuantizationSupported(infos[0],
+                                               *(PolymorphicDowncast<const FakeQuantizationDescriptor*>(&descriptor)),
+                                               reasonIfUnsupported);
+        case LayerType::MemCopy:
+            return IsMemCopySupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Rank:
+            return IsRankSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Shape:
+            return IsShapeSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::UnidirectionalSequenceLstm:
+        {
+            if (infos.size() != 6)
+            {
+                throw InvalidArgumentException("Invalid number of UnidirectionalSequenceLstm TensorInfos. TensorInfos "
+                                               "should be of format: {input, outputStateIn, cellStateIn, "
+                                               "hiddenStateOutputVal, cellStateOutputVal, output}");
+            }
+            auto desc = *(PolymorphicDowncast<const UnidirectionalSequenceLstmDescriptor*>(&descriptor));
+            return IsUnidirectionalSequenceLstmSupported(infos[0],
+                                                         infos[1],
+                                                         infos[2],
+                                                         infos[3],
+                                                         infos[4],
+                                                         infos[5],
+                                                         desc,
+                                                         lstmParamsInfo.value(),
+                                                         reasonIfUnsupported);
+        }
+        case LayerType::Pooling3d:
+            return IsPooling3dSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const Pooling3dDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::Map:
+            return true;
+        case LayerType::Unmap:
+            return true;
+        case LayerType::MemImport:
+            return LayerSupportBase::IsMemImportSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Merge:
+            return LayerSupportBase::IsMergeSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::QuantizedLstm:
+            return LayerSupportBase::IsQuantizedLstmSupported(infos[0],
+                                                              infos[1],
+                                                              infos[2],
+                                                              infos[3],
+                                                              infos[4],
+                                                              quantizedLstmInputParamsInfo.value(),
+                                                              reasonIfUnsupported);
+        default:
+            // layers not supported in neon by default:
+            // precompiled, standin, switch
+            return false;
+    }
 }
 
 bool RefLayerSupport::IsActivationSupported(const TensorInfo& input,
@@ -76,7 +544,6 @@ bool RefLayerSupport::IsActivationSupported(const TensorInfo& input,
 
     // Define supported types.
     std::array<DataType,6> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -143,7 +610,6 @@ bool RefLayerSupport::IsAdditionSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -179,23 +645,73 @@ bool RefLayerSupport::IsArgMinMaxSupported(const armnn::TensorInfo &input, const
 {
     IgnoreUnused(descriptor);
 
-    std::array<DataType, 7> supportedTypes =
+    std::array<DataType, 8> supportedInputTypes =
     {
-        DataType::BFloat16,
         DataType::Float16,
         DataType::Float32,
         DataType::QAsymmS8,
         DataType::QAsymmU8,
         DataType::QSymmS16,
-        DataType::Signed32
+        DataType::Signed32,
+        DataType::Signed64
+    };
+
+    std::array<DataType,2> supportedOutputTypes = {
+        DataType::Signed32,
+        DataType::Signed64
     };
 
     bool supported = true;
 
-    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedInputTypes), reasonIfUnsupported,
                                   "Reference ArgMinMax: input is not a supported type.");
-    supported &= CheckSupportRule(TypeIs(output, DataType::Signed32), reasonIfUnsupported,
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedOutputTypes), reasonIfUnsupported,
                                   "Reference ArgMinMax: output type not supported");
+
+    return supported;
+}
+
+bool RefLayerSupport::IsBatchMatMulSupported(const TensorInfo& inputX,
+                                             const TensorInfo& inputY,
+                                             const TensorInfo& output,
+                                             const BatchMatMulDescriptor& descriptor,
+                                             Optional<std::string &> reasonIfUnsupported) const
+{
+    IgnoreUnused(descriptor);
+
+    std::array<DataType, 6> supportedTypes =
+    {
+        DataType::Float16,
+        DataType::Float32,
+        DataType::QAsymmS8,
+        DataType::QAsymmU8,
+        DataType::QSymmS16
+    };
+
+    bool supported = true;
+
+    supported &= CheckSupportRule(TypeAnyOf(inputX, supportedTypes), reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: input X is not a supported type");
+
+    supported &= CheckSupportRule(TypeAnyOf(inputY, supportedTypes), reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: input Y is not a supported type");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: output is not a supported type");
+
+    supported &= CheckSupportRule(TypesAreEqual(inputX, inputY), reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: input X and input Y types are mismatched");
+
+    supported &= CheckSupportRule(TypesAreEqual(inputX, output), reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: inputs and output types are mismatched");
+
+    supported &= CheckSupportRule(TensorNumDimensionsAreGreaterOrEqualTo(inputX, 2),
+                                  reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: input X is not of rank 2 or greater");
+
+    supported &= CheckSupportRule(TensorNumDimensionsAreGreaterOrEqualTo(inputY, 2),
+                                  reasonIfUnsupported,
+                                  "Reference batch matrix multiplication: input Y is not of rank 2 or greater");
 
     return supported;
 }
@@ -213,7 +729,6 @@ bool RefLayerSupport::IsBatchNormalizationSupported(const TensorInfo& input,
 
     std::array<DataType, 6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -263,7 +778,6 @@ bool RefLayerSupport::IsBatchToSpaceNdSupported(const TensorInfo& input,
     // Define supported types.
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -297,6 +811,67 @@ bool RefLayerSupport::IsBatchToSpaceNdSupported(const TensorInfo& input,
     return supported;
 }
 
+bool RefLayerSupport::IsCastSupported(const TensorInfo& input,
+                                      const TensorInfo& output,
+                                      Optional<std::string&> reasonIfUnsupported) const
+{
+    std::array<DataType, 9> supportedInputTypes =
+            {
+                    DataType::Float32,
+                    DataType::Float16,
+                    DataType::QSymmS8,
+                    DataType::QAsymmS8,
+                    DataType::QAsymmU8,
+                    DataType::QSymmS16,
+                    DataType::Signed32
+            };
+
+    bool supported = true;
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedInputTypes), reasonIfUnsupported,
+                                  "Reference cast: input is not a supported type");
+
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedInputTypes), reasonIfUnsupported,
+                                  "Reference cast: output is not a supported type");
+
+    supported &= CheckSupportRule(ShapesAreSameTotalSize(input, output), reasonIfUnsupported,
+                                  "Reference cast: input and output shapes have different number of total elements");
+
+    return supported;
+}
+
+bool RefLayerSupport::IsChannelShuffleSupported(const TensorInfo& input,
+                                                const TensorInfo& output,
+                                                const ChannelShuffleDescriptor& descriptor,
+                                                Optional<std::string&> reasonIfUnsupported) const
+{
+    IgnoreUnused(descriptor);
+    bool supported = true;
+
+    // Define supported output and inputs types.
+    std::array<DataType, 7> supportedTypes =
+    {
+        DataType::Float32,
+        DataType::Float16,
+        DataType::QAsymmS8,
+        DataType::QAsymmU8,
+        DataType::QSymmS8,
+        DataType::QSymmS16
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+                                  "Reference ChannelShuffle: input is not a supported type.");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference ChannelShuffle: output is not a supported type.");
+
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                                  "Reference ChannelShuffle: input and output types are mismatched.");
+
+    return supported;
+}
+
+
 bool RefLayerSupport::IsComparisonSupported(const TensorInfo& input0,
                                             const TensorInfo& input1,
                                             const TensorInfo& output,
@@ -307,7 +882,6 @@ bool RefLayerSupport::IsComparisonSupported(const TensorInfo& input0,
     std::array<DataType, 8> supportedInputTypes =
     {
         DataType::Boolean,
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -331,20 +905,20 @@ bool RefLayerSupport::IsComparisonSupported(const TensorInfo& input0,
 
 bool RefLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> inputs,
                                         const TensorInfo& output,
-                                        const ConcatDescriptor& descriptor,
+                                        const OriginsDescriptor& descriptor,
                                         Optional<std::string&> reasonIfUnsupported) const
 {
     IgnoreUnused(descriptor);
 
     bool supported = true;
-    std::array<DataType,6> supportedTypes =
+    std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
         DataType::QAsymmU8,
-        DataType::QSymmS16
+        DataType::QSymmS16,
+        DataType::Signed32
     };
 
     supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
@@ -367,7 +941,6 @@ bool RefLayerSupport::IsConstantSupported(const TensorInfo& output,
 {
     std::array<DataType,8> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float16,
         DataType::Float32,
         DataType::QAsymmS8,
@@ -379,21 +952,6 @@ bool RefLayerSupport::IsConstantSupported(const TensorInfo& output,
 
     return CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
                                   "Reference constant: output is not a supported type.");
-}
-
-bool RefLayerSupport::IsConvertBf16ToFp32Supported(const TensorInfo& input,
-                                                   const TensorInfo& output,
-                                                   Optional<std::string&> reasonIfUnsupported) const
-{
-    bool supported = true;
-
-    supported &= CheckSupportRule(TypeIs(input, DataType::BFloat16), reasonIfUnsupported,
-                                  "Reference for ConvertBf16ToFp32 layer: input type not supported");
-
-    supported &= CheckSupportRule(TypeIs(output, DataType::Float32), reasonIfUnsupported,
-                                  "Reference for ConvertBf16ToFp32 layer: output type not supported");
-
-    return supported;
 }
 
 bool RefLayerSupport::IsConvertFp16ToFp32Supported(const TensorInfo& input,
@@ -414,21 +972,6 @@ bool RefLayerSupport::IsConvertFp16ToFp32Supported(const TensorInfo& input,
                                           &FalseFuncU8<>,
                                           &FalseFuncI32<>,
                                           &FalseFuncU8<>));
-}
-
-bool RefLayerSupport::IsConvertFp32ToBf16Supported(const TensorInfo& input,
-                                                   const TensorInfo& output,
-                                                   Optional<std::string&> reasonIfUnsupported) const
-{
-    bool supported = true;
-
-    supported &= CheckSupportRule(TypeIs(input, DataType::Float32), reasonIfUnsupported,
-                                  "Reference for ConvertFp32ToBf16 layer: input type not supported");
-
-    supported &= CheckSupportRule(TypeIs(output, DataType::BFloat16), reasonIfUnsupported,
-                                  "Reference for ConvertFp32ToBf16 layer: output type not supported");
-
-    return supported;
 }
 
 bool RefLayerSupport::IsConvertFp32ToFp16Supported(const TensorInfo& input,
@@ -463,7 +1006,6 @@ bool RefLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
     // Define supported types.
     std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -478,33 +1020,19 @@ bool RefLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
     supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
                                   "Reference Convolution2d: output is not a supported type.");
 
-    // For Convolution2d, we allow to have BFloat16 input with Float32 output for optimization.
-    if (input.GetDataType() == DataType::BFloat16)
-    {
-        if (output.GetDataType() != DataType::BFloat16 && output.GetDataType() != DataType::Float32)
-        {
-            reasonIfUnsupported.value() += "Output tensor type must be BFloat16 or Float32 for BFloat16 input.\n";
-            supported = false;
-        }
-    }
-    else
-    {
-        supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
-                                  "Reference Convolution2d: input and output types mismatched.");
-    }
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                              "Reference Convolution2d: input and output types mismatched.");
+
 
     const DataType inputType = input.GetDataType();
     if (IsQuantized8BitType(inputType))
     {
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        std::array<DataType, 4> supportedWeightTypes =
+        std::array<DataType, 3> supportedWeightTypes =
         {
             DataType::QAsymmS8,
             DataType::QAsymmU8,
-            DataType::QSymmS8,
-            DataType::QuantizedSymm8PerAxis // deprecated
+            DataType::QSymmS8
         };
-        ARMNN_NO_DEPRECATE_WARN_END
 
         supported &= CheckSupportRule(TypeAnyOf(weights, supportedWeightTypes), reasonIfUnsupported,
                                       "Reference Convolution2d: weights type not supported for quantized input.");
@@ -522,7 +1050,6 @@ bool RefLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
     {
         std::array<DataType,4> biasesSupportedTypes =
         {
-            DataType::BFloat16,
             DataType::Float32,
             DataType::Float16,
             DataType::Signed32
@@ -530,6 +1057,74 @@ bool RefLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
 
         supported &= CheckSupportRule(TypeAnyOf(biases.value(), biasesSupportedTypes), reasonIfUnsupported,
                                       "Reference Convolution2d: biases is not a supported type.");
+    }
+    IgnoreUnused(descriptor);
+
+    return supported;
+}
+
+bool RefLayerSupport::IsConvolution3dSupported(const TensorInfo& input,
+                                               const TensorInfo& output,
+                                               const Convolution3dDescriptor& descriptor,
+                                               const TensorInfo& weights,
+                                               const Optional<TensorInfo>& biases,
+                                               Optional<std::string&> reasonIfUnsupported) const
+{
+    bool supported = true;
+
+    // Define supported types.
+    std::array<DataType,7> supportedTypes =
+    {
+        DataType::Float32,
+        DataType::Float16,
+        DataType::QAsymmS8,
+        DataType::QAsymmU8,
+        DataType::QSymmS8,
+        DataType::QSymmS16
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+                                  "Reference Convolution3d: input is not a supported type.");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference Convolution3d: output is not a supported type.");
+
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                                  "Reference Convolution3d: input and output types mismatched.");
+
+    const DataType inputType = input.GetDataType();
+    if (IsQuantized8BitType(inputType))
+    {
+        std::array<DataType, 3> supportedWeightTypes =
+        {
+            DataType::QAsymmS8,
+            DataType::QAsymmU8,
+            DataType::QSymmS8
+        };
+
+        supported &= CheckSupportRule(TypeAnyOf(weights, supportedWeightTypes), reasonIfUnsupported,
+                                      "Reference Convolution3d: weights type not supported for quantized input.");
+    }
+    else
+    {
+        supported &= CheckSupportRule(TypeAnyOf(weights, supportedTypes), reasonIfUnsupported,
+                                      "Reference Convolution3d: weights is not a supported type.");
+
+        supported &= CheckSupportRule(TypesAreEqual(input, weights), reasonIfUnsupported,
+                                      "Reference Convolution3d: input and weights types mismatched.");
+    }
+
+    if (biases.has_value())
+    {
+        std::array<DataType,4> biasesSupportedTypes =
+        {
+            DataType::Float32,
+            DataType::Float16,
+            DataType::Signed32
+        };
+
+        supported &= CheckSupportRule(TypeAnyOf(biases.value(), biasesSupportedTypes), reasonIfUnsupported,
+                                      "Reference Convolution3d: biases is not a supported type.");
     }
     IgnoreUnused(descriptor);
 
@@ -576,7 +1171,6 @@ bool RefLayerSupport::IsDepthToSpaceSupported(const TensorInfo& input,
 
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -609,7 +1203,6 @@ bool RefLayerSupport::IsDepthwiseConvolutionSupported(const TensorInfo& input,
     // Define supported types.
     std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -630,15 +1223,12 @@ bool RefLayerSupport::IsDepthwiseConvolutionSupported(const TensorInfo& input,
     const DataType inputType = input.GetDataType();
     if (IsQuantized8BitType(inputType))
     {
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        std::array<DataType, 4> supportedWeightTypes =
+        std::array<DataType, 3> supportedWeightTypes =
                 {
                         DataType::QAsymmS8,
                         DataType::QAsymmU8,
                         DataType::QSymmS8,
-                        DataType::QuantizedSymm8PerAxis // deprecated
                 };
-        ARMNN_NO_DEPRECATE_WARN_END
 
         supported &= CheckSupportRule(TypeAnyOf(weights, supportedWeightTypes), reasonIfUnsupported,
                                        "Reference DepthwiseConvolution2d: weights type not supported for "
@@ -657,7 +1247,6 @@ bool RefLayerSupport::IsDepthwiseConvolutionSupported(const TensorInfo& input,
     {
         std::array<DataType,4> biasesSupportedTypes =
         {
-            DataType::BFloat16,
             DataType::Float32,
             DataType::Float16,
             DataType::Signed32
@@ -676,24 +1265,21 @@ bool RefLayerSupport::IsDequantizeSupported(const TensorInfo& input,
 {
    bool supported = true;
 
-    std::array<DataType,4> supportedInputTypes = {
+    std::array<DataType,5> supportedInputTypes = {
         DataType::QAsymmS8,
         DataType::QAsymmU8,
         DataType::QSymmS8,
-        DataType::QSymmS16
+        DataType::QSymmS16,
+        DataType::Float16
     };
 
     supported &= CheckSupportRule(TypeAnyOf(input, supportedInputTypes), reasonIfUnsupported,
                                   "Reference for Dequantize layer: input type not supported.");
 
-    supported &= CheckSupportRule( TypeNotPerAxisQuantized(input), reasonIfUnsupported,
-                                    "Reference for Dequantize layer: per-axis quantized input not support .");
-
     supported &= CheckSupportRule(TypeNotPerAxisQuantized(input), reasonIfUnsupported,
-                                  "Reference dequantize: per-axis quantized input not support .");
+                                  "Reference for Dequantize layer: per-axis quantized input not supported.");
 
     std::array<DataType,3> supportedOutputTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16
     };
@@ -724,7 +1310,6 @@ bool RefLayerSupport::IsDetectionPostProcessSupported(const TensorInfo& boxEncod
 
     std::array<DataType,6> supportedInputTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -759,7 +1344,6 @@ bool RefLayerSupport::IsDivisionSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -798,7 +1382,6 @@ bool RefLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
 
     std::array<DataType, 7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -839,18 +1422,6 @@ bool RefLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
                                   "have different number of total elements");
 
     return supported;
-}
-
-bool RefLayerSupport::IsEqualSupported(const TensorInfo& input0,
-                                       const TensorInfo& input1,
-                                       const TensorInfo& output,
-                                       Optional<std::string&> reasonIfUnsupported) const
-{
-    return IsComparisonSupported(input0,
-                                 input1,
-                                 output,
-                                 ComparisonDescriptor(ComparisonOperation::Equal),
-                                 reasonIfUnsupported);
 }
 
 bool RefLayerSupport::IsFakeQuantizationSupported(const TensorInfo& input,
@@ -905,7 +1476,6 @@ bool RefLayerSupport::IsFloorSupported(const TensorInfo& input,
 
     std::array<DataType,3> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16
     };
@@ -931,7 +1501,6 @@ bool RefLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
     // Define supported types.
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -948,20 +1517,8 @@ bool RefLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
     supported &= CheckSupportRule(TypeAnyOf(weights, supportedTypes), reasonIfUnsupported,
                                   "Reference Fully Connected: weights type not supported.");
 
-    // For FullyConnected, we allow to have BFloat16 input with Float32 output for optimization.
-    if (input.GetDataType() == DataType::BFloat16)
-    {
-        if (output.GetDataType() != DataType::BFloat16 && output.GetDataType() != DataType::Float32)
-        {
-            reasonIfUnsupported.value() += "Output tensor type must be BFloat16 or Float32 for BFloat16 input.\n";
-            supported = false;
-        }
-    }
-    else
-    {
-        supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
-                                  "Reference Fully Connected: input and output types mismatched.");
-    }
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                              "Reference Fully Connected: input and output types mismatched.");
 
     supported &= CheckSupportRule(TypeAnyOf(weights, supportedTypes), reasonIfUnsupported,
                                   "Reference Fully Connected: weights is not a supported type.");
@@ -975,7 +1532,6 @@ bool RefLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
         std::array<DataType, 5>
         supportedBiasTypes =
         {
-            DataType::BFloat16,
             DataType::Float32,
             DataType::Float16,
             DataType::Signed32,
@@ -999,6 +1555,37 @@ bool RefLayerSupport::IsFullyConnectedSupported(const TensorInfo& input,
     return supported;
 }
 
+bool RefLayerSupport::IsGatherNdSupported(const armnn::TensorInfo& input0,
+                                          const armnn::TensorInfo& input1,
+                                          const armnn::TensorInfo& output,
+                                          armnn::Optional<std::string&> reasonIfUnsupported) const
+{
+    bool supported = true;
+    std::array<DataType,7> supportedTypes =
+    {
+            DataType::Float32,
+            DataType::Float16,
+            DataType::QAsymmS8,
+            DataType::QAsymmU8,
+            DataType::QSymmS16,
+            DataType::Signed32
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(input0, supportedTypes), reasonIfUnsupported,
+                                  "Reference GatherNd: input type not supported");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference GatherNd: output type not supported");
+
+    supported &= CheckSupportRule(TypeIs(input1, DataType::Signed32), reasonIfUnsupported,
+                                  "Reference GatherNd: indices (input1) type not supported");
+
+    supported &= CheckSupportRule(TypesAreEqual(input0, output), reasonIfUnsupported,
+                                  "Reference GatherNd: input and output types not matching");
+
+    return supported;
+}
+
 bool RefLayerSupport::IsGatherSupported(const armnn::TensorInfo& input0,
                                         const armnn::TensorInfo& input1,
                                         const armnn::TensorInfo& output,
@@ -1008,7 +1595,6 @@ bool RefLayerSupport::IsGatherSupported(const armnn::TensorInfo& input0,
     bool supported = true;
     std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1017,11 +1603,7 @@ bool RefLayerSupport::IsGatherSupported(const armnn::TensorInfo& input0,
         DataType::Signed32
     };
 
-    if (descriptor.m_Axis != 0)
-    {
-        reasonIfUnsupported.value() += std::string("Reference Gather: axis not supported\n");
-        supported &= false;
-    }
+    IgnoreUnused(descriptor);
     supported &= CheckSupportRule(TypeAnyOf(input0, supportedTypes), reasonIfUnsupported,
                                   "Reference Gather: input type not supported");
 
@@ -1035,18 +1617,6 @@ bool RefLayerSupport::IsGatherSupported(const armnn::TensorInfo& input0,
                                   "Reference Gather: input and output types not matching");
 
     return supported;
-}
-
-bool RefLayerSupport::IsGreaterSupported(const TensorInfo& input0,
-                                         const TensorInfo& input1,
-                                         const TensorInfo& output,
-                                         Optional<std::string&> reasonIfUnsupported) const
-{
-    return IsComparisonSupported(input0,
-                                 input1,
-                                 output,
-                                 ComparisonDescriptor(ComparisonOperation::Greater),
-                                 reasonIfUnsupported);
 }
 
 bool RefLayerSupport::IsInputSupported(const TensorInfo& /*input*/,
@@ -1064,7 +1634,6 @@ bool RefLayerSupport::IsInstanceNormalizationSupported(const TensorInfo& input,
     // Define supported types
     std::array<DataType, 3> supportedTypes =
         {
-            DataType::BFloat16,
             DataType::Float32,
             DataType::Float16
         };
@@ -1096,7 +1665,6 @@ bool RefLayerSupport::IsL2NormalizationSupported(const TensorInfo& input,
     // Define supported types
     std::array<DataType, 6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1156,7 +1724,6 @@ bool RefLayerSupport::IsLogSoftmaxSupported(const TensorInfo& input,
 
     std::array<DataType, 3> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16
     };
@@ -1191,7 +1758,6 @@ bool RefLayerSupport::IsLstmSupported(const TensorInfo& input,
     bool supported = true;
 
     std::array<DataType,3> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::QSymmS16
     };
@@ -1209,6 +1775,7 @@ bool RefLayerSupport::IsLstmSupported(const TensorInfo& input,
                                   "Reference Lstm: input and outputStateOut types are mismatched");
     supported &= CheckSupportRule(TypesAreEqual(input, cellStateOut), reasonIfUnsupported,
                                   "Reference Lstm: input and cellStateOut types are mismatched");
+
     supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
                                   "Reference Lstm: input and output types are mismatched");
     // check layer parameters
@@ -1293,7 +1860,6 @@ bool RefLayerSupport::IsMaximumSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1334,7 +1900,6 @@ bool RefLayerSupport::IsMeanSupported(const TensorInfo& input,
 
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1386,14 +1951,6 @@ bool RefLayerSupport::IsMeanSupported(const TensorInfo& input,
     return supported;
 }
 
-bool RefLayerSupport::IsMergerSupported(const std::vector<const TensorInfo*> inputs,
-                                        const TensorInfo& output,
-                                        const MergerDescriptor& descriptor,
-                                        Optional<std::string&> reasonIfUnsupported) const
-{
-    return IsConcatSupported(inputs, output, descriptor, reasonIfUnsupported);
-}
-
 bool RefLayerSupport::IsMemCopySupported(const TensorInfo &input,
                                          const TensorInfo &output,
                                          Optional<std::string &> reasonIfUnsupported) const
@@ -1431,7 +1988,6 @@ bool RefLayerSupport::IsMinimumSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1469,7 +2025,6 @@ bool RefLayerSupport::IsMultiplicationSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1509,7 +2064,6 @@ bool RefLayerSupport::IsNormalizationSupported(const TensorInfo& input,
     // Define supported types
     std::array<DataType, 6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float16,
         DataType::Float32,
         DataType::QAsymmS8,
@@ -1549,7 +2103,6 @@ bool RefLayerSupport::IsPadSupported(const TensorInfo& input,
     // Define supported output and inputs types.
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1611,7 +2164,6 @@ bool RefLayerSupport::IsPooling2dSupported(const TensorInfo& input,
     // Define supported output and inputs types.
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1630,6 +2182,37 @@ bool RefLayerSupport::IsPooling2dSupported(const TensorInfo& input,
 
     return supported;
 }
+
+bool RefLayerSupport::IsPooling3dSupported(const TensorInfo& input,
+                                           const TensorInfo& output,
+                                           const Pooling3dDescriptor& descriptor,
+                                           Optional<std::string&> reasonIfUnsupported) const
+{
+    IgnoreUnused(descriptor);
+    bool supported = true;
+
+    // Define supported output and inputs types.
+    std::array<DataType,6> supportedTypes =
+    {
+        DataType::Float32,
+        DataType::Float16,
+        DataType::QAsymmS8,
+        DataType::QAsymmU8,
+        DataType::QSymmS16
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+                                  "Reference poolind3d: input is not a supported type.");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference poolind3d: output is not a supported type.");
+
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                                  "Reference poolind3d: input and output types are mismatched.");
+
+    return supported;
+}
+
 
 bool RefLayerSupport::IsQLstmSupported(const TensorInfo& input,
                                        const TensorInfo& previousOutputIn,
@@ -1663,7 +2246,6 @@ bool RefLayerSupport::IsQuantizeSupported(const TensorInfo& input,
 
     // Define supported input types.
     std::array<DataType,7> supportedInputTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1706,6 +2288,35 @@ bool RefLayerSupport::IsRankSupported(const TensorInfo& input,
            "Reference rank: input type not supported.");
 }
 
+bool RefLayerSupport::IsReduceSupported(const TensorInfo& input,
+                                        const TensorInfo& output,
+                                        const ReduceDescriptor& descriptor,
+                                        Optional<std::string&> reasonIfUnsupported) const
+{
+    IgnoreUnused(descriptor);
+    bool supported = true;
+    std::array<DataType,7> supportedTypes =
+    {
+        DataType::Float32,
+        DataType::Float16,
+        DataType::QAsymmS8,
+        DataType::QAsymmU8,
+        DataType::QSymmS16,
+        DataType::Signed32
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+                                  "Reference Reduce: input type not supported");
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference Reduce: output type not supported");
+
+    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
+                                  "Reference Reduce: input and output types not matching");
+
+    return supported;
+}
+
 bool RefLayerSupport::IsReshapeSupported(const TensorInfo& input,
                                          const TensorInfo& output,
                                          const ReshapeDescriptor& descriptor,
@@ -1728,33 +2339,6 @@ bool RefLayerSupport::IsReshapeSupported(const TensorInfo& input,
 
     return CheckSupportRule(TypeAnyOf(input, supportedOutputTypes), reasonIfUnsupported,
         "Reference reshape: input type not supported.");
-}
-
-bool RefLayerSupport::IsResizeBilinearSupported(const TensorInfo& input,
-                                                const TensorInfo& output,
-                                                Optional<std::string&> reasonIfUnsupported) const
-{
-    bool supported = true;
-    std::array<DataType,6> supportedTypes =
-    {
-        DataType::BFloat16,
-        DataType::Float32,
-        DataType::Float16,
-        DataType::QAsymmS8,
-        DataType::QAsymmU8,
-        DataType::QSymmS16
-    };
-
-    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
-                                  "Reference ResizeBilinear: input type not supported");
-
-    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
-                                  "Reference ResizeBilinear: output type not supported");
-
-    supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
-                                  "Reference ResizeBilinear: input and output types not matching");
-
-    return supported;
 }
 
 bool RefLayerSupport::IsResizeSupported(const TensorInfo& input,
@@ -1786,14 +2370,22 @@ bool RefLayerSupport::IsResizeSupported(const TensorInfo& input,
     return supported;
 }
 
-bool RefLayerSupport::IsRsqrtSupported(const TensorInfo& input,
+bool RefLayerSupport::IsShapeSupported(const TensorInfo& input,
                                        const TensorInfo& output,
                                        Optional<std::string&> reasonIfUnsupported) const
 {
-    return IsElementwiseUnarySupported(input,
-                                       output,
-                                       ElementwiseUnaryDescriptor(UnaryOperation::Rsqrt),
-                                       reasonIfUnsupported);
+    IgnoreUnused(input);
+    bool supported = true;
+
+    std::array<DataType, 1> supportedTypes =
+    {
+        DataType::Signed32
+    };
+
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference Shape: output type not supported");
+
+    return supported;
 }
 
 bool RefLayerSupport::IsSliceSupported(const TensorInfo& input,
@@ -1806,7 +2398,6 @@ bool RefLayerSupport::IsSliceSupported(const TensorInfo& input,
 
     std::array<DataType, 5> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::QAsymmS8,
         DataType::QAsymmU8,
@@ -1834,7 +2425,6 @@ bool RefLayerSupport::IsSoftmaxSupported(const TensorInfo& input,
     bool supported = true;
     std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QSymmS8,
@@ -1864,7 +2454,6 @@ bool RefLayerSupport::IsSpaceToBatchNdSupported(const TensorInfo& input,
     bool supported = true;
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1895,7 +2484,6 @@ bool RefLayerSupport::IsSpaceToDepthSupported(const TensorInfo& input,
 
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1916,28 +2504,6 @@ bool RefLayerSupport::IsSpaceToDepthSupported(const TensorInfo& input,
 }
 
 bool RefLayerSupport::IsSplitterSupported(const TensorInfo& input,
-                                          const ViewsDescriptor& descriptor,
-                                          Optional<std::string&> reasonIfUnsupported) const
-{
-    IgnoreUnused(descriptor);
-    bool supported = true;
-    std::array<DataType,6> supportedTypes =
-    {
-        DataType::BFloat16,
-        DataType::Float32,
-        DataType::Float16,
-        DataType::QAsymmS8,
-        DataType::QAsymmU8,
-        DataType::QSymmS16
-    };
-
-    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
-                                  "Reference splitter: input type not supported");
-
-    return supported;
-}
-
-bool RefLayerSupport::IsSplitterSupported(const TensorInfo& input,
                                           const std::vector<std::reference_wrapper<TensorInfo>>& outputs,
                                           const ViewsDescriptor& descriptor,
                                           Optional<std::string&> reasonIfUnsupported) const
@@ -1946,7 +2512,6 @@ bool RefLayerSupport::IsSplitterSupported(const TensorInfo& input,
     bool supported = true;
     std::array<DataType,6> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -1976,14 +2541,14 @@ bool RefLayerSupport::IsStackSupported(const std::vector<const TensorInfo*>& inp
     IgnoreUnused(descriptor);
 
     bool supported = true;
-    std::array<DataType,6> supportedTypes =
+    std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
         DataType::QAsymmU8,
-        DataType::QSymmS16
+        DataType::QSymmS16,
+        DataType::Signed32
     };
 
     supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
@@ -2011,7 +2576,6 @@ bool RefLayerSupport::IsStridedSliceSupported(const TensorInfo& input,
 
     std::array<DataType,5> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::QAsymmS8,
         DataType::QAsymmU8,
@@ -2038,7 +2602,6 @@ bool RefLayerSupport::IsSubtractionSupported(const TensorInfo& input0,
     bool supported = true;
 
     std::array<DataType,7> supportedTypes = {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -2077,7 +2640,6 @@ bool RefLayerSupport::IsPreluSupported(const TensorInfo& input,
 
     std::array<DataType, 6> supportedTypes
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -2115,7 +2677,6 @@ bool RefLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
 
     std::array<DataType,7> supportedTypes =
     {
-        DataType::BFloat16,
         DataType::Float32,
         DataType::Float16,
         DataType::QAsymmS8,
@@ -2137,15 +2698,12 @@ bool RefLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
     const DataType inputType = input.GetDataType();
     if (IsQuantized8BitType(inputType))
     {
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        std::array<DataType, 4> supportedWeightTypes =
+        std::array<DataType, 3> supportedWeightTypes =
         {
             DataType::QAsymmS8,
             DataType::QAsymmU8,
-            DataType::QSymmS8,
-            DataType::QuantizedSymm8PerAxis //Deprecated
+            DataType::QSymmS8
         };
-        ARMNN_NO_DEPRECATE_WARN_END
 
         supported &= CheckSupportRule(TypeAnyOf(weights, supportedWeightTypes), reasonIfUnsupported,
                                       "Reference TransposeConvolution2d: weights type not supported for "
@@ -2164,7 +2722,6 @@ bool RefLayerSupport::IsTransposeConvolution2dSupported(const TensorInfo& input,
     {
         std::array<DataType,4> biasesSupportedTypes =
         {
-            DataType::BFloat16,
             DataType::Float32,
             DataType::Float16,
             DataType::Signed32
@@ -2203,6 +2760,151 @@ bool RefLayerSupport::IsTransposeSupported(const TensorInfo& input,
 
     supported &= CheckSupportRule(TypesAreEqual(input, output), reasonIfUnsupported,
                                   "Reference transpose: input and output types are mismatched.");
+
+    return supported;
+}
+
+bool RefLayerSupport::IsUnidirectionalSequenceLstmSupported(
+        const TensorInfo& input,
+        const TensorInfo& outputStateIn,
+        const TensorInfo& cellStateIn,
+        const TensorInfo& outputStateOut,
+        const TensorInfo& cellStateOut,
+        const TensorInfo& output,
+        const UnidirectionalSequenceLstmDescriptor& descriptor,
+        const LstmInputParamsInfo& paramsInfo,
+        Optional<std::string&> reasonIfUnsupported) const
+{
+    IgnoreUnused(descriptor);
+    IgnoreUnused(paramsInfo);
+    IgnoreUnused(outputStateIn);
+    IgnoreUnused(cellStateIn);
+    IgnoreUnused(outputStateOut);
+    IgnoreUnused(cellStateOut);
+    bool supported = true;
+
+    std::array<DataType, 2> supportedTypes =
+    {
+        DataType::Float32,
+        DataType::QAsymmS8
+    };
+
+    std::array<DataType, 2> supportedWeightTypes =
+    {
+        DataType::Float32,
+        DataType::QAsymmS8
+    };
+
+    std::array<DataType, 3> supportedBiasTypes =
+    {
+        DataType::Float32,
+        DataType::QAsymmS8,
+        DataType::Signed32
+    };
+
+    // check inputs and outputs
+    supported &= CheckSupportRule(TypeAnyOf(input, supportedTypes), reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: input is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(output, supportedTypes), reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: output is not a supported type.");
+
+    // check layer parameters
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputToForgetWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: InputToForgetWeights "
+                                  "is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputToCellWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: InputToCellWeights is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputToOutputWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: InputToOutputWeights "
+                                  "is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetRecurrentToForgetWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: RecurrentToForgetWeights "
+                                  "is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetRecurrentToCellWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: RecurrentToCellWeights "
+                                  "is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetRecurrentToOutputWeights(), supportedWeightTypes),
+                                  reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: RecurrentToOutputWeights "
+                                  "is not a supported type.");
+
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetForgetGateBias(), supportedBiasTypes), reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: ForgetGateBias is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetCellBias(), supportedBiasTypes), reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: CellBias is not a supported type.");
+    supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetOutputGateBias(), supportedBiasTypes), reasonIfUnsupported,
+                                  "Reference UnidirectionalSequenceLstm: OutputGateBias is not a supported type.");
+    if (!descriptor.m_CifgEnabled)
+    {
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputToInputWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: InputToInputWeights "
+                                      "is not a supported type.");
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetRecurrentToInputWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: RecurrentToInputWeights "
+                                      "is not a supported type.");
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputGateBias(), supportedBiasTypes), reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: InputGateBias is not a supported type.");
+        if (descriptor.m_PeepholeEnabled)
+        {
+            supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetCellToInputWeights(), supportedWeightTypes),
+                                          reasonIfUnsupported,
+                                          "Reference UnidirectionalSequenceLstm: CellToInputWeights "
+                                          "is not a supported type.");
+        }
+    }
+    if (descriptor.m_PeepholeEnabled)
+    {
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetCellToForgetWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: CellToForgetWeights "
+                                      "is not a supported type.");
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetCellToOutputWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: CellToOutputWeights "
+                                      "is not a supported type.");
+    }
+    if (descriptor.m_ProjectionEnabled)
+    {
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetProjectionWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: ProjectionWeights "
+                                      "is not a supported type.");
+        if (paramsInfo.m_ProjectionBias != nullptr)
+        {
+            supported &= CheckSupportRule(TypesAreEqual(input, paramsInfo.GetProjectionBias()), reasonIfUnsupported,
+                                          "Reference UnidirectionalSequenceLstm: input and ProjectionBias types "
+                                          "are mismatched");
+        }
+    }
+    if (descriptor.m_LayerNormEnabled)
+    {
+        if (!descriptor.m_CifgEnabled)
+        {
+            supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetInputLayerNormWeights(), supportedWeightTypes),
+                                          reasonIfUnsupported,
+                                          "Reference UnidirectionalSequenceLstm: InputLayerNormWeights "
+                                          "is not a supported type.");
+        }
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetForgetLayerNormWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: ForgetLayerNormWeights "
+                                      "is not a supported type.");
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetCellLayerNormWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: CellLayerNormWeights "
+                                      "is not a supported type.");
+        supported &= CheckSupportRule(TypeAnyOf(paramsInfo.GetOutputLayerNormWeights(), supportedWeightTypes),
+                                      reasonIfUnsupported,
+                                      "Reference UnidirectionalSequenceLstm: OutputLayerNormWeights "
+                                      "is not a supported type.");
+    }
 
     return supported;
 }

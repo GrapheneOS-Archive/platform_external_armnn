@@ -114,7 +114,7 @@ The interface functions to be implemented are:
             const IMemoryManagerSharedPtr& memoryManager = nullptr) const = 0;
     virtual IBackendContextPtr CreateBackendContext(const IRuntime::CreationOptions&) const = 0;
     virtual IBackendProfilingContextPtr CreateBackendProfilingContext(const IRuntime::CreationOptions& creationOptions,
-            armnn::profiling::IBackendProfiling& backendProfiling) const = 0;
+            arm::pipe::IBackendProfiling& backendProfiling) const = 0;
     virtual ILayerSupportSharedPtr GetLayerSupport() const = 0;
     virtual Optimizations GetOptimizations() const = 0;
     virtual SubgraphUniquePtr OptimizeSubgraph(const SubgraphView& subgraph, bool& optimizationAttempted) const;
@@ -166,7 +166,7 @@ Dynamic backends are registered during the runtime creation.
 
 ## The ILayerSupport interface
 
-Arm NN uses the [ILayerSupport](../../include/armnn/ILayerSupport.hpp) interface to decide if a layer
+Arm NN uses the [ILayerSupport](../../include/armnn/backends/ILayerSupport.hpp) interface to decide if a layer
 with a set of parameters (i.e. input and output tensors, descriptor, weights, filter, kernel if any) are
 supported on a given backend. The backends need a way to communicate this information by implementing
 the ```GetLayerSupport()``` function on the ```IBackendInternal``` interface.
@@ -225,6 +225,28 @@ runtime will hold this for its entire lifetime. It then calls the following inte
 * ```AfterLoadNetwork(NetworkId networkId)```
 * ```BeforeUnloadNetwork(NetworkId networkId)```
 * ```AfterUnloadNetwork(NetworkId networkId)```
+
+## The UseCustomMemoryAllocator interface
+
+Backends can also have an associated CustomMemoryAllocator registered with them that ArmNN will use to allocate
+intra/inter-layer memory. This particular feature is required if you want a backend to use ProtectedContentAllocation.
+To support this on your own backend you must implement the UseCustomMemoryAllocator interface.
+
+This interface returns a boolean value which indicates if the provided allocator is supported by
+the backend. This interface is also used by the lambda function returned by the Backend Registry to configure
+the CustomMemoryAllocator. Within the backend itself there should be a wrapper class to convert the generic
+CustomMemoryAllocator provided by the interface into something that is more suitable for your own backend.
+
+Examples of how this can be done are in the [ClBackend header](cl/ClBackend.hpp) and the
+[ClRegistryInitializer header](cl/ClRegistryInitializer.cpp)
+
+## The GetCapabilities interface
+
+This is a list of BackendCapabilities currently supported by the backend. It consists of a constant list of
+Name/Value pairs, each containing a string name, and a boolean value to indicate support. For example to
+indicate support for ProtectedContentAllocation you would return {"ProtectedContentAllocation", true}
+
+An example can be found at the top of [ClBackend header](cl/ClBackend.hpp)
 
 ## Dynamic backends
 

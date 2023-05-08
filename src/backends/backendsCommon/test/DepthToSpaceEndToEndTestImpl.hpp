@@ -8,9 +8,9 @@
 #include <ResolveType.hpp>
 
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 
-#include <backendsCommon/test/DataLayoutUtils.hpp>
+#include <armnnTestUtils/DataLayoutUtils.hpp>
 
 namespace
 {
@@ -44,6 +44,7 @@ void DepthToSpaceEndToEndImpl(const std::vector<armnn::BackendId>& backends,
     using namespace armnn;
 
     TensorInfo inputInfo(nhwcInputShape, ArmnnType);
+    inputInfo.SetConstant(true);
     TensorInfo outputInfo(nhwcOutputShape, ArmnnType);
 
     constexpr float   qScale  = 0.25f;

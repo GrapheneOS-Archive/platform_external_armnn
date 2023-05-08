@@ -1,12 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClLstmFloatWorkload.hpp"
 #include <cl/ClTensorHandle.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
+#include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
 #include <armnn/utility/NumericCast.hpp>
@@ -19,9 +20,17 @@ namespace armnn
 {
 using namespace armcomputetensorutils;
 
-ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor &descriptor, const WorkloadInfo &info)
+ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor& descriptor,
+                                         const WorkloadInfo& info,
+                                         const arm_compute::CLCompileContext& clCompileContext)
         : FloatWorkload<LstmQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClLstmFloatWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         GetGuid());
+
     arm_compute::LSTMParams<arm_compute::ICLTensor> lstm_param;
 
     // Basic parameters
@@ -155,43 +164,20 @@ ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor &descriptor, 
     float projection_threshold = m_Data.m_Parameters.m_ClippingThresProj;
 
     // for preparing the object for the class ActivationLayerInfo, we need to consider 5 situations
-    arm_compute::ActivationLayerInfo activationLayerInfo;
-    if (m_Data.m_Parameters.m_ActivationFunc == 0)
-    {
-        // no activation, do nothing
-    }
-    else if (m_Data.m_Parameters.m_ActivationFunc == 1)
-    {
-        activationLayerInfo = arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::RELU);
-    }
-    else if (m_Data.m_Parameters.m_ActivationFunc == 3)
-    {
-        activationLayerInfo = arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::BOUNDED_RELU, 6.0);
-    }
-    else if (m_Data.m_Parameters.m_ActivationFunc == 4)
-    {
-        activationLayerInfo =  arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::TANH, 1.0, 1.0);
-    }
-    else if (m_Data.m_Parameters.m_ActivationFunc == 6)
-    {
-        activationLayerInfo =  arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::LOGISTIC);
-    }
-    else
-    {
-        throw armnn::Exception("Wrong Type of Activation Function!");
-    }
+    arm_compute::ActivationLayerInfo activationLayerInfo =
+        ConvertLstmActivationFuncToAclLayerInfo(m_Data.m_Parameters.m_ActivationFunc);
 
-    m_LstmLayer.configure(&input, m_InputToForgetWeightsTensor.get(), m_InputToCellWeightsTensor.get(),
-                          m_InputToOutputWeightsTensor.get(), m_RecurrentToForgetWeightsTensor.get(),
-                          m_RecurrentToCellWeightsTensor.get(), m_RecurrentToOutputWeightsTensor.get(),
-                          m_ForgetGateBiasTensor.get(), m_CellBiasTensor.get(), m_OutputGateBiasTensor.get(),
-                          &output_state_in, &cell_state_in, m_ScratchBuffer.get(), &output_state_out,
-                          &cell_state_out, &output, lstm_param, activationLayerInfo,
-                          cell_threshold, projection_threshold);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClLstmFloatWorkload_configure");
+        m_LstmLayer.configure(clCompileContext, &input, m_InputToForgetWeightsTensor.get(),
+                              m_InputToCellWeightsTensor.get(), m_InputToOutputWeightsTensor.get(),
+                              m_RecurrentToForgetWeightsTensor.get(), m_RecurrentToCellWeightsTensor.get(),
+                              m_RecurrentToOutputWeightsTensor.get(), m_ForgetGateBiasTensor.get(),
+                              m_CellBiasTensor.get(), m_OutputGateBiasTensor.get(), &output_state_in,
+                              &cell_state_in, m_ScratchBuffer.get(), &output_state_out,
+                              &cell_state_out, &output, lstm_param, activationLayerInfo,
+                              cell_threshold, projection_threshold);
+    }
 
     armcomputetensorutils::InitialiseArmComputeTensorEmpty(*m_ScratchBuffer);
 
@@ -251,7 +237,7 @@ ClLstmFloatWorkload::ClLstmFloatWorkload(const LstmQueueDescriptor &descriptor, 
 
 void ClLstmFloatWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClLstmFloatWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClLstmFloatWorkload_Execute", GetGuid());
     RunClFunction(m_LstmLayer, CHECK_LOCATION());
 }
 
@@ -324,7 +310,7 @@ arm_compute::Status ClLstmFloatWorkloadValidate(const TensorInfo& input, const T
 
         if (paramsInfo.m_ProjectionBias != nullptr)
         {
-            aclProjectionBiasInfo = BuildArmComputeTensorInfo(paramsInfo.GetInputGateBias());
+            aclProjectionBiasInfo = BuildArmComputeTensorInfo(paramsInfo.GetProjectionBias());
         }
         lstm_params_info.set_projection_params(&aclProjectionWeightsInfo,
                                                paramsInfo.m_ProjectionBias != nullptr ?
@@ -342,35 +328,8 @@ arm_compute::Status ClLstmFloatWorkloadValidate(const TensorInfo& input, const T
     float projection_threshold = descriptor.m_ClippingThresProj;
 
     // for preparing the object for the class ActivationLayerInfo, we need to consider 5 situations
-    arm_compute::ActivationLayerInfo activationLayerInfo;
-    if (descriptor.m_ActivationFunc == 0)
-    {
-        // no activation, do nothing
-    }
-    else if (descriptor.m_ActivationFunc == 1)
-    {
-        activationLayerInfo = arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::RELU);
-    }
-    else if (descriptor.m_ActivationFunc == 3)
-    {
-        activationLayerInfo = arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::BOUNDED_RELU, 6.0);
-    }
-    else if (descriptor.m_ActivationFunc == 4)
-    {
-        activationLayerInfo =  arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::TANH, 1.0, 1.0);
-    }
-    else if (descriptor.m_ActivationFunc == 6)
-    {
-        activationLayerInfo =  arm_compute::ActivationLayerInfo(
-                arm_compute::ActivationLayerInfo::ActivationFunction::LOGISTIC);
-    }
-    else
-    {
-        throw armnn::Exception("Wrong Type of Activation Function!");
-    }
+    arm_compute::ActivationLayerInfo activationLayerInfo =
+        ConvertLstmActivationFuncToAclLayerInfo(descriptor.m_ActivationFunc);
 
     if (descriptor.m_LayerNormEnabled)
     {
@@ -432,6 +391,44 @@ void ClLstmFloatWorkload::FreeUnusedTensors()
     FreeTensorIfUnused(m_ForgetLayerNormWeightsTensor);
     FreeTensorIfUnused(m_CellLayerNormWeightsTensor);
     FreeTensorIfUnused(m_OutputLayerNormWeightsTensor);
+}
+
+void ClLstmFloatWorkload::ReplaceInputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+// Replace output tensor handle with the given TensorHandle
+void ClLstmFloatWorkload::ReplaceOutputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+void ClLstmFloatWorkload::Reconfigure()
+{
+    throw armnn::UnimplementedException("Reconfigure not implemented for this workload");
 }
 
 } //namespace armnn

@@ -1,26 +1,36 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include <armnn/Types.hpp>
 #include <armnn/BackendId.hpp>
 #include <armnn/Optional.hpp>
-
 #include <memory>
 #include <unordered_map>
 #include <functional>
+#include <stddef.h>
+#include <string>
+
+namespace arm
+{
+namespace pipe
+{
+
+class IProfilingService;
+
+} // namespace arm
+} // namespace pipe
 
 namespace armnn
 {
 
-namespace profiling
-{
-    class ProfilingService;
-}
 class IBackendInternal;
+class ICustomAllocator;
+class IMemoryOptimizerStrategy;
+
 using IBackendInternalUniquePtr = std::unique_ptr<IBackendInternal>;
+using MemoryOptimizerStrategiesMapRef = std::unordered_map<BackendId, std::shared_ptr<IMemoryOptimizerStrategy>>;
 
 class BackendRegistry
 {
@@ -34,7 +44,11 @@ public:
     size_t Size() const;
     BackendIdSet GetBackendIds() const;
     std::string GetBackendIdsAsString() const;
-    void SetProfilingService(armnn::Optional<profiling::ProfilingService&> profilingService);
+    void SetProfilingService(armnn::Optional<arm::pipe::IProfilingService&> profilingService);
+    void RegisterAllocator(const BackendId& id, std::shared_ptr<ICustomAllocator> alloc);
+    std::unordered_map<BackendId, std::shared_ptr<ICustomAllocator>> GetAllocators();
+    void RegisterMemoryOptimizerStrategy(const BackendId& id, std::shared_ptr<IMemoryOptimizerStrategy> strategy);
+    MemoryOptimizerStrategiesMapRef GetMemoryOptimizerStrategies();
 
     BackendRegistry() {}
     virtual ~BackendRegistry() {}
@@ -50,6 +64,8 @@ public:
     };
 
     void Deregister(const BackendId& id);
+    void DeregisterAllocator(const BackendId &id);
+    void DeregisterMemoryOptimizerStrategy(const BackendId &id);
 
 protected:
     using FactoryStorage = std::unordered_map<BackendId, FactoryFunction>;
@@ -62,7 +78,9 @@ private:
     BackendRegistry& operator=(const BackendRegistry&) = delete;
 
     FactoryStorage m_Factories;
-    armnn::Optional<profiling::ProfilingService&> m_ProfilingService;
+    armnn::Optional<arm::pipe::IProfilingService&> m_ProfilingService;
+    std::unordered_map<BackendId, std::shared_ptr<ICustomAllocator>> m_CustomMemoryAllocatorMap;
+    std::unordered_map<BackendId, std::shared_ptr<IMemoryOptimizerStrategy>> m_MemoryOptimizerStrategyMap;
 };
 
 BackendRegistry& BackendRegistryInstance();

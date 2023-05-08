@@ -7,6 +7,7 @@
 #include "NeonInterceptorScheduler.hpp"
 
 #include <armnn/utility/Assert.hpp>
+#include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <memory>
 
@@ -29,7 +30,7 @@ void NeonTimer::Start()
     {
         // Keep the real schedule and add NeonInterceptorScheduler as an interceptor
         m_RealScheduler  = &arm_compute::Scheduler::get();
-        arm_compute::Scheduler::set(std::static_pointer_cast<arm_compute::IScheduler>(g_Interceptor));
+        arm_compute::Scheduler::set(armnn::PolymorphicPointerDowncast<arm_compute::IScheduler>(g_Interceptor));
     }
 }
 
@@ -39,6 +40,11 @@ void NeonTimer::Stop()
     g_Interceptor->SetKernels(nullptr);
     arm_compute::Scheduler::set(m_RealSchedulerType);
     m_RealScheduler = nullptr;
+}
+
+bool NeonTimer::HasKernelMeasurements() const
+{
+    return m_Kernels.size() > 0;
 }
 
 std::vector<Measurement> NeonTimer::GetMeasurements() const

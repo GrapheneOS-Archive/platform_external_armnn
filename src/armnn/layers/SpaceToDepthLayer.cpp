@@ -10,8 +10,8 @@
 #include <armnn/utility/IgnoreUnused.hpp>
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <numeric>
 
@@ -32,7 +32,7 @@ std::unique_ptr<IWorkload> SpaceToDepthLayer::CreateWorkload(const IWorkloadFact
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSpaceToDepth(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::SpaceToDepth, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SpaceToDepthLayer* SpaceToDepthLayer::Clone(Graph& graph) const
@@ -77,9 +77,9 @@ void SpaceToDepthLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SpaceToDepthLayer");
 }
 
-void SpaceToDepthLayer::Accept(ILayerVisitor& visitor) const
+void SpaceToDepthLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSpaceToDepthLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

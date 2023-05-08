@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -34,17 +34,17 @@ std::unique_ptr<IWorkload> BatchNormalizationLayer::CreateWorkload(const IWorklo
     descriptor.m_Beta = m_Beta.get();
     descriptor.m_Gamma = m_Gamma.get();
 
-    return factory.CreateBatchNormalization(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::BatchNormalization, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 BatchNormalizationLayer* BatchNormalizationLayer::Clone(Graph& graph) const
 {
     auto layer = CloneBase<BatchNormalizationLayer>(graph, m_Param, GetName());
 
-    layer->m_Mean = m_Mean ? std::make_unique<ScopedCpuTensorHandle>(*m_Mean) : nullptr;
-    layer->m_Variance = m_Variance ? std::make_unique<ScopedCpuTensorHandle>(*m_Variance) : nullptr;
-    layer->m_Beta = m_Beta ? std::make_unique<ScopedCpuTensorHandle>(*m_Beta) : nullptr;
-    layer->m_Gamma = m_Gamma ? std::make_unique<ScopedCpuTensorHandle>(*m_Gamma) : nullptr;
+    layer->m_Mean = m_Mean ? m_Mean : nullptr;
+    layer->m_Variance = m_Variance ? m_Variance : nullptr;
+    layer->m_Beta = m_Beta ? m_Beta : nullptr;
+    layer->m_Gamma = m_Gamma ? m_Gamma : nullptr;
 
     return std::move(layer);
 }
@@ -65,19 +65,25 @@ void BatchNormalizationLayer::ValidateTensorShapesFromInputs()
 
 }
 
-Layer::ConstantTensors BatchNormalizationLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors BatchNormalizationLayer::GetConstantTensorsByRef() const
 {
+    // For API stability DO NOT ALTER order and add new members to the end of vector
     return {m_Mean, m_Variance, m_Beta, m_Gamma};
 }
 
-void BatchNormalizationLayer::Accept(ILayerVisitor& visitor) const
+void BatchNormalizationLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor meanTensor(m_Mean->GetTensorInfo(), m_Mean->Map(true));
-    ConstTensor varianceTensor(m_Variance->GetTensorInfo(), m_Variance->Map(true));
-    ConstTensor betaTensor(m_Beta->GetTensorInfo(), m_Beta->Map(true));
-    ConstTensor gammaTensor(m_Gamma->GetTensorInfo(), m_Gamma->Map(true));
-    visitor.VisitBatchNormalizationLayer(
-            this, GetParameters(), meanTensor, varianceTensor, betaTensor, gammaTensor, GetName());
+    ManagedConstTensorHandle managedMean(m_Mean);
+    ManagedConstTensorHandle managedVariance(m_Variance);
+    ManagedConstTensorHandle managedBeta(m_Beta);
+    ManagedConstTensorHandle managedGamma(m_Gamma);
+
+    std::vector<armnn::ConstTensor> constTensors { { managedMean.GetTensorInfo(), managedMean.Map() },
+                                                   { managedVariance.GetTensorInfo(), managedVariance.Map() },
+                                                   { managedBeta.GetTensorInfo(), managedBeta.Map() },
+                                                   { managedGamma.GetTensorInfo(), managedGamma.Map() } };
+
+    strategy.ExecuteStrategy(this, GetParameters(), constTensors, GetName());
 }
 
 } // namespace armnn

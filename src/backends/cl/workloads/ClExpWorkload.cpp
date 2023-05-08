@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -23,20 +23,31 @@ arm_compute::Status ClExpWorkloadValidate(const TensorInfo& input, const TensorI
     return arm_compute::CLExpLayer::validate(&aclInput, &aclOutput);
 }
 
-ClExpWorkload::ClExpWorkload(const ElementwiseUnaryQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<ElementwiseUnaryQueueDescriptor>(descriptor, info)
+ClExpWorkload::ClExpWorkload(const ElementwiseUnaryQueueDescriptor& descriptor,
+                             const WorkloadInfo& info,
+                             const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<ElementwiseUnaryQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClExpWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClExpWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& output = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
-    m_ExpLayer.configure(&input, &output);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClExpWorkload_configure");
+        m_ExpLayer.configure(clCompileContext, &input, &output);
+    }
 }
 
 void ClExpWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClExpWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClExpWorkload_Execute", this->GetGuid());
     RunClFunction(m_ExpLayer, CHECK_LOCATION());
 }
 
