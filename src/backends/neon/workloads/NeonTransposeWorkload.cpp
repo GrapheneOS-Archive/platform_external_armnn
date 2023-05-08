@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -26,8 +26,14 @@ arm_compute::Status NeonTransposeWorkloadValidate(const TensorInfo& input,
 
 NeonTransposeWorkload::NeonTransposeWorkload(const TransposeQueueDescriptor& descriptor,
                                              const WorkloadInfo& info)
-        : BaseWorkload<TransposeQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<TransposeQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonTransposeWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs(GetName(), 1, 1);
 
     const arm_compute::ITensor& input = static_cast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -41,7 +47,7 @@ NeonTransposeWorkload::NeonTransposeWorkload(const TransposeQueueDescriptor& des
 
 void NeonTransposeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON(GetName() + "_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID(GetName() + "_Execute", this->GetGuid());
     m_PermuteFunction.run();
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -13,6 +13,7 @@
 #include <backendsCommon/WorkloadInfo.hpp>
 #include "InternalTypes.hpp"
 #include "SerializeLayerParameters.hpp"
+#include "DllExport.hpp"
 
 #include <armnn/Types.hpp>
 #include <armnn/Tensor.hpp>
@@ -28,7 +29,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
@@ -50,10 +51,13 @@ public:
     ~InputSlot();
 
     Layer& GetOwningLayer() const { return m_OwningLayer; }
-    unsigned int GetSlotIndex() const { return m_SlotIndex; }
+    unsigned int GetSlotIndex() const override { return m_SlotIndex; }
 
     const OutputSlot* GetConnectedOutputSlot() const { return m_Connection; }
     OutputSlot* GetConnectedOutputSlot() { return m_Connection; }
+
+    const IConnectableLayer& GetOwningIConnectableLayer() const override;
+    IConnectableLayer& GetOwningIConnectableLayer() override;
 
     /// Links the slot to an output slot or breaks an existing link if passing nullptr.
     void SetConnection(OutputSlot* source)
@@ -69,7 +73,7 @@ public:
     // Inserts single-output existing layer at this point in the graph.
     void Insert(Layer& layer);
 
-    // IInputSlot
+    // InputSlot
 
     const IOutputSlot* GetConnection() const override;
     IOutputSlot* GetConnection() override;
@@ -113,6 +117,9 @@ public:
     }
 
     Layer& GetOwningLayer() const { return m_OwningLayer; }
+
+    const IConnectableLayer& GetOwningIConnectableLayer() const override;
+    IConnectableLayer& GetOwningIConnectableLayer() override;
 
     LayerGuid GetOwningLayerGuid() const override;
 
@@ -200,7 +207,7 @@ inline const IOutputSlot* InputSlot::GetConnection() const { return GetConnected
 inline IOutputSlot* InputSlot::GetConnection() { return GetConnectedOutputSlot(); }
 
 
-class ScopedCpuTensorHandle;
+class ScopedTensorHandle;
 
 // Base layer class
 
@@ -213,6 +220,9 @@ public:
     /// @param name - Optional name for the layer (may be nullptr).
     Layer(unsigned int numInputSlots, unsigned int numOutputSlots, LayerType type, const char* name);
     Layer(unsigned int numInputSlots, unsigned int numOutputSlots, LayerType type, DataLayout layout, const char* name);
+
+    void ExecuteStrategy(IStrategy& strategy) const override;
+
 
     const std::string& GetNameStr() const
     {
@@ -230,6 +240,7 @@ public:
     }
 
     ShapeInferenceMethod GetShapeInferenceMethod() const { return m_ShapeInferenceMethod; };
+    bool GetAllowExpandedDims() const { return m_AllowExpandedDims; };
 
     const std::vector<InputSlot>& GetInputSlots() const { return m_InputSlots; }
     const std::vector<OutputSlot>& GetOutputSlots() const { return m_OutputSlots; }
@@ -259,12 +270,12 @@ public:
     void ResetPriority() const;
     LayerPriority GetPriority() const;
 
-    LayerType GetType() const { return m_Type; }
+    LayerType GetType() const override { return m_Type; }
 
     DataType GetDataType() const;
 
     const BackendId& GetBackendId() const { return m_BackendId; }
-    void SetBackendId(const BackendId& id) { m_BackendId = id; }
+    void SetBackendId(const BackendId& id) override { m_BackendId = id; }
 
     // Virtuals
 
@@ -335,6 +346,11 @@ public:
         m_ShapeInferenceMethod = shapeInferenceMethod;
     }
 
+    void SetAllowExpandedDims(bool allowExpandedDims)
+    {
+        m_AllowExpandedDims = allowExpandedDims;
+    }
+
     template<typename T>
     std::shared_ptr<T> GetAdditionalInformation() const
     {
@@ -345,6 +361,8 @@ public:
     {
         m_AdditionalInfoObject = additionalInfo;
     }
+
+    virtual const BaseDescriptor& GetParameters() const override { return m_NullDescriptor; }
 
 protected:
     // Graph needs access to the virtual destructor.
@@ -387,8 +405,12 @@ protected:
     LayerType* CloneBase(Graph& graph, Params&& ... params) const;
 
     // Retrieve the Handles to the constants
-    using ConstantTensors = std::vector<std::reference_wrapper<std::unique_ptr<ScopedCpuTensorHandle>>>;
-    virtual ConstantTensors GetConstantTensorsByRef() {return ConstantTensors(); };
+    // Marking this as override and having this here keeps IConnectable abstract with only pure virtual function
+    virtual ConstantTensors GetConstantTensorsByRef() override final;
+
+    // Retrieve the Handles to the constants
+    // Marking this as override and having this here keeps IConnectable abstract with only pure virtual function
+    virtual ImmutableConstantTensors GetConstantTensorsByRef() const override { return ImmutableConstantTensors(); };
 
     // "Blob"
     AdditionalInfoObjectPtr m_AdditionalInfoObject;
@@ -418,10 +440,16 @@ private:
     mutable LayerPriority m_Priority = 0;
     mutable bool m_Visiting = false;
 
+    bool m_AllowExpandedDims = false;
+
     LayerGuid m_Guid;
 
     std::list<std::string> m_RelatedLayerNames;
 
+    /// returned by layers which have no parameters associated with them.
+    /// has to be a member as it is returned as a const reference
+    /// declared static so that there is only ever one of them in memory
+    ARMNN_DLLEXPORT static NullDescriptor m_NullDescriptor;
 };
 
 // A layer user-provided data can be bound to (e.g. inputs, outputs).
@@ -440,6 +468,11 @@ public:
 
     LayerBindingId GetBindingId() const { return m_Id; };
 
+    void ExecuteStrategy(IStrategy& strategy) const override
+    {
+        strategy.ExecuteStrategy(this, BaseDescriptor(), {}, GetName(), GetBindingId());
+    }
+
 protected:
     ~BindableLayer() = default;
 
@@ -447,4 +480,4 @@ private:
     LayerBindingId m_Id;
 };
 
-}
+} //namespace armnn

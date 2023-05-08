@@ -7,9 +7,8 @@
 #include "../InferenceTestImage.hpp"
 #include <armnn/Logging.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <Filesystem.hpp>
+#include <armnnUtils/Filesystem.hpp>
 
-#include <mapbox/variant.hpp>
 #include <cxxopts/cxxopts.hpp>
 
 #include <algorithm>
@@ -164,15 +163,16 @@ public:
                 ("f,model-format",
                     "Format of the intended model file that uses the images."
                     "Different formats have different image normalization styles."
-                    "Accepted values (caffe, tensorflow, tflite)",
-                    cxxopts::value<std::string>(m_ModelFormat))
+                    "If unset, defaults to tflite."
+                    "Accepted value (tflite)",
+                    cxxopts::value<std::string>(m_ModelFormat)->default_value("tflite"))
                 ("o,outfile",
                     "Output raw tensor file path",
                     cxxopts::value<std::string>(m_OutputFileName))
                 ("z,output-type",
                     "The data type of the output tensors."
                     "If unset, defaults to \"float\" for all defined inputs. "
-                    "Accepted values (float, int or qasymm8)",
+                    "Accepted values (float, int, qasymms8 or qasymmu8)",
                     cxxopts::value<std::string>(m_OutputType)->default_value("float"))
                 ("new-width",
                     "Resize image to new width. Keep original width if unspecified",
@@ -235,15 +235,7 @@ public:
     unsigned int GetNewHeight() {return static_cast<unsigned int>(std::stoi(m_NewHeight));}
     SupportedFrontend GetModelFormat()
     {
-        if (m_ModelFormat == "caffe")
-        {
-            return SupportedFrontend::Caffe;
-        }
-        else if (m_ModelFormat == "tensorflow")
-        {
-            return SupportedFrontend::TensorFlow;
-        }
-        else if (m_ModelFormat == "tflite")
+        if (m_ModelFormat == "tflite")
         {
             return SupportedFrontend::TFLite;
         }
@@ -262,13 +254,17 @@ public:
         {
             return armnn::DataType::Signed32;
         }
-        else if (m_OutputType == "qasymm8")
+        else if (m_OutputType == "qasymm8" || m_OutputType == "qasymmu8")
         {
             return armnn::DataType::QAsymmU8;
         }
+        else if (m_OutputType == "qasymms8")
+        {
+            return armnn::DataType::QAsymmS8;
+        }
         else
         {
-            throw armnn::Exception("Unsupported input type" + m_OutputType);
+            throw armnn::Exception("Unsupported input type " + m_OutputType);
         }
     }
 
@@ -300,8 +296,7 @@ int main(int argc, char* argv[])
     const unsigned int batchSize = 1;
     const armnn::DataLayout outputLayout(cmdline.GetLayout());
 
-    using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<uint8_t>>;
-    std::vector<TContainer> imageDataContainers;
+    std::vector<armnnUtils::TContainer> imageDataContainers;
     const NormalizationParameters& normParams = GetNormalizationParameters(modelFormat, outputType);
     try
     {
@@ -314,6 +309,10 @@ int main(int argc, char* argv[])
             case armnn::DataType::QAsymmU8:
                 imageDataContainers.push_back(PrepareImageTensor<uint8_t>(
                     imagePath, newWidth, newHeight, normParams, batchSize, outputLayout));
+                break;
+            case armnn::DataType::QAsymmS8:
+                imageDataContainers.push_back(PrepareImageTensor<int8_t>(
+                        imagePath, newWidth, newHeight, normParams, batchSize, outputLayout));
                 break;
             case armnn::DataType::Float32:
             default:

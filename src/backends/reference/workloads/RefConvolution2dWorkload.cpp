@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -12,43 +12,52 @@
 
 namespace armnn
 {
-RefConvolution2dWorkload::RefConvolution2dWorkload(
-        const Convolution2dQueueDescriptor& descriptor, const WorkloadInfo& info)
-        : BaseWorkload<Convolution2dQueueDescriptor>(descriptor, info)
+RefConvolution2dWorkload::RefConvolution2dWorkload(const Convolution2dQueueDescriptor& descriptor,
+                                                   const WorkloadInfo& info)
+    : RefBaseWorkload<Convolution2dQueueDescriptor>(descriptor, info)
+    , m_InputShape(info.m_InputTensorInfos[0].GetShape())
+    , m_FilterShape(info.m_InputTensorInfos[1].GetShape())
+    , m_OutputShape(info.m_OutputTensorInfos[0].GetShape())
 {
-    m_Weight = std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Weight));
-    const TensorInfo& rFilterInfo = m_Weight->GetTensorInfo();
+    WorkloadInfo detailsInfo;
+    detailsInfo.m_InputTensorInfos = info.m_InputTensorInfos;
+    detailsInfo.m_OutputTensorInfos = info.m_OutputTensorInfos;
 
-    m_FilterShape = rFilterInfo.GetShape();
-    m_FilterDecoder = MakeDecoder<float>(rFilterInfo, m_Weight.get()->Map(true));
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("RefConvolution2dWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         detailsInfo,
+                                         this->GetGuid());
+}
 
-    if (descriptor.m_Parameters.m_BiasEnabled)
+void RefConvolution2dWorkload::Execute() const
+{
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefConvolution2dWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefConvolution2dWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
+{
+    ARMNN_SCOPED_PROFILING_EVENT_GUID(Compute::CpuRef, "RefConvolution2dWorkload_Execute", this->GetGuid());
+
+    std::unique_ptr<Decoder<float>> inputDecoder = MakeDecoder<float>(GetTensorInfo(inputs[0]), inputs[0]->Map());
+    std::unique_ptr<Encoder<float>> outputEncoder = MakeEncoder<float>(GetTensorInfo(outputs[0]), outputs[0]->Map());
+
+    std::unique_ptr<Decoder<float>> weightsDecoder = MakeDecoder<float>(GetTensorInfo(inputs[1]), inputs[1]->Map());
+    std::unique_ptr<Decoder<float>> biasDecoder;
+
+    if (m_Data.m_Parameters.m_BiasEnabled)
     {
-        m_Bias = std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Bias));
-        const TensorInfo& biasInfo = m_Bias->GetTensorInfo();
-        m_BiasDecoder = MakeDecoder<float>(biasInfo, m_Bias->Map(true));
+        biasDecoder = MakeDecoder<float>(GetTensorInfo(inputs[2]), inputs[2]->Map());
     }
-}
 
-void RefConvolution2dWorkload::PostAllocationConfigure()
-{
-    const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
-    m_InputShape = inputInfo.GetShape();
-    m_InputDecoder = MakeDecoder<float>(inputInfo);
-
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
-    m_OutputShape = outputInfo.GetShape();
-    m_OutputEncoder = MakeEncoder<float>(outputInfo);
-}
-
-void RefConvolution2dWorkload::Execute() const {
-    ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefConvolution2dWorkload_Execute");
-
-    m_InputDecoder->Reset(m_Data.m_Inputs[0]->Map());
-    m_OutputEncoder->Reset(m_Data.m_Outputs[0]->Map());
-
-    Convolve(m_InputShape, *m_InputDecoder, m_OutputShape, *m_OutputEncoder, m_FilterShape,
-             *m_FilterDecoder, m_Data.m_Parameters.m_BiasEnabled, m_BiasDecoder.get(),
+    Convolve(m_InputShape, *inputDecoder, m_OutputShape, *outputEncoder, m_FilterShape,
+             *weightsDecoder, m_Data.m_Parameters.m_BiasEnabled, biasDecoder.get(),
              m_Data.m_Parameters.m_DataLayout, m_Data.m_Parameters.m_PadTop, m_Data.m_Parameters.m_PadLeft,
              m_Data.m_Parameters.m_StrideX, m_Data.m_Parameters.m_StrideY,
              m_Data.m_Parameters.m_DilationX, m_Data.m_Parameters.m_DilationY);

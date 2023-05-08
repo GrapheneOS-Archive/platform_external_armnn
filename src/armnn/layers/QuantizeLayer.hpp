@@ -12,7 +12,6 @@ namespace armnn {
 //Forward
 class IWorkload;
 class IWorkloadFactory;
-class ILayerVisitor;
 
 class QuantizeLayer : public Layer
 {
@@ -23,7 +22,8 @@ public:
 
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
+
 
 protected:
     QuantizeLayer(const char* name);

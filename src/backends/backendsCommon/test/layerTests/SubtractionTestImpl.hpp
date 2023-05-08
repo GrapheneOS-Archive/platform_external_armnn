@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <Half.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 LayerTestResult<float, 4> SubtractionTest(
     armnn::IWorkloadFactory& workloadFactory,

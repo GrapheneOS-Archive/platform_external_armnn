@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,8 +7,8 @@
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/LstmParams.hpp>
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include "ClBaseWorkload.hpp"
+#include <armnn/backends/WorkloadData.hpp>
 
 #include "arm_compute/graph/Tensor.h"
 #include "arm_compute/runtime/CL/functions/CLQLSTMLayer.h"
@@ -16,10 +16,12 @@
 namespace armnn
 {
 
-class ClQLstmWorkload : public BaseWorkload<QLstmQueueDescriptor>
+class ClQLstmWorkload : public ClBaseWorkload<QLstmQueueDescriptor>
 {
 public:
-    ClQLstmWorkload(const QLstmQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClQLstmWorkload(const QLstmQueueDescriptor& descriptor,
+                    const WorkloadInfo& info,
+                    const arm_compute::CLCompileContext& clCompileContext);
     virtual void Execute() const override;
 
 private:

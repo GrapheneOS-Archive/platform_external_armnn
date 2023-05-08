@@ -20,7 +20,8 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
-#include <stdlib.h>
+#include <iterator>
+#include <cmath>
 
 using namespace armnnTfLiteParser;
 using namespace armnn;
@@ -127,8 +128,8 @@ int LoadModel(const char* filename,
     ARMNN_LOG(debug) << "Model loaded ok: " << filename;
 
     // Optimize backbone model
-    OptimizerOptions options;
-    options.m_ImportEnabled = enableImport != ImportMemory::False;
+    OptimizerOptionsOpaque options;
+    options.SetImportEnabled(enableImport != ImportMemory::False);
     auto optimizedModel = Optimize(*model, backendPreferences, runtime.GetDeviceSpec(), options);
     if (!optimizedModel)
     {
@@ -147,7 +148,10 @@ int LoadModel(const char* filename,
     // Load model into runtime
     {
         std::string errorMessage;
-        INetworkProperties modelProps(options.m_ImportEnabled, options.m_ImportEnabled);
+
+        armnn::MemorySource memSource = options.GetImportEnabled() ? armnn::MemorySource::Malloc
+                                                                : armnn::MemorySource::Undefined;
+        INetworkProperties modelProps(false, memSource, memSource);
         Status status = runtime.LoadNetwork(networkId, std::move(optimizedModel), errorMessage, modelProps);
         if (status != Status::Success)
         {
@@ -262,7 +266,7 @@ void CheckAccuracy(std::vector<float>* toDetector0, std::vector<float>* toDetect
             // Compare abs(difference) with tolerance to check for value by value equality
             for (unsigned int j = 0; j < outputs[i]->size(); ++j)
             {
-                compare = abs(expected[j] - outputs[i]->at(j));
+                compare = std::abs(expected[j] - outputs[i]->at(j));
                 if (compare > 0.001f)
                 {
                     count++;
@@ -324,7 +328,7 @@ struct ParseArgs
                 "of yoloV3big e.g. 'mydir/file1.txt,mydir/file2.txt,mydir/file3.txt,mydir/file4.txt'->InputToDetector1"
                 " will be tried first then InputToDetector2 then InputToDetector3 then the Detector Output and finally"
                 " the NMS output. NOTE: Files are passed as comma separated list without whitespaces.",
-                cxxopts::value<std::vector<std::string>>())
+                cxxopts::value<std::vector<std::string>>()->default_value({}))
 
                 ("d,detector-path",
                  "File path where the TfLite model for the yoloV3big "

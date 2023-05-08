@@ -7,8 +7,6 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/ILayerVisitor.hpp>
-
 namespace armnn
 {
 
@@ -23,7 +21,7 @@ std::unique_ptr<IWorkload> QuantizeLayer::CreateWorkload(const IWorkloadFactory&
 
     WorkloadInfo info = PrepInfoAndDesc(descriptor);
 
-    return factory.CreateQuantize(descriptor, info);
+    return factory.CreateWorkload(LayerType::Quantize, descriptor, info);
 }
 
 Layer* QuantizeLayer::Clone(Graph& graph) const
@@ -45,9 +43,9 @@ void QuantizeLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "QuantizeLayer");
 }
 
-void QuantizeLayer::Accept(ILayerVisitor& visitor) const
+void QuantizeLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitQuantizeLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } //namespace armnn

@@ -8,8 +8,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 using namespace armnnUtils;
 
@@ -37,18 +37,18 @@ std::unique_ptr<IWorkload> TransposeConvolution2dLayer::CreateWorkload(const IWo
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateTransposeConvolution2d(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::TransposeConvolution2d, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 TransposeConvolution2dLayer* TransposeConvolution2dLayer::Clone(Graph& graph) const
 {
     auto layer = CloneBase<TransposeConvolution2dLayer>(graph, m_Param, GetName());
 
-    layer->m_Weight = m_Weight ? std::make_unique<ScopedCpuTensorHandle>(*m_Weight) : nullptr;
+    layer->m_Weight = m_Weight ? m_Weight : nullptr;
 
     if (layer->m_Param.m_BiasEnabled)
     {
-        layer->m_Bias = m_Bias ? std::make_unique<ScopedCpuTensorHandle>(*m_Bias) : nullptr;
+        layer->m_Bias = m_Bias ? m_Bias : nullptr;
     }
 
     return std::move(layer);
@@ -78,27 +78,11 @@ std::vector<TensorShape> TransposeConvolution2dLayer::InferOutputShapes(
 
     unsigned int wOutput = (wInput - 1) * m_Param.m_StrideX + wKernel - wPadding;
     unsigned int hOutput = (hInput - 1) * m_Param.m_StrideY + hKernel - hPadding;
-
-    unsigned int kernelElements = kernelShape[0] * kernelShape[dataLayoutIndex.GetChannelsIndex()];
-    unsigned int inputElements  = batches * inputShape[dataLayoutIndex.GetChannelsIndex()];
-
-    ARMNN_ASSERT_MSG(inputElements != 0, "Invalid number of input elements");
-
-    unsigned int channels;
-    if (kernelElements >= inputElements)
-    {
-        ARMNN_ASSERT_MSG(kernelElements % inputElements == 0 , "Invalid number of elements");
-        channels = kernelElements / inputElements;
-    }
-    else
-    {
-        ARMNN_ASSERT_MSG(inputElements % kernelElements == 0 , "Invalid number of elements");
-        channels = kernelShape[0];
-    }
+    unsigned int cOutput = kernelShape[0];
 
     TensorShape tensorShape = m_Param.m_DataLayout == armnn::DataLayout::NHWC ?
-         TensorShape( { batches, hOutput, wOutput, channels } ) :
-         TensorShape( { batches, channels, hOutput, wOutput });
+         TensorShape( { batches, hOutput, wOutput, cOutput } ) :
+         TensorShape( { batches, cOutput, hOutput, wOutput });
 
     return std::vector<TensorShape>({ tensorShape });
 }
@@ -132,23 +116,24 @@ void TransposeConvolution2dLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, expectedOutputShape[0], m_ShapeInferenceMethod, "TransposeConvolution2dLayer");
 }
 
-Layer::ConstantTensors TransposeConvolution2dLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors TransposeConvolution2dLayer::GetConstantTensorsByRef() const
 {
+    // For API stability DO NOT ALTER order and add new members to the end of vector
     return {m_Weight, m_Bias};
 }
 
-void TransposeConvolution2dLayer::Accept(ILayerVisitor& visitor) const
+void TransposeConvolution2dLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor weightsTensor(m_Weight->GetTensorInfo(), m_Weight->Map(true)) ;
-    Optional<ConstTensor> optionalBiasTensor = EmptyOptional();
+    ManagedConstTensorHandle managedWeight(m_Weight);
+    std::vector<armnn::ConstTensor> constTensors { { managedWeight.GetTensorInfo(), managedWeight.Map() } };
 
+    ManagedConstTensorHandle managedBias(m_Bias);
     if (GetParameters().m_BiasEnabled)
     {
-        ConstTensor biasTensor(m_Bias->GetTensorInfo(), m_Bias->Map(true));
-        optionalBiasTensor = Optional<ConstTensor>(biasTensor);
+        constTensors.emplace_back(ConstTensor(managedBias.GetTensorInfo(), managedBias.Map()));
     }
 
-    visitor.VisitTransposeConvolution2dLayer(this, GetParameters(), weightsTensor, optionalBiasTensor, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), constTensors, GetName());
 }
 
 } // namespace armnn

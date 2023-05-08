@@ -1,17 +1,13 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 
-#include <string>
-#include <iostream>
 
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_Div")
+{
 struct DivFixture : public ParserFlatbuffersFixture
 {
     explicit DivFixture(const std::string & inputShape1,
@@ -92,7 +88,7 @@ struct SimpleDivFixture : public DivFixture
     SimpleDivFixture() : DivFixture("[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseDiv, SimpleDivFixture)
+TEST_CASE_FIXTURE(SimpleDivFixture, "ParseDiv")
 {
     using armnn::DataType;
     float Inf = std::numeric_limits<float>::infinity();
@@ -118,7 +114,7 @@ struct DynamicDivFixture : public DivFixture
     DynamicDivFixture() : DivFixture("[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]", "[  ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseDynamicDiv, DynamicDivFixture)
+TEST_CASE_FIXTURE(DynamicDivFixture, "ParseDynamicDiv")
 {
     using armnn::DataType;
     float Inf = std::numeric_limits<float>::infinity();
@@ -138,4 +134,4 @@ BOOST_FIXTURE_TEST_CASE(ParseDynamicDiv, DynamicDivFixture)
                                                          1.0f,  1.0f, -1.0f } } }, true);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

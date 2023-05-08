@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 #include <backendsCommon/UnmapWorkload.hpp>
 
 namespace armnn
@@ -41,9 +41,9 @@ void UnmapLayer::ValidateTensorShapesFromInputs()
     ARMNN_ASSERT(GetNumOutputSlots() == 0);
 }
 
-void UnmapLayer::Accept(ILayerVisitor& visitor) const
+void UnmapLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    IgnoreUnused(visitor);
+    IgnoreUnused(strategy);
     throw armnn::Exception("UnmapLayer should not appear in an input graph");
 }
 

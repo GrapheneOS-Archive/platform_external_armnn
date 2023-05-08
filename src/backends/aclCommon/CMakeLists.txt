@@ -1,5 +1,5 @@
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -11,7 +11,15 @@ list(APPEND armnnAclCommon_sources
     ArmComputeUtils.hpp
     BaseMemoryManager.cpp
     BaseMemoryManager.hpp
+    IClTensorHandle.hpp
 )
+
+if(ARMCOMPUTECL)
+    list(APPEND armnnAclCommon_sources
+        ArmComputeTuningUtils.hpp
+        ArmComputeTuningUtils.cpp
+    )
+endif()
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)
@@ -23,3 +31,4 @@ target_include_directories(armnnAclCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/armn
 target_include_directories(armnnAclCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnAclCommon PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
 target_include_directories(armnnAclCommon PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)
+target_include_directories(armnnAclCommon PRIVATE ${PROJECT_SOURCE_DIR}/profiling/client/include)

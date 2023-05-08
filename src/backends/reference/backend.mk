@@ -23,10 +23,12 @@ BACKEND_SOURCES := \
         RefTensorHandleFactory.cpp \
         workloads/Activation.cpp \
         workloads/ArgMinMax.cpp \
+        workloads/BatchMatMulImpl.cpp \
         workloads/BatchNormImpl.cpp \
         workloads/BatchToSpaceNd.cpp \
         workloads/Broadcast.cpp \
         workloads/ConvImpl.cpp \
+        workloads/Conv3dImpl.cpp \
         workloads/Debug.cpp \
         workloads/DepthToSpace.cpp \
         workloads/DetectionPostProcess.cpp \
@@ -37,35 +39,42 @@ BACKEND_SOURCES := \
         workloads/Gather.cpp \
         workloads/InstanceNorm.cpp \
         workloads/LogSoftmax.cpp \
+        workloads/Lstm.cpp \
         workloads/LstmUtils.cpp \
-        workloads/Mean.cpp \
         workloads/Concatenate.cpp \
+        workloads/MirrorPad.cpp \
         workloads/Pad.cpp \
         workloads/Pooling2d.cpp \
+        workloads/Pooling3d.cpp \
         workloads/PreluImpl.cpp \
+        workloads/Reduce.cpp \
         workloads/RefActivationWorkload.cpp \
         workloads/RefArgMinMaxWorkload.cpp \
+        workloads/RefBatchMatMulWorkload.cpp \
         workloads/RefBatchNormalizationWorkload.cpp \
         workloads/RefBatchToSpaceNdWorkload.cpp \
+        workloads/RefCastWorkload.cpp \
+        workloads/RefChannelShuffleWorkload.cpp \
         workloads/RefComparisonWorkload.cpp \
         workloads/RefConcatWorkload.cpp \
         workloads/RefConstantWorkload.cpp \
-        workloads/RefConvertBf16ToFp32Workload.cpp \
         workloads/RefConvertFp16ToFp32Workload.cpp \
-        workloads/RefConvertFp32ToBf16Workload.cpp \
         workloads/RefConvertFp32ToFp16Workload.cpp \
         workloads/RefConvolution2dWorkload.cpp \
+        workloads/RefConvolution3dWorkload.cpp \
         workloads/RefDebugWorkload.cpp \
         workloads/RefDepthToSpaceWorkload.cpp \
         workloads/RefDepthwiseConvolution2dWorkload.cpp \
         workloads/RefDequantizeWorkload.cpp \
         workloads/RefDetectionPostProcessWorkload.cpp \
+        workloads/RefElementwiseBinaryWorkload.cpp \
         workloads/RefElementwiseWorkload.cpp \
         workloads/RefElementwiseUnaryWorkload.cpp \
         workloads/RefFakeQuantizationFloat32Workload.cpp \
         workloads/RefFillWorkload.cpp \
         workloads/RefFloorWorkload.cpp \
         workloads/RefFullyConnectedWorkload.cpp \
+        workloads/RefGatherNdWorkload.cpp \
         workloads/RefGatherWorkload.cpp \
         workloads/RefInstanceNormalizationWorkload.cpp \
         workloads/RefL2NormalizationWorkload.cpp \
@@ -78,11 +87,12 @@ BACKEND_SOURCES := \
         workloads/RefPadWorkload.cpp \
         workloads/RefPermuteWorkload.cpp \
         workloads/RefPooling2dWorkload.cpp \
+        workloads/RefPooling3dWorkload.cpp \
         workloads/RefPreluWorkload.cpp \
         workloads/RefQLstmWorkload.cpp \
         workloads/RefQuantizeWorkload.cpp \
+        workloads/RefReduceWorkload.cpp \
         workloads/RefReshapeWorkload.cpp \
-        workloads/RefResizeBilinearWorkload.cpp \
         workloads/RefResizeWorkload.cpp \
         workloads/RefSliceWorkload.cpp \
         workloads/RefSoftmaxWorkload.cpp \
@@ -93,6 +103,7 @@ BACKEND_SOURCES := \
         workloads/RefSplitterWorkload.cpp \
         workloads/RefTransposeConvolution2dWorkload.cpp \
         workloads/RefTransposeWorkload.cpp \
+        workloads/RefUnidirectionalSequenceLstmWorkload.cpp \
         workloads/Resize.cpp \
         workloads/Slice.cpp \
         workloads/SpaceToBatchNd.cpp \
@@ -124,6 +135,7 @@ ifeq ($(ARMNN_REF_ENABLED),1)
 
 BACKEND_TEST_SOURCES := \
         test/ArgMinMaxTests.cpp \
+        test/RefBackendTests.cpp \
         test/RefCreateWorkloadTests.cpp \
         test/RefDetectionPostProcessTests.cpp \
         test/RefEndToEndTests.cpp \

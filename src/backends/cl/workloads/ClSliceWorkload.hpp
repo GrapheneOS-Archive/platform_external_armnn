@@ -1,11 +1,11 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/CL/functions/CLSlice.h>
@@ -17,10 +17,12 @@ arm_compute::Status ClSliceWorkloadValidate(const TensorInfo& input,
                                             const TensorInfo& output,
                                             const SliceDescriptor& descriptor);
 
-class ClSliceWorkload : public BaseWorkload<SliceQueueDescriptor>
+class ClSliceWorkload : public ClBaseWorkload<SliceQueueDescriptor>
 {
 public:
-    ClSliceWorkload(const SliceQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClSliceWorkload(const SliceQueueDescriptor& descriptor,
+                    const WorkloadInfo& info,
+                    const arm_compute::CLCompileContext& clCompileContext);
     virtual void Execute() const override;
 
 private:
