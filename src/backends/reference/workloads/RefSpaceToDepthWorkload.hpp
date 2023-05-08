@@ -1,21 +1,24 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "RefBaseWorkload.hpp"
 
 #include <armnn/TypesUtils.hpp>
 
 namespace armnn
 {
 
-class RefSpaceToDepthWorkload : public BaseWorkload<SpaceToDepthQueueDescriptor>
+class RefSpaceToDepthWorkload : public RefBaseWorkload<SpaceToDepthQueueDescriptor>
 {
 public:
-    using BaseWorkload<SpaceToDepthQueueDescriptor>::BaseWorkload;
-    virtual void Execute() const override;
+    using RefBaseWorkload<SpaceToDepthQueueDescriptor>::RefBaseWorkload;
+    void Execute() const override;
+    void ExecuteAsync(ExecutionData& executionData)  override;
+private:
+    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
 };
 
 } //namespace armnn

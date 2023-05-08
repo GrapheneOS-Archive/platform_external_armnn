@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,27 +7,25 @@
 
 #include "BaseIterator.hpp"
 
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include "RefBaseWorkload.hpp"
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
 
-class RefElementwiseUnaryWorkload : public BaseWorkload<ElementwiseUnaryQueueDescriptor>
+class RefElementwiseUnaryWorkload : public RefBaseWorkload<ElementwiseUnaryQueueDescriptor>
 {
 public:
-    using BaseWorkload<ElementwiseUnaryQueueDescriptor>::m_Data;
+    using RefBaseWorkload<ElementwiseUnaryQueueDescriptor>::m_Data;
 
     RefElementwiseUnaryWorkload(const ElementwiseUnaryQueueDescriptor& descriptor, const WorkloadInfo& info);
-    void PostAllocationConfigure() override;
     void Execute() const override;
+    void ExecuteAsync(ExecutionData& executionData)  override;
 
 private:
+    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
     using InType  = float;
     using OutType = float;
-
-    std::unique_ptr<Decoder<InType>>  m_Input;
-    std::unique_ptr<Encoder<OutType>> m_Output;
 };
 
 } // namespace armnn

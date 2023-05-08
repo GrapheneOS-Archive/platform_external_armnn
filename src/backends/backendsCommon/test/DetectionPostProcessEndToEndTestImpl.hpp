@@ -5,10 +5,12 @@
 
 #pragma once
 
-#include "CommonTestUtils.hpp"
+#include <CommonTestUtils.hpp>
 
 #include <armnn/INetwork.hpp>
 #include <ResolveType.hpp>
+
+#include <doctest/doctest.h>
 
 namespace{
 
@@ -80,16 +82,19 @@ void DetectionPostProcessEndToEnd(const std::vector<BackendId>& backends, bool u
 
     boxEncodingsInfo.SetQuantizationScale(boxScale);
     boxEncodingsInfo.SetQuantizationOffset(boxOffset);
+    boxEncodingsInfo.SetConstant(true);
     scoresInfo.SetQuantizationScale(scoreScale);
     scoresInfo.SetQuantizationOffset(scoreOffset);
+    scoresInfo.SetConstant(true);
     anchorsInfo.SetQuantizationScale(anchorScale);
     anchorsInfo.SetQuantizationOffset(anchorOffset);
+    anchorsInfo.SetConstant(true);
 
     // Builds up the structure of the network
     armnn::INetworkPtr net = CreateDetectionPostProcessNetwork<T>(boxEncodingsInfo, scoresInfo,
                                                                   anchorsInfo, anchors, useRegularNms);
 
-    BOOST_TEST_CHECKPOINT("create a network");
+    CHECK(net);
 
     std::map<int, std::vector<T>> inputTensorData = {{ 0, boxEncodings }, { 1, scores }};
     std::map<int, std::vector<float>> expectedOutputData = {{ 0, expectedDetectionBoxes },

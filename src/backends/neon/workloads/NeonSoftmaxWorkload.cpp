@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -32,8 +32,14 @@ arm_compute::Status NeonSoftmaxWorkloadValidate(const TensorInfo& input,
 
 NeonSoftmaxWorkload::NeonSoftmaxWorkload(const SoftmaxQueueDescriptor& descriptor,
     const WorkloadInfo& info, std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager)
-    : BaseWorkload<SoftmaxQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<SoftmaxQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonSoftmaxWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("NeonSoftmaxWorkload", 1, 1);
 
     // The ArmCompute softmax layer uses 2D input/output tensors, so flatten the first three dimensions.
@@ -48,7 +54,7 @@ NeonSoftmaxWorkload::NeonSoftmaxWorkload(const SoftmaxQueueDescriptor& descripto
 
 void NeonSoftmaxWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonSoftmaxWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonSoftmaxWorkload_Execute", this->GetGuid());
     m_SoftmaxLayer->run();
 }
 

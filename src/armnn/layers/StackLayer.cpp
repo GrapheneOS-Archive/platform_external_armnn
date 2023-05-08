@@ -6,8 +6,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <queue>
 
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> StackLayer::CreateWorkload(const IWorkloadFactory& fa
     StackQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateStack(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Stack, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 StackLayer* StackLayer::Clone(Graph& graph) const
@@ -95,9 +95,9 @@ void StackLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "StackLayer");
 }
 
-void StackLayer::Accept(ILayerVisitor& visitor) const
+void StackLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitStackLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn armnn

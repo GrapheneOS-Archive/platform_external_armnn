@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "WorkloadFactory.hpp"
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -34,8 +34,9 @@ public:
                                                       const bool /*IsMemoryManaged*/) const override
     { return nullptr; }
 
-    std::unique_ptr<IWorkload> CreateAbs(const AbsQueueDescriptor& /*descriptor*/,
-                                         const WorkloadInfo& /*info*/) const override
+    std::unique_ptr<IWorkload> CreateWorkload(LayerType /*type*/,
+                                              const QueueDescriptor& /*descriptor*/,
+                                              const WorkloadInfo& /*info*/) const override
     { return nullptr; }
 
     std::unique_ptr<IWorkload> CreateActivation(const ActivationQueueDescriptor& /*descriptor*/,
@@ -109,21 +110,14 @@ public:
     std::unique_ptr<IWorkload> CreateElementwiseUnary(const ElementwiseUnaryQueueDescriptor& descriptor,
                                                       const WorkloadInfo& info) const override
     {
-        if (descriptor.m_Parameters.m_Operation == UnaryOperation::Abs)
+        if (descriptor.m_Parameters.m_Operation == UnaryOperation::LogicalNot)
         {
-            AbsQueueDescriptor absDescriptor;
-            return CreateAbs(absDescriptor, info);
+            return CreateWorkload(armnn::LayerType::ElementwiseUnary, descriptor, info);
         }
-        else if (descriptor.m_Parameters.m_Operation == UnaryOperation::Rsqrt)
+        else
         {
-            RsqrtQueueDescriptor rsqrtDescriptor;
-            return CreateRsqrt(rsqrtDescriptor, info);
+            { return nullptr; }
         }
-        else if (descriptor.m_Parameters.m_Operation == UnaryOperation::LogicalNot)
-        {
-            return CreateLogicalUnary(descriptor, info);
-        }
-        return nullptr;
     }
 
     std::unique_ptr<IWorkload> CreateFakeQuantization(const FakeQuantizationQueueDescriptor& /*descriptor*/,
@@ -206,6 +200,10 @@ public:
                                                const WorkloadInfo& /*info*/) const override
     { return nullptr; }
 
+    std::unique_ptr<IWorkload> CreatePooling3d(const Pooling3dQueueDescriptor& /*descriptor*/,
+                                               const WorkloadInfo& /*info*/) const override
+    { return nullptr; }
+
     std::unique_ptr<IWorkload> CreatePreCompiled(const PreCompiledQueueDescriptor& /*descriptor*/,
                                                  const WorkloadInfo& /*info*/) const override
     { return nullptr; }
@@ -232,10 +230,6 @@ public:
 
     std::unique_ptr<IWorkload> CreateResize(const ResizeQueueDescriptor& /*descriptor*/,
                                             const WorkloadInfo& /*info*/) const override
-    { return nullptr; }
-
-    std::unique_ptr<IWorkload> CreateRsqrt(const RsqrtQueueDescriptor& /*descriptor*/,
-                                           const WorkloadInfo& /*info*/) const override
     { return nullptr; }
 
     std::unique_ptr<IWorkload> CreateSlice(const SliceQueueDescriptor& /*descriptor*/,
