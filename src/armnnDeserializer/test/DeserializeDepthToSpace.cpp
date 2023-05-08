@@ -5,12 +5,14 @@
 
 #include "ParserFlatbuffersSerializeFixture.hpp"
 
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
+
+#include <boost/test/unit_test.hpp>
 
 #include <string>
 
-TEST_SUITE("Deserializer_DepthToSpace")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct DepthToSpaceFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit DepthToSpaceFixture(const std::string& inputShape,
@@ -113,7 +115,7 @@ struct DepthToSpaceFloat32Fixture : DepthToSpaceFixture
                                                        "Float32") {}     // data type
 };
 
-TEST_CASE_FIXTURE(DepthToSpaceFloat32Fixture, "DepthToSpaceFloat32")
+BOOST_FIXTURE_TEST_CASE(DepthToSpaceFloat32, DepthToSpaceFloat32Fixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -131,4 +133,4 @@ TEST_CASE_FIXTURE(DepthToSpaceFloat32Fixture, "DepthToSpaceFloat32")
         });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

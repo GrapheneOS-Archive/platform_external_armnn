@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Reshape")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct ReshapeFixture : public ParserFlatbuffersFixture
 {
     explicit ReshapeFixture(const std::string& inputShape,
@@ -79,13 +83,13 @@ struct ReshapeFixtureWithReshapeDims : ReshapeFixture
     ReshapeFixtureWithReshapeDims() : ReshapeFixture("[ 1, 9 ]", "[ 3, 3 ]", "[ 3, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(ReshapeFixtureWithReshapeDims, "ParseReshapeWithReshapeDims")
+BOOST_FIXTURE_TEST_CASE(ParseReshapeWithReshapeDims, ReshapeFixtureWithReshapeDims)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<2, armnn::DataType::QAsymmU8>(0,
                                                  { 1, 2, 3, 4, 5, 6, 7, 8, 9 },
                                                  { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({3,3})));
 }
 
@@ -94,13 +98,13 @@ struct ReshapeFixtureWithReshapeDimsFlatten : ReshapeFixture
     ReshapeFixtureWithReshapeDimsFlatten() : ReshapeFixture("[ 3, 3 ]", "[ 9 ]", "[ -1 ]") {}
 };
 
-TEST_CASE_FIXTURE(ReshapeFixtureWithReshapeDimsFlatten, "ParseReshapeWithReshapeDimsFlatten")
+BOOST_FIXTURE_TEST_CASE(ParseReshapeWithReshapeDimsFlatten, ReshapeFixtureWithReshapeDimsFlatten)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<1, armnn::DataType::QAsymmU8>(0,
                                                  { 1, 2, 3, 4, 5, 6, 7, 8, 9 },
                                                  { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({9})));
 }
 
@@ -109,13 +113,13 @@ struct ReshapeFixtureWithReshapeDimsFlattenTwoDims : ReshapeFixture
     ReshapeFixtureWithReshapeDimsFlattenTwoDims() : ReshapeFixture("[ 3, 2, 3 ]", "[ 2, 9 ]", "[ 2, -1 ]") {}
 };
 
-TEST_CASE_FIXTURE(ReshapeFixtureWithReshapeDimsFlattenTwoDims, "ParseReshapeWithReshapeDimsFlattenTwoDims")
+BOOST_FIXTURE_TEST_CASE(ParseReshapeWithReshapeDimsFlattenTwoDims, ReshapeFixtureWithReshapeDimsFlattenTwoDims)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<2, armnn::DataType::QAsymmU8>(0,
                                                  { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 },
                                                  { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({2,9})));
 }
 
@@ -124,13 +128,13 @@ struct ReshapeFixtureWithReshapeDimsFlattenOneDim : ReshapeFixture
     ReshapeFixtureWithReshapeDimsFlattenOneDim() : ReshapeFixture("[ 2, 9 ]", "[ 2, 3, 3 ]", "[ 2, -1, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(ReshapeFixtureWithReshapeDimsFlattenOneDim, "ParseReshapeWithReshapeDimsFlattenOneDim")
+BOOST_FIXTURE_TEST_CASE(ParseReshapeWithReshapeDimsFlattenOneDim, ReshapeFixtureWithReshapeDimsFlattenOneDim)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<3, armnn::DataType::QAsymmU8>(0,
                                                  { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 },
                                                  { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({2,3,3})));
 }
 
@@ -141,7 +145,7 @@ struct DynamicReshapeFixtureWithReshapeDimsFlattenOneDim : ReshapeFixture
                                                                          "[ 2, -1, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(DynamicReshapeFixtureWithReshapeDimsFlattenOneDim, "DynParseReshapeWithReshapeDimsFlattenOneDim")
+BOOST_FIXTURE_TEST_CASE(DynParseReshapeWithReshapeDimsFlattenOneDim, DynamicReshapeFixtureWithReshapeDimsFlattenOneDim)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
      RunTest<3,
@@ -152,4 +156,4 @@ TEST_CASE_FIXTURE(DynamicReshapeFixtureWithReshapeDimsFlattenOneDim, "DynParseRe
                                    true);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -12,30 +12,26 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonAdditionWorkload.hpp
     NeonArgMinMaxWorkload.cpp
     NeonArgMinMaxWorkload.hpp
-    NeonBatchMatMulWorkload.cpp
-    NeonBatchMatMulWorkload.hpp
     NeonBatchNormalizationWorkload.cpp
     NeonBatchNormalizationWorkload.hpp
     NeonBatchToSpaceNdWorkload.cpp
     NeonBatchToSpaceNdWorkload.hpp
-    NeonCastWorkload.cpp
-    NeonCastWorkload.hpp
-    NeonChannelShuffleWorkload.cpp
-    NeonChannelShuffleWorkload.hpp
     NeonComparisonWorkload.cpp
     NeonComparisonWorkload.hpp
     NeonConcatWorkload.cpp
     NeonConcatWorkload.hpp
     NeonConstantWorkload.cpp
     NeonConstantWorkload.hpp
+    NeonConvertBf16ToFp32Workload.cpp
+    NeonConvertBf16ToFp32Workload.hpp
     NeonConvertFp16ToFp32Workload.cpp
     NeonConvertFp16ToFp32Workload.hpp
+    NeonConvertFp32ToBf16Workload.cpp
+    NeonConvertFp32ToBf16Workload.hpp
     NeonConvertFp32ToFp16Workload.cpp
     NeonConvertFp32ToFp16Workload.hpp
     NeonConvolution2dWorkload.cpp
     NeonConvolution2dWorkload.hpp
-    NeonConvolution3dWorkload.cpp
-    NeonConvolution3dWorkload.hpp
     NeonDepthToSpaceWorkload.cpp
     NeonDepthToSpaceWorkload.hpp
     NeonDepthwiseConvolutionWorkload.cpp
@@ -54,14 +50,10 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonFullyConnectedWorkload.hpp
     NeonGatherWorkload.cpp
     NeonGatherWorkload.hpp
-    NeonGatherNdWorkload.cpp
-    NeonGatherNdWorkload.hpp
     NeonInstanceNormalizationWorkload.cpp
     NeonInstanceNormalizationWorkload.hpp
     NeonL2NormalizationFloatWorkload.cpp
     NeonL2NormalizationFloatWorkload.hpp
-    NeonLogWorkload.cpp
-    NeonLogWorkload.hpp
     NeonLogicalAndWorkload.cpp
     NeonLogicalAndWorkload.hpp
     NeonLogicalNotWorkload.cpp
@@ -92,8 +84,6 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonPermuteWorkload.hpp
     NeonPooling2dWorkload.cpp
     NeonPooling2dWorkload.hpp
-    NeonPooling3dWorkload.hpp
-    NeonPooling3dWorkload.cpp
     NeonPreluWorkload.cpp
     NeonPreluWorkload.hpp
     NeonQLstmWorkload.cpp
@@ -102,17 +92,12 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonQuantizedLstmWorkload.hpp
     NeonQuantizeWorkload.cpp
     NeonQuantizeWorkload.hpp
-    NeonRankWorkload.hpp
-    NeonReduceWorkload.cpp
-    NeonReduceWorkload.hpp
     NeonReshapeWorkload.cpp
     NeonReshapeWorkload.hpp
     NeonResizeWorkload.cpp
     NeonResizeWorkload.hpp
     NeonRsqrtWorkload.cpp
     NeonRsqrtWorkload.hpp
-    NeonSinWorkload.cpp
-    NeonSinWorkload.hpp
     NeonSliceWorkload.cpp
     NeonSliceWorkload.hpp
     NeonSoftmaxWorkload.cpp
@@ -123,8 +108,6 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonSpaceToDepthWorkload.hpp
     NeonSplitterWorkload.cpp
     NeonSplitterWorkload.hpp
-    NeonSqrtWorkload.cpp
-    NeonSqrtWorkload.hpp
     NeonStackWorkload.cpp
     NeonStackWorkload.hpp
     NeonStridedSliceWorkload.cpp
@@ -135,10 +118,6 @@ list(APPEND armnnNeonBackendWorkloads_sources
     NeonTransposeConvolution2dWorkload.hpp
     NeonTransposeWorkload.cpp
     NeonTransposeWorkload.hpp
-    NeonUnidirectionalSequenceLstmFloatWorkload.cpp
-    NeonUnidirectionalSequenceLstmFloatWorkload.hpp
-    NeonUnidirectionalSequenceLstmWorkload.cpp
-    NeonUnidirectionalSequenceLstmWorkload.hpp
     NeonWorkloads.hpp
     NeonWorkloadUtils.hpp
 )
@@ -149,4 +128,3 @@ target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DI
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
 target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)
-target_include_directories(armnnNeonBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/client/include)

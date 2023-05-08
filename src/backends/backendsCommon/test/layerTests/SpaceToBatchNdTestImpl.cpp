@@ -5,16 +5,16 @@
 
 #include "SpaceToBatchNdTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
 #include <armnnUtils/Permute.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -58,9 +58,12 @@ LayerTestResult<T, 4> SpaceToBatchNdTestImpl(
         outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset);
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(outputExpectedData, qScale, qOffset);
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    boost::multi_array<T, 4> input = MakeTensor<T, 4>(inputTensorInfo,
+                                                      armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset));
+
+    LayerTestResult<T, 4> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo,
+                                          armnnUtils::QuantizedVector<T>(outputExpectedData, qScale, qOffset));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -69,23 +72,18 @@ LayerTestResult<T, 4> SpaceToBatchNdTestImpl(
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::SpaceToBatchNd,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSpaceToBatchNd(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
 
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>

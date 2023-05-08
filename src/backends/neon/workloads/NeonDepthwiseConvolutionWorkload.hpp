@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/IFunction.h>
 #include <arm_compute/runtime/Tensor.h>
@@ -23,7 +23,7 @@ arm_compute::Status NeonDepthwiseConvolutionWorkloadValidate(const TensorInfo& i
                                                              const ActivationDescriptor* activationDescriptor
                                                                      = nullptr);
 
-class NeonDepthwiseConvolutionWorkload : public NeonBaseWorkload<DepthwiseConvolution2dQueueDescriptor>
+class NeonDepthwiseConvolutionWorkload : public BaseWorkload<DepthwiseConvolution2dQueueDescriptor>
 {
 public:
     NeonDepthwiseConvolutionWorkload(const DepthwiseConvolution2dQueueDescriptor& descriptor,
@@ -33,6 +33,11 @@ public:
 
 private:
     mutable std::unique_ptr<arm_compute::IFunction> m_pDepthwiseConvolutionLayer;
+
+    std::unique_ptr<arm_compute::Tensor> m_KernelTensor;
+    std::unique_ptr<arm_compute::Tensor> m_BiasTensor;
+
+    void FreeUnusedTensors();
 };
 
 } // namespace armnn

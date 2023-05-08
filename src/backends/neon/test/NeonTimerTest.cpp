@@ -6,35 +6,35 @@
 #include "NeonWorkloadFactoryHelper.hpp"
 
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #include <neon/NeonTimer.hpp>
 #include <neon/NeonWorkloadFactory.hpp>
 
 #include <backendsCommon/test/LayerTests.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <cstdlib>
 #include <algorithm>
 
 using namespace armnn;
 
-TEST_SUITE("NeonTimerInstrument")
-{
+BOOST_AUTO_TEST_SUITE(NeonTimerInstrument)
 
-TEST_CASE("NeonTimerGetName")
+
+BOOST_AUTO_TEST_CASE(NeonTimerGetName)
 {
     NeonTimer neonTimer;
-    CHECK_EQ(std::string(neonTimer.GetName()), "NeonKernelTimer");
+    BOOST_CHECK_EQUAL(neonTimer.GetName(), "NeonKernelTimer");
 }
 
-TEST_CASE("NeonTimerMeasure")
+BOOST_AUTO_TEST_CASE(NeonTimerMeasure)
 {
     NeonWorkloadFactory workloadFactory =
         NeonWorkloadFactoryHelper::GetFactory(NeonWorkloadFactoryHelper::GetMemoryManager());
@@ -63,6 +63,10 @@ TEST_CASE("NeonTimerMeasure")
     armnn::TensorInfo outputTensorInfo({ outputBatchSize, outputChannels, outputHeight, outputWidth },
         armnn::DataType::Float32);
 
+    LayerTestResult<float, 4> result(inputTensorInfo);
+
+    auto input = MakeTensor<float, 4>(inputTensorInfo, inputData);
+
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = workloadFactory.CreateTensorHandle(outputTensorInfo);
@@ -78,13 +82,12 @@ TEST_CASE("NeonTimerMeasure")
     descriptor.m_Parameters.m_A = upperBound;
     descriptor.m_Parameters.m_B = lowerBound;
 
-    std::unique_ptr<armnn::IWorkload> workload
-            = workloadFactory.CreateWorkload(LayerType::Activation, descriptor, workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateActivation(descriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
 
     NeonTimer neonTimer;
     // Start the timer.
@@ -96,20 +99,16 @@ TEST_CASE("NeonTimerMeasure")
 
     std::vector<Measurement> measurements = neonTimer.GetMeasurements();
 
-    CHECK(measurements.size() <= 2);
+    BOOST_CHECK(measurements.size() <= 2);
     if (measurements.size() > 1)
     {
-        CHECK_EQ(measurements[0].m_Name, "NeonKernelTimer/0: NEFillBorderKernel");
-        CHECK(measurements[0].m_Value > 0.0);
+        BOOST_CHECK_EQUAL(measurements[0].m_Name, "NeonKernelTimer/0: NEFillBorderKernel");
+        BOOST_CHECK(measurements[0].m_Value > 0.0);
     }
-    std::ostringstream oss_neon;
-    std::ostringstream oss_cpu;
-    oss_neon << "NeonKernelTimer/" << measurements.size()-1 << ": NEActivationLayerKernel";
-    oss_cpu << "NeonKernelTimer/" << measurements.size()-1 << ": CpuActivationKernel";
-    bool kernelCheck = ((measurements[measurements.size()-1].m_Name.find(oss_neon.str()) != std::string::npos)
-                        || (measurements[measurements.size()-1].m_Name.find(oss_cpu.str()) != std::string::npos));
-    CHECK(kernelCheck);
-    CHECK(measurements[measurements.size()-1].m_Value > 0.0);
+    std::ostringstream oss;
+    oss << "NeonKernelTimer/" << measurements.size()-1 << ": NEActivationLayerKernel";
+    BOOST_CHECK_EQUAL(measurements[measurements.size()-1].m_Name, oss.str());
+    BOOST_CHECK(measurements[measurements.size()-1].m_Value > 0.0);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

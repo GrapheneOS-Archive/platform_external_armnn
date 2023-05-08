@@ -1,30 +1,28 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "RefBaseWorkload.hpp"
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 namespace armnn
 {
 
-class RefBatchNormalizationWorkload : public RefBaseWorkload<BatchNormalizationQueueDescriptor>
+class RefBatchNormalizationWorkload : public BaseWorkload<BatchNormalizationQueueDescriptor>
 {
 public:
     explicit RefBatchNormalizationWorkload(const BatchNormalizationQueueDescriptor& descriptor,
                                            const WorkloadInfo& info);
-    void Execute() const override;
-    void ExecuteAsync(ExecutionData& executionData)  override;
+    virtual void Execute() const override;
 
 private:
-    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
-    std::unique_ptr<ScopedTensorHandle> m_Mean;
-    std::unique_ptr<ScopedTensorHandle> m_Variance;
-    std::unique_ptr<ScopedTensorHandle> m_Beta;
-    std::unique_ptr<ScopedTensorHandle> m_Gamma;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Mean;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Variance;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Beta;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Gamma;
 };
 
 } //namespace armnn

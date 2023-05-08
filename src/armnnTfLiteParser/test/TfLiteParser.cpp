@@ -1,19 +1,20 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include <doctest/doctest.h>
+#include "../TfLiteParser.hpp"
 
-TEST_SUITE("TensorflowLiteParser")
-{
-TEST_CASE("ParseEmptyBinaryData")
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
+BOOST_AUTO_TEST_CASE(ParseEmptyBinaryData)
 {
     ITfLiteParser::TfLiteParserOptions options;
     ITfLiteParserPtr m_Parser(ITfLiteParser::Create(armnn::Optional<ITfLiteParser::TfLiteParserOptions>(options)));
     // Should throw armnn::ParseException: Buffer doesn't conform to the expected Tensorflow Lite flatbuffers format.
-    CHECK_THROWS_AS(m_Parser->CreateNetworkFromBinary({0}), armnn::ParseException);
+    BOOST_CHECK_THROW(m_Parser->CreateNetworkFromBinary({0}), armnn::ParseException);
 }
 
 struct NoInputBindingsFixture : public ParserFlatbuffersFixture
@@ -31,10 +32,10 @@ struct NoInputBindingsFixture : public ParserFlatbuffersFixture
     }
 };
 
-TEST_CASE_FIXTURE(NoInputBindingsFixture, "ParseBadInputBindings")
+BOOST_FIXTURE_TEST_CASE( ParseBadInputBindings, NoInputBindingsFixture )
 {
     // Should throw armnn::ParseException: No input binding found for subgraph:0 and name:inputTensor.
-    CHECK_THROWS_AS((RunTest<4, armnn::DataType::QAsymmU8>(0, { }, { 0 })), armnn::ParseException);
+    BOOST_CHECK_THROW( (RunTest<4, armnn::DataType::QAsymmU8>(0, { }, { 0 })), armnn::ParseException);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

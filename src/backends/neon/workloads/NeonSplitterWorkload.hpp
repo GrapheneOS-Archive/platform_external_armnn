@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/IFunction.h>
@@ -19,7 +19,7 @@ arm_compute::Status NeonSplitterWorkloadValidate(const TensorInfo& input,
                                                  const std::vector<std::reference_wrapper<TensorInfo>>& outputs,
                                                  unsigned int splitAxis);
 
-class NeonSplitterWorkload : public NeonBaseWorkload<SplitterQueueDescriptor>
+class NeonSplitterWorkload : public BaseWorkload<SplitterQueueDescriptor>
 {
 public:
     NeonSplitterWorkload(const SplitterQueueDescriptor& descriptor, const WorkloadInfo& info);

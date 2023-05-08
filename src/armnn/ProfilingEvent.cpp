@@ -9,17 +9,15 @@
 namespace armnn
 {
 Event::Event(const std::string& eventName,
-             IProfiler* profiler,
+             Profiler* profiler,
              Event* parent,
              const BackendId backendId,
-             std::vector<InstrumentPtr>&& instruments,
-             const Optional<arm::pipe::ProfilingGuid> guid)
+             std::vector<InstrumentPtr>&& instruments)
     : m_EventName(eventName)
     , m_Profiler(profiler)
     , m_Parent(parent)
     , m_BackendId(backendId)
     , m_Instruments(std::move(instruments))
-    , m_ProfilingGuid(guid)
 {
 }
 
@@ -29,7 +27,7 @@ Event::Event(Event&& other) noexcept
     , m_Parent(other.m_Parent)
     , m_BackendId(other.m_BackendId)
     , m_Instruments(std::move(other.m_Instruments))
-    , m_ProfilingGuid(other.m_ProfilingGuid)
+
 {
 }
 
@@ -66,17 +64,12 @@ const std::vector<Measurement> Event::GetMeasurements() const
     return measurements;
 }
 
-const std::vector<Event::InstrumentPtr>& Event::GetInstruments() const
-{
-    return m_Instruments;
-}
-
 const std::string& Event::GetName() const
 {
     return m_EventName;
 }
 
-const IProfiler* Event::GetProfiler() const
+const Profiler* Event::GetProfiler() const
 {
     return m_Profiler;
 }
@@ -91,12 +84,6 @@ BackendId Event::GetBackendId() const
     return m_BackendId;
 }
 
-Optional<arm::pipe::ProfilingGuid> Event::GetProfilingGuid() const
-{
-    return m_ProfilingGuid;
-}
-
-
 Event& Event::operator=(Event&& other) noexcept
 {
     if (this == &other)
@@ -108,7 +95,6 @@ Event& Event::operator=(Event&& other) noexcept
     m_Profiler = other.m_Profiler;
     m_Parent = other.m_Parent;
     m_BackendId = other.m_BackendId;
-    m_ProfilingGuid = other.m_ProfilingGuid;
     other.m_Profiler = nullptr;
     other.m_Parent = nullptr;
     return *this;

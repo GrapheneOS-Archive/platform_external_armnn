@@ -8,12 +8,12 @@
 
 namespace armnn
 {
+
 template <typename T>
 void Debug(const TensorInfo& inputInfo,
            const T* inputData,
            LayerGuid guid,
            const std::string& layerName,
-           unsigned int slotIndex,
-           bool outputsToFile);
+           unsigned int slotIndex);
 
 } //namespace armnn

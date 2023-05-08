@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/IFunction.h>
 #include <arm_compute/runtime/Tensor.h>
@@ -24,7 +24,7 @@ arm_compute::Status NeonBatchNormalizationValidate(const TensorInfo& input,
                                                    const BatchNormalizationDescriptor& descriptor,
                                                    const ActivationDescriptor* activationDescriptor = nullptr);
 
-class NeonBatchNormalizationWorkload : public NeonBaseWorkload<BatchNormalizationQueueDescriptor>
+class NeonBatchNormalizationWorkload : public BaseWorkload<BatchNormalizationQueueDescriptor>
 {
 public:
     NeonBatchNormalizationWorkload(const BatchNormalizationQueueDescriptor& descriptor,

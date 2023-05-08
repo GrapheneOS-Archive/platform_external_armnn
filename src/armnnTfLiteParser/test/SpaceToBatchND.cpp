@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_SpaceToBatchND")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SpaceToBatchNDFixture : public ParserFlatbuffersFixture
 {
     explicit SpaceToBatchNDFixture(const std::string & inputShape,
@@ -101,7 +105,7 @@ struct SpaceToBatchNDFixtureSimpleTest : public SpaceToBatchNDFixture
                                                               "[ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SpaceToBatchNDFixtureSimpleTest, "SpaceToBatchNdSimpleTest")
+BOOST_FIXTURE_TEST_CASE(SpaceToBatchNdSimpleTest, SpaceToBatchNDFixtureSimpleTest)
 {
     RunTest<4, armnn::DataType::Float32>
         (0,
@@ -124,7 +128,7 @@ struct SpaceToBatchNDFixtureMultipleInputBatchesTest : public SpaceToBatchNDFixt
                                                                             "[ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SpaceToBatchNDFixtureMultipleInputBatchesTest, "SpaceToBatchNdMultipleInputBatchesTest")
+BOOST_FIXTURE_TEST_CASE(SpaceToBatchNdMultipleInputBatchesTest, SpaceToBatchNDFixtureMultipleInputBatchesTest)
 {
     RunTest<4, armnn::DataType::Float32>
         (0,
@@ -146,7 +150,7 @@ struct SpaceToBatchNDFixturePaddingTest : public SpaceToBatchNDFixture
                                                                "[ 1,0,0,0, 0,0,0,0, 2,0,0,0, 0,0,0,0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SpaceToBatchNDFixturePaddingTest, "SpaceToBatchNdPaddingTest")
+BOOST_FIXTURE_TEST_CASE(SpaceToBatchNdPaddingTest, SpaceToBatchNDFixturePaddingTest)
 {
     RunTest<4, armnn::DataType::Float32>
         (0,
@@ -171,4 +175,4 @@ TEST_CASE_FIXTURE(SpaceToBatchNDFixturePaddingTest, "SpaceToBatchNdPaddingTest")
                                0.0f, 10.0f, }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

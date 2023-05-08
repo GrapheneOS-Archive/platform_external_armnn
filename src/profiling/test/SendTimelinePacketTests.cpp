@@ -4,32 +4,27 @@
 //
 
 #include "ProfilingMocks.hpp"
-#include "ProfilingTestUtils.hpp"
-#include "ProfilingOptionsConverter.hpp"
-#include <Runtime.hpp>
-#include <ArmNNProfilingServiceInitialiser.hpp>
 
-#include <armnn/profiling/ArmNNProfiling.hpp>
+#include <BufferManager.hpp>
+#include <LabelsAndEventClasses.hpp>
+#include <ProfilingService.hpp>
+#include <ProfilingUtils.hpp>
+#include <SendTimelinePacket.hpp>
+#include <Threads.hpp>
+#include <TimelinePacketWriterFactory.hpp>
 
-#include <client/src/BufferManager.hpp>
-#include <client/src/ProfilingService.hpp>
-#include <client/src/ProfilingUtils.hpp>
-#include <client/src/SendTimelinePacket.hpp>
-#include <client/src/TimelinePacketWriterFactory.hpp>
-
-#include <common/include/LabelsAndEventClasses.hpp>
 #include <common/include/SwTrace.hpp>
-#include <common/include/Threads.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <functional>
+#include <Runtime.hpp>
 
-using namespace arm::pipe;
+using namespace armnn::profiling;
 
-TEST_SUITE("SendTimelinePacketTests")
-{
-TEST_CASE("SendTimelineMessageDirectoryPackageTest")
+BOOST_AUTO_TEST_SUITE(SendTimelinePacketTests)
+
+BOOST_AUTO_TEST_CASE(SendTimelineMessageDirectoryPackageTest)
 {
     MockBufferManager mockBuffer(512);
     TimelinePacketWriterFactory timelinePacketWriterFactory(mockBuffer);
@@ -52,111 +47,111 @@ TEST_CASE("SendTimelineMessageDirectoryPackageTest")
     uint32_t packetType   = (packetHeaderWord0 >> 16) & 0x00000007;
     uint32_t streamId     = (packetHeaderWord0 >>  0) & 0x00000007;
 
-    CHECK(packetFamily == 1);
-    CHECK(packetClass  == 0);
-    CHECK(packetType   == 0);
-    CHECK(streamId     == 0);
+    BOOST_CHECK(packetFamily == 1);
+    BOOST_CHECK(packetClass  == 0);
+    BOOST_CHECK(packetType   == 0);
+    BOOST_CHECK(streamId     == 0);
 
     offset += uint32_t_size;
     uint32_t packetHeaderWord1 = ReadUint32(packetBuffer, offset);
     uint32_t sequenceNumbered = (packetHeaderWord1 >> 24) & 0x00000001;
     uint32_t dataLength       = (packetHeaderWord1 >>  0) & 0x00FFFFFF;
-    CHECK(sequenceNumbered ==  0);
-    CHECK(dataLength       == 443);
+    BOOST_CHECK(sequenceNumbered ==  0);
+    BOOST_CHECK(dataLength       == 443);
 
     offset += uint32_t_size;
     uint8_t readStreamVersion = ReadUint8(packetBuffer, offset);
-    CHECK(readStreamVersion == 4);
+    BOOST_CHECK(readStreamVersion == 4);
     offset += uint8_t_size;
     uint8_t readPointerBytes = ReadUint8(packetBuffer, offset);
-    CHECK(readPointerBytes == uint64_t_size);
+    BOOST_CHECK(readPointerBytes == uint64_t_size);
     offset += uint8_t_size;
     uint8_t readThreadIdBytes = ReadUint8(packetBuffer, offset);
-    CHECK(readThreadIdBytes == ThreadIdSize);
+    BOOST_CHECK(readThreadIdBytes == ThreadIdSize);
 
     offset += uint8_t_size;
     uint32_t DeclCount = ReadUint32(packetBuffer, offset);
-    CHECK(DeclCount == 5);
+    BOOST_CHECK(DeclCount == 5);
 
     offset += uint32_t_size;
     arm::pipe::SwTraceMessage swTraceMessage = arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
                                                                              offset,
                                                                              packetBuffer->GetSize());
 
-    CHECK(swTraceMessage.m_Id == 0);
-    CHECK(swTraceMessage.m_Name == "declareLabel");
-    CHECK(swTraceMessage.m_UiName == "declare label");
-    CHECK(swTraceMessage.m_ArgTypes.size() == 2);
-    CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
-    CHECK(swTraceMessage.m_ArgTypes[1] == 's');
-    CHECK(swTraceMessage.m_ArgNames.size() == 2);
-    CHECK(swTraceMessage.m_ArgNames[0] == "guid");
-    CHECK(swTraceMessage.m_ArgNames[1] == "value");
+    BOOST_CHECK(swTraceMessage.m_Id == 0);
+    BOOST_CHECK(swTraceMessage.m_Name == "declareLabel");
+    BOOST_CHECK(swTraceMessage.m_UiName == "declare label");
+    BOOST_CHECK(swTraceMessage.m_ArgTypes.size() == 2);
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[1] == 's');
+    BOOST_CHECK(swTraceMessage.m_ArgNames.size() == 2);
+    BOOST_CHECK(swTraceMessage.m_ArgNames[0] == "guid");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[1] == "value");
 
     swTraceMessage = arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
                                                    offset,
                                                    packetBuffer->GetSize());
 
-    CHECK(swTraceMessage.m_Id == 1);
-    CHECK(swTraceMessage.m_Name == "declareEntity");
-    CHECK(swTraceMessage.m_UiName == "declare entity");
-    CHECK(swTraceMessage.m_ArgTypes.size() == 1);
-    CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
-    CHECK(swTraceMessage.m_ArgNames.size() == 1);
-    CHECK(swTraceMessage.m_ArgNames[0] == "guid");
+    BOOST_CHECK(swTraceMessage.m_Id == 1);
+    BOOST_CHECK(swTraceMessage.m_Name == "declareEntity");
+    BOOST_CHECK(swTraceMessage.m_UiName == "declare entity");
+    BOOST_CHECK(swTraceMessage.m_ArgTypes.size() == 1);
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgNames.size() == 1);
+    BOOST_CHECK(swTraceMessage.m_ArgNames[0] == "guid");
 
     swTraceMessage = arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
                                                    offset,
                                                    packetBuffer->GetSize());
 
-    CHECK(swTraceMessage.m_Id == 2);
-    CHECK(swTraceMessage.m_Name == "declareEventClass");
-    CHECK(swTraceMessage.m_UiName == "declare event class");
-    CHECK(swTraceMessage.m_ArgTypes.size() == 2);
-    CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
-    CHECK(swTraceMessage.m_ArgTypes[1] == 'p');
-    CHECK(swTraceMessage.m_ArgNames.size() == 2);
-    CHECK(swTraceMessage.m_ArgNames[0] == "guid");
-    CHECK(swTraceMessage.m_ArgNames[1] == "nameGuid");
+    BOOST_CHECK(swTraceMessage.m_Id == 2);
+    BOOST_CHECK(swTraceMessage.m_Name == "declareEventClass");
+    BOOST_CHECK(swTraceMessage.m_UiName == "declare event class");
+    BOOST_CHECK(swTraceMessage.m_ArgTypes.size() == 2);
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[0] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[1] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgNames.size() == 2);
+    BOOST_CHECK(swTraceMessage.m_ArgNames[0] == "guid");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[1] == "nameGuid");
 
     swTraceMessage = arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
                                                    offset,
                                                    packetBuffer->GetSize());
 
-    CHECK(swTraceMessage.m_Id == 3);
-    CHECK(swTraceMessage.m_Name == "declareRelationship");
-    CHECK(swTraceMessage.m_UiName == "declare relationship");
-    CHECK(swTraceMessage.m_ArgTypes.size() == 5);
-    CHECK(swTraceMessage.m_ArgTypes[0] == 'I');
-    CHECK(swTraceMessage.m_ArgTypes[1] == 'p');
-    CHECK(swTraceMessage.m_ArgTypes[2] == 'p');
-    CHECK(swTraceMessage.m_ArgTypes[3] == 'p');
-    CHECK(swTraceMessage.m_ArgTypes[4] == 'p');
-    CHECK(swTraceMessage.m_ArgNames.size() == 5);
-    CHECK(swTraceMessage.m_ArgNames[0] == "relationshipType");
-    CHECK(swTraceMessage.m_ArgNames[1] == "relationshipGuid");
-    CHECK(swTraceMessage.m_ArgNames[2] == "headGuid");
-    CHECK(swTraceMessage.m_ArgNames[3] == "tailGuid");
-    CHECK(swTraceMessage.m_ArgNames[4] == "attributeGuid");
+    BOOST_CHECK(swTraceMessage.m_Id == 3);
+    BOOST_CHECK(swTraceMessage.m_Name == "declareRelationship");
+    BOOST_CHECK(swTraceMessage.m_UiName == "declare relationship");
+    BOOST_CHECK(swTraceMessage.m_ArgTypes.size() == 5);
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[0] == 'I');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[1] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[2] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[3] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[4] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgNames.size() == 5);
+    BOOST_CHECK(swTraceMessage.m_ArgNames[0] == "relationshipType");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[1] == "relationshipGuid");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[2] == "headGuid");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[3] == "tailGuid");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[4] == "attributeGuid");
 
     swTraceMessage = arm::pipe::ReadSwTraceMessage(packetBuffer->GetReadableData(),
                                                    offset,
                                                    packetBuffer->GetSize());
 
-    CHECK(swTraceMessage.m_Id == 4);
-    CHECK(swTraceMessage.m_Name == "declareEvent");
-    CHECK(swTraceMessage.m_UiName == "declare event");
-    CHECK(swTraceMessage.m_ArgTypes.size() == 3);
-    CHECK(swTraceMessage.m_ArgTypes[0] == '@');
-    CHECK(swTraceMessage.m_ArgTypes[1] == 't');
-    CHECK(swTraceMessage.m_ArgTypes[2] == 'p');
-    CHECK(swTraceMessage.m_ArgNames.size() == 3);
-    CHECK(swTraceMessage.m_ArgNames[0] == "timestamp");
-    CHECK(swTraceMessage.m_ArgNames[1] == "threadId");
-    CHECK(swTraceMessage.m_ArgNames[2] == "eventGuid");
+    BOOST_CHECK(swTraceMessage.m_Id == 4);
+    BOOST_CHECK(swTraceMessage.m_Name == "declareEvent");
+    BOOST_CHECK(swTraceMessage.m_UiName == "declare event");
+    BOOST_CHECK(swTraceMessage.m_ArgTypes.size() == 3);
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[0] == '@');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[1] == 't');
+    BOOST_CHECK(swTraceMessage.m_ArgTypes[2] == 'p');
+    BOOST_CHECK(swTraceMessage.m_ArgNames.size() == 3);
+    BOOST_CHECK(swTraceMessage.m_ArgNames[0] == "timestamp");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[1] == "threadId");
+    BOOST_CHECK(swTraceMessage.m_ArgNames[2] == "eventGuid");
 }
 
-TEST_CASE("SendTimelineEntityWithEventClassPacketTest")
+BOOST_AUTO_TEST_CASE(SendTimelineEntityWithEventClassPacketTest)
 {
     MockBufferManager bufferManager(40);
     TimelinePacketWriterFactory timelinePacketWriterFactory(bufferManager);
@@ -189,10 +184,10 @@ TEST_CASE("SendTimelineEntityWithEventClassPacketTest")
     uint32_t entityBinaryPacketType         = (entityBinaryPacketHeaderWord0 >> 16) & 0x00000007;
     uint32_t entityBinaryPacketStreamId     = (entityBinaryPacketHeaderWord0 >>  0) & 0x00000007;
 
-    CHECK(entityBinaryPacketFamily       == 1);
-    CHECK(entityBinaryPacketClass        == 0);
-    CHECK(entityBinaryPacketType         == 1);
-    CHECK(entityBinaryPacketStreamId     == 0);
+    BOOST_CHECK(entityBinaryPacketFamily       == 1);
+    BOOST_CHECK(entityBinaryPacketClass        == 0);
+    BOOST_CHECK(entityBinaryPacketType         == 1);
+    BOOST_CHECK(entityBinaryPacketStreamId     == 0);
 
     offset += uint32_t_size;
 
@@ -201,40 +196,40 @@ TEST_CASE("SendTimelineEntityWithEventClassPacketTest")
     uint32_t entityBinaryPacketSequenceNumbered = (entityBinaryPacketHeaderWord1 >> 24) & 0x00000001;
     uint32_t entityBinaryPacketDataLength       = (entityBinaryPacketHeaderWord1 >>  0) & 0x00FFFFFF;
 
-    CHECK(entityBinaryPacketSequenceNumbered == 0);
-    CHECK(entityBinaryPacketDataLength       == 32);
+    BOOST_CHECK(entityBinaryPacketSequenceNumbered == 0);
+    BOOST_CHECK(entityBinaryPacketDataLength       == 32);
 
     // Check the decl_id
     offset += uint32_t_size;
     uint32_t entitytDecId = ReadUint32(packetBuffer, offset);
 
-    CHECK(entitytDecId == uint32_t(1));
+    BOOST_CHECK(entitytDecId == uint32_t(1));
 
     // Check the profiling GUID
     offset += uint32_t_size;
     uint64_t readProfilingGuid = ReadUint64(packetBuffer, offset);
 
-    CHECK(readProfilingGuid == entityBinaryPacketProfilingGuid);
+    BOOST_CHECK(readProfilingGuid == entityBinaryPacketProfilingGuid);
 
     // Reading TimelineEventClassBinaryPacket
     offset += uint64_t_size;
 
     uint32_t eventClassDeclId = ReadUint32(packetBuffer, offset);
-    CHECK(eventClassDeclId == uint32_t(2));
+    BOOST_CHECK(eventClassDeclId == uint32_t(2));
 
     // Check the profiling GUID
     offset += uint32_t_size;
     readProfilingGuid = ReadUint64(packetBuffer, offset);
-    CHECK(readProfilingGuid == eventClassBinaryPacketProfilingGuid);
+    BOOST_CHECK(readProfilingGuid == eventClassBinaryPacketProfilingGuid);
 
     offset += uint64_t_size;
     uint64_t readEventClassNameGuid = ReadUint64(packetBuffer, offset);
-    CHECK(readEventClassNameGuid == eventClassBinaryPacketNameGuid);
+    BOOST_CHECK(readEventClassNameGuid == eventClassBinaryPacketNameGuid);
 
     bufferManager.MarkRead(packetBuffer);
 }
 
-TEST_CASE("SendEventClassAfterTimelineEntityPacketTest")
+BOOST_AUTO_TEST_CASE(SendEventClassAfterTimelineEntityPacketTest)
 {
     unsigned int uint32_t_size = sizeof(uint32_t);
     unsigned int uint64_t_size = sizeof(uint64_t);
@@ -263,29 +258,29 @@ TEST_CASE("SendEventClassAfterTimelineEntityPacketTest")
     uint32_t entityBinaryPacketType   = (entityBinaryPacketHeaderWord0 >> 16) & 0x00000007;
     uint32_t entityBinaryPacketStreamId     = (entityBinaryPacketHeaderWord0 >>  0) & 0x00000007;
 
-    CHECK(entityBinaryPacketFamily == 1);
-    CHECK(entityBinaryPacketClass  == 0);
-    CHECK(entityBinaryPacketType   == 1);
-    CHECK(entityBinaryPacketStreamId     == 0);
+    BOOST_CHECK(entityBinaryPacketFamily == 1);
+    BOOST_CHECK(entityBinaryPacketClass  == 0);
+    BOOST_CHECK(entityBinaryPacketType   == 1);
+    BOOST_CHECK(entityBinaryPacketStreamId     == 0);
 
     offset += uint32_t_size;
     uint32_t entityBinaryPacketHeaderWord1 = ReadUint32(packetBuffer, offset);
     uint32_t entityBinaryPacketSequenceNumbered = (entityBinaryPacketHeaderWord1 >> 24) & 0x00000001;
     uint32_t entityBinaryPacketDataLength       = (entityBinaryPacketHeaderWord1 >>  0) & 0x00FFFFFF;
-    CHECK(entityBinaryPacketSequenceNumbered == 0);
-    CHECK(entityBinaryPacketDataLength       == 12);
+    BOOST_CHECK(entityBinaryPacketSequenceNumbered == 0);
+    BOOST_CHECK(entityBinaryPacketDataLength       == 12);
 
     // Check the decl_id
     offset += uint32_t_size;
     uint32_t entitytDecId = ReadUint32(packetBuffer, offset);
 
-    CHECK(entitytDecId == uint32_t(1));
+    BOOST_CHECK(entitytDecId == uint32_t(1));
 
     // Check the profiling GUID
     offset += uint32_t_size;
     uint64_t readProfilingGuid = ReadUint64(packetBuffer, offset);
 
-    CHECK(readProfilingGuid == entityBinaryPacketProfilingGuid);
+    BOOST_CHECK(readProfilingGuid == entityBinaryPacketProfilingGuid);
 
     bufferManager.MarkRead(packetBuffer);
 
@@ -311,36 +306,36 @@ TEST_CASE("SendEventClassAfterTimelineEntityPacketTest")
     uint32_t eventClassBinaryPacketType   = (eventClassBinaryPacketHeaderWord0 >> 16) & 0x00000007;
     uint32_t eventClassBinaryPacketStreamId     = (eventClassBinaryPacketHeaderWord0 >>  0) & 0x00000007;
 
-    CHECK(eventClassBinaryPacketFamily == 1);
-    CHECK(eventClassBinaryPacketClass  == 0);
-    CHECK(eventClassBinaryPacketType   == 1);
-    CHECK(eventClassBinaryPacketStreamId     == 0);
+    BOOST_CHECK(eventClassBinaryPacketFamily == 1);
+    BOOST_CHECK(eventClassBinaryPacketClass  == 0);
+    BOOST_CHECK(eventClassBinaryPacketType   == 1);
+    BOOST_CHECK(eventClassBinaryPacketStreamId     == 0);
 
     offset += uint32_t_size;
     uint32_t eventClassBinaryPacketHeaderWord1 = ReadUint32(packetBuffer, offset);
     uint32_t eventClassBinaryPacketSequenceNumbered = (eventClassBinaryPacketHeaderWord1 >> 24) & 0x00000001;
     uint32_t eventClassBinaryPacketDataLength       = (eventClassBinaryPacketHeaderWord1 >>  0) & 0x00FFFFFF;
-    CHECK(eventClassBinaryPacketSequenceNumbered == 0);
-    CHECK(eventClassBinaryPacketDataLength       == 20);
+    BOOST_CHECK(eventClassBinaryPacketSequenceNumbered == 0);
+    BOOST_CHECK(eventClassBinaryPacketDataLength       == 20);
 
     offset += uint32_t_size;
     uint32_t eventClassDeclId = ReadUint32(packetBuffer, offset);
-    CHECK(eventClassDeclId == uint32_t(2));
+    BOOST_CHECK(eventClassDeclId == uint32_t(2));
 
     // Check the profiling GUID
     offset += uint32_t_size;
     readProfilingGuid = ReadUint64(packetBuffer, offset);
-    CHECK(readProfilingGuid == eventClassBinaryPacketProfilingGuid);
+    BOOST_CHECK(readProfilingGuid == eventClassBinaryPacketProfilingGuid);
 
     offset += uint64_t_size;
     uint64_t readEventClassNameGuid = ReadUint64(packetBuffer, offset);
-    CHECK(readEventClassNameGuid == eventClassBinaryPacketNameGuid);
+    BOOST_CHECK(readEventClassNameGuid == eventClassBinaryPacketNameGuid);
 
     bufferManager.MarkRead(packetBuffer);
 
     // Send TimelineEventBinaryPacket
     const uint64_t timestamp = 456789u;
-    const int threadId = arm::pipe::GetCurrentThreadId();
+    const int threadId = armnnUtils::Threads::GetCurrentThreadId();
     const uint64_t eventProfilingGuid = 123456u;
     sendTimelinePacket->SendTimelineEventBinaryPacket(timestamp, threadId, eventProfilingGuid);
 
@@ -360,51 +355,51 @@ TEST_CASE("SendEventClassAfterTimelineEntityPacketTest")
     uint32_t eventBinaryPacketType   = (eventBinaryPacketHeaderWord0 >> 16) & 0x00000007;
     uint32_t eventBinaryPacketStreamId     = (eventBinaryPacketHeaderWord0 >>  0) & 0x00000007;
 
-    CHECK(eventBinaryPacketFamily == 1);
-    CHECK(eventBinaryPacketClass  == 0);
-    CHECK(eventBinaryPacketType   == 1);
-    CHECK(eventBinaryPacketStreamId     == 0);
+    BOOST_CHECK(eventBinaryPacketFamily == 1);
+    BOOST_CHECK(eventBinaryPacketClass  == 0);
+    BOOST_CHECK(eventBinaryPacketType   == 1);
+    BOOST_CHECK(eventBinaryPacketStreamId     == 0);
 
     offset += uint32_t_size;
     uint32_t eventBinaryPacketHeaderWord1 = ReadUint32(packetBuffer, offset);
     uint32_t eventBinaryPacketSequenceNumbered = (eventBinaryPacketHeaderWord1 >> 24) & 0x00000001;
     uint32_t eventBinaryPacketDataLength       = (eventBinaryPacketHeaderWord1 >>  0) & 0x00FFFFFF;
-    CHECK(eventBinaryPacketSequenceNumbered == 0);
-    CHECK(eventBinaryPacketDataLength == 20 + ThreadIdSize);
+    BOOST_CHECK(eventBinaryPacketSequenceNumbered == 0);
+    BOOST_CHECK(eventBinaryPacketDataLength == 20 + ThreadIdSize);
 
     // Check the decl_id
     offset += uint32_t_size;
     uint32_t eventDeclId = ReadUint32(packetBuffer, offset);
-    CHECK(eventDeclId == 4);
+    BOOST_CHECK(eventDeclId == 4);
 
     // Check the timestamp
     offset += uint32_t_size;
     uint64_t eventTimestamp = ReadUint64(packetBuffer, offset);
-    CHECK(eventTimestamp == timestamp);
+    BOOST_CHECK(eventTimestamp == timestamp);
 
     // Check the thread id
     offset += uint64_t_size;
     std::vector<uint8_t> readThreadId(ThreadIdSize, 0);
     ReadBytes(packetBuffer, offset, ThreadIdSize, readThreadId.data());
-    CHECK(readThreadId == threadId);
+    BOOST_CHECK(readThreadId == threadId);
 
     // Check the profiling GUID
     offset += ThreadIdSize;
     readProfilingGuid = ReadUint64(packetBuffer, offset);
-    CHECK(readProfilingGuid == eventProfilingGuid);
+    BOOST_CHECK(readProfilingGuid == eventProfilingGuid);
 }
 
-TEST_CASE("SendTimelinePacketTests2")
+BOOST_AUTO_TEST_CASE(SendTimelinePacketTests2)
 {
     MockBufferManager bufferManager(40);
     TimelinePacketWriterFactory timelinePacketWriterFactory(bufferManager);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = timelinePacketWriterFactory.GetSendTimelinePacket();
 
-    CHECK_THROWS_AS(sendTimelinePacket->SendTimelineMessageDirectoryPackage(),
-                    arm::pipe::ProfilingException);
+    BOOST_CHECK_THROW(sendTimelinePacket->SendTimelineMessageDirectoryPackage(),
+                      armnn::RuntimeException);
 }
 
-TEST_CASE("SendTimelinePacketTests3")
+BOOST_AUTO_TEST_CASE(SendTimelinePacketTests3)
 {
     MockBufferManager bufferManager(512);
     TimelinePacketWriterFactory timelinePacketWriterFactory(bufferManager);
@@ -423,86 +418,70 @@ TEST_CASE("SendTimelinePacketTests3")
     // Send TimelineEventClassBinaryPacket
     const uint64_t eventClassBinaryPacketProfilingGuid = 789123u;
     const uint64_t eventClassBinaryPacketNameGuid = 8845u;
-    CHECK_THROWS_AS(sendTimelinePacket->SendTimelineEventClassBinaryPacket(
+    BOOST_CHECK_THROW(sendTimelinePacket->SendTimelineEventClassBinaryPacket(
                       eventClassBinaryPacketProfilingGuid, eventClassBinaryPacketNameGuid),
-                      BufferExhaustion);
+                      armnn::profiling::BufferExhaustion);
 }
 
-TEST_CASE("GetGuidsFromProfilingService")
+BOOST_AUTO_TEST_CASE(GetGuidsFromProfilingService)
 {
-    LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
-
     armnn::IRuntime::CreationOptions options;
     options.m_ProfilingOptions.m_EnableProfiling = true;
-    armnn::RuntimeImpl runtime(options);
-    armnn::ArmNNProfilingServiceInitialiser initialiser;
-    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
-                                      initialiser,
-                                      arm::pipe::ARMNN_SOFTWARE_INFO,
-                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                      arm::pipe::ARMNN_HARDWARE_VERSION,
-                                      runtime);
+    armnn::Runtime runtime(options);
+    armnn::profiling::ProfilingService profilingService(runtime);
 
-    profilingService.ResetExternalProfilingOptions(
-        ConvertExternalProfilingOptions(options.m_ProfilingOptions), true);
+    profilingService.ResetExternalProfilingOptions(options.m_ProfilingOptions, true);
     ProfilingStaticGuid staticGuid = profilingService.GetStaticId("dummy");
     std::hash<std::string> hasher;
     uint64_t hash = static_cast<uint64_t>(hasher("dummy"));
     ProfilingStaticGuid expectedStaticValue(hash | MIN_STATIC_GUID);
-    CHECK(staticGuid == expectedStaticValue);
+    BOOST_CHECK(staticGuid == expectedStaticValue);
     ProfilingDynamicGuid dynamicGuid = profilingService.GetNextGuid();
     uint64_t dynamicGuidValue = static_cast<uint64_t>(dynamicGuid);
     ++dynamicGuidValue;
     ProfilingDynamicGuid expectedDynamicValue(dynamicGuidValue);
     dynamicGuid = profilingService.GetNextGuid();
-    CHECK(dynamicGuid == expectedDynamicValue);
+    BOOST_CHECK(dynamicGuid == expectedDynamicValue);
 }
 
-TEST_CASE("GetTimelinePackerWriterFromProfilingService")
+BOOST_AUTO_TEST_CASE(GetTimelinePackerWriterFromProfilingService)
 {
-    LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
-
-    ProfilingOptions options;
+    armnn::IRuntime::CreationOptions::ExternalProfilingOptions options;
     options.m_EnableProfiling = true;
-    armnn::ArmNNProfilingServiceInitialiser initialiser;
-    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
-                                      initialiser,
-                                      arm::pipe::ARMNN_SOFTWARE_INFO,
-                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                      arm::pipe::ARMNN_HARDWARE_VERSION);
+    armnn::profiling::ProfilingService profilingService;
     profilingService.ResetExternalProfilingOptions(options, true);
 
     std::unique_ptr<ISendTimelinePacket> writer = profilingService.GetSendTimelinePacket();
-    CHECK(writer != nullptr);
+    BOOST_CHECK(writer != nullptr);
 }
 
-TEST_CASE("CheckStaticGuidsAndEvents")
+BOOST_AUTO_TEST_CASE(CheckStaticGuidsAndEvents)
 {
-    CHECK("name" == LabelsAndEventClasses::NAME_LABEL);
-    CHECK("type" == LabelsAndEventClasses::TYPE_LABEL);
-    CHECK("index" == LabelsAndEventClasses::INDEX_LABEL);
+    BOOST_CHECK("name" == LabelsAndEventClasses::NAME_LABEL);
+    BOOST_CHECK("type" == LabelsAndEventClasses::TYPE_LABEL);
+    BOOST_CHECK("index" == LabelsAndEventClasses::INDEX_LABEL);
 
     std::hash<std::string> hasher;
 
     uint64_t hash = static_cast<uint64_t>(hasher(LabelsAndEventClasses::NAME_LABEL));
     ProfilingStaticGuid expectedNameGuid(hash | MIN_STATIC_GUID);
-    CHECK(LabelsAndEventClasses::NAME_GUID == expectedNameGuid);
+    BOOST_CHECK(LabelsAndEventClasses::NAME_GUID == expectedNameGuid);
 
     hash = static_cast<uint64_t>(hasher(LabelsAndEventClasses::TYPE_LABEL));
     ProfilingStaticGuid expectedTypeGuid(hash | MIN_STATIC_GUID);
-    CHECK(LabelsAndEventClasses::TYPE_GUID == expectedTypeGuid);
+    BOOST_CHECK(LabelsAndEventClasses::TYPE_GUID == expectedTypeGuid);
 
     hash = static_cast<uint64_t>(hasher(LabelsAndEventClasses::INDEX_LABEL));
     ProfilingStaticGuid expectedIndexGuid(hash | MIN_STATIC_GUID);
-    CHECK(LabelsAndEventClasses::INDEX_GUID == expectedIndexGuid);
+    BOOST_CHECK(LabelsAndEventClasses::INDEX_GUID == expectedIndexGuid);
 
     hash = static_cast<uint64_t>(hasher("ARMNN_PROFILING_SOL"));
     ProfilingStaticGuid expectedSol(hash | MIN_STATIC_GUID);
-    CHECK(LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS == expectedSol);
+    BOOST_CHECK(LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS == expectedSol);
 
     hash = static_cast<uint64_t>(hasher("ARMNN_PROFILING_EOL"));
     ProfilingStaticGuid expectedEol(hash | MIN_STATIC_GUID);
-    CHECK(LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS == expectedEol);
+    BOOST_CHECK(LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS == expectedEol);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

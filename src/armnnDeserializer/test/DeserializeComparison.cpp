@@ -4,15 +4,17 @@
 //
 
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
+
+#include <boost/test/unit_test.hpp>
 
 #include <string>
 
-TEST_SUITE("Deserializer_Comparison")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 #define DECLARE_SIMPLE_COMPARISON_FIXTURE(operation, dataType) \
 struct Simple##operation##dataType##Fixture : public SimpleComparisonFixture \
 { \
@@ -22,7 +24,7 @@ struct Simple##operation##dataType##Fixture : public SimpleComparisonFixture \
 
 #define DECLARE_SIMPLE_COMPARISON_TEST_CASE(operation, dataType) \
 DECLARE_SIMPLE_COMPARISON_FIXTURE(operation, dataType) \
-TEST_CASE_FIXTURE(Simple##operation##dataType##Fixture, #operation#dataType) \
+BOOST_FIXTURE_TEST_CASE(operation##dataType, Simple##operation##dataType##Fixture) \
 { \
     using T = armnn::ResolveType<armnn::DataType::dataType>; \
     constexpr float   qScale  = 1.f; \
@@ -241,6 +243,15 @@ DECLARE_SIMPLE_COMPARISON_TEST_CASE(LessOrEqual,    Float32)
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(NotEqual,       Float32)
 
 
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(Equal,          QuantisedAsymm8)
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(Greater,        QuantisedAsymm8)
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(GreaterOrEqual, QuantisedAsymm8)
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(Less,           QuantisedAsymm8)
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(LessOrEqual,    QuantisedAsymm8)
+DECLARE_SIMPLE_COMPARISON_TEST_CASE(NotEqual,       QuantisedAsymm8)
+ARMNN_NO_DEPRECATE_WARN_END
+
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(Equal,          QAsymmU8)
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(Greater,        QAsymmU8)
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(GreaterOrEqual, QAsymmU8)
@@ -248,4 +259,4 @@ DECLARE_SIMPLE_COMPARISON_TEST_CASE(Less,           QAsymmU8)
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(LessOrEqual,    QAsymmU8)
 DECLARE_SIMPLE_COMPARISON_TEST_CASE(NotEqual,       QAsymmU8)
 
-}
+BOOST_AUTO_TEST_SUITE_END()

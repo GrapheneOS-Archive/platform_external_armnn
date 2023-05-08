@@ -41,9 +41,8 @@ inline armnn::InputTensors MakeInputTensors(const std::vector<armnn::BindingPoin
                                                   inputBinding.second.GetNumElements(),
                                                   value.size()));
             }
-            armnn::TensorInfo inputTensorInfo = inputBinding.second;
-            inputTensorInfo.SetConstant(true);
-            armnn::ConstTensor inputTensor(inputTensorInfo, value.data());
+
+            armnn::ConstTensor inputTensor(inputBinding.second, value.data());
             inputTensors.push_back(std::make_pair(inputBinding.first, inputTensor));
         },
         inputData);

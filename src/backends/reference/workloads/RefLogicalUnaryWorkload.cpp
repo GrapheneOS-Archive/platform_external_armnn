@@ -1,5 +1,5 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,32 +19,30 @@ namespace armnn
 
 RefLogicalUnaryWorkload::RefLogicalUnaryWorkload(const ElementwiseUnaryQueueDescriptor& desc,
                                                  const WorkloadInfo& info)
-    : RefBaseWorkload<ElementwiseUnaryQueueDescriptor>(desc, info)
+    : BaseWorkload<ElementwiseUnaryQueueDescriptor>(desc, info)
 {}
+
+void RefLogicalUnaryWorkload::PostAllocationConfigure()
+{
+    const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
+    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
+
+    m_Input = MakeDecoder<InType>(inputInfo);
+    m_Output = MakeEncoder<OutType>(outputInfo);
+}
 
 void RefLogicalUnaryWorkload::Execute() const
 {
-    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
-}
-
-void RefLogicalUnaryWorkload::ExecuteAsync(ExecutionData& executionData)
-{
-    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
-    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
-}
-
-void RefLogicalUnaryWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
-{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefLogicalUnaryWorkload_Execute");
 
-    const TensorInfo& inputInfo = GetTensorInfo(inputs[0]);
-    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
+    const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
+    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
 
     const TensorShape& inShape = inputInfo.GetShape();
     const TensorShape& outShape = outputInfo.GetShape();
 
-    std::unique_ptr<Decoder<InType>>  input = MakeDecoder<InType>(inputInfo, inputs[0]->Map());
-    std::unique_ptr<Encoder<OutType>> output = MakeEncoder<OutType>(outputInfo, outputs[0]->Map());
+    m_Input->Reset(m_Data.m_Inputs[0]->Map());
+    m_Output->Reset(m_Data.m_Outputs[0]->Map());
 
     using NotFunction = LogicalUnaryFunction<std::logical_not<bool>>;
 
@@ -52,7 +50,7 @@ void RefLogicalUnaryWorkload::Execute(std::vector<ITensorHandle*> inputs, std::v
     {
         case UnaryOperation::LogicalNot:
         {
-            NotFunction(inShape, outShape, *input, *output);
+            NotFunction(inShape, outShape, *m_Input, *m_Output);
             break;
         }
         default:

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -23,25 +23,20 @@ arm_compute::Status ClRsqrtWorkloadValidate(const TensorInfo& input, const Tenso
     return arm_compute::CLRsqrtLayer::validate(&aclInput, &aclOutput);
 }
 
-ClRsqrtWorkload::ClRsqrtWorkload(const RsqrtQueueDescriptor& descriptor,
-                                 const WorkloadInfo& info,
-                                 const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<RsqrtQueueDescriptor>(descriptor, info)
+ClRsqrtWorkload::ClRsqrtWorkload(const RsqrtQueueDescriptor& descriptor, const WorkloadInfo& info)
+    : BaseWorkload<RsqrtQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("ClRsqrtWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& output = PolymorphicDowncast<ClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClRsqrtWorkload_configure");
-        m_RsqrtLayer.configure(clCompileContext, &input, &output);
-    }
+    m_RsqrtLayer.configure(&input, &output);
 }
 
 void ClRsqrtWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClRsqrtWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClRsqrtWorkload_Execute");
     RunClFunction(m_RsqrtLayer, CHECK_LOCATION());
 }
 

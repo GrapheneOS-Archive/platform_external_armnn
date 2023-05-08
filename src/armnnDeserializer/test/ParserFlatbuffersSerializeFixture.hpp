@@ -6,7 +6,7 @@
 #pragma once
 
 #include "SchemaSerialize.hpp"
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include "test/TensorHelpers.hpp"
 
 #include "flatbuffers/idl.h"
 #include "flatbuffers/util.h"
@@ -19,9 +19,7 @@
 #include <ResolveType.hpp>
 
 #include <fmt/format.h>
-#include <doctest/doctest.h>
 
-#include <vector>
 
 using armnnDeserializer::IDeserializer;
 using TensorRawPtr = armnnSerializer::TensorInfo*;
@@ -96,10 +94,10 @@ struct ParserFlatbuffersSerializeFixture
         flatbuffers::Parser parser;
 
         bool ok = parser.Parse(schemafile.c_str());
-        CHECK_MESSAGE(ok, std::string("Failed to parse schema file. Error was: " + parser.error_).c_str());
+        ARMNN_ASSERT_MSG(ok, "Failed to parse schema file");
 
         ok &= parser.Parse(m_JsonString.c_str());
-        CHECK_MESSAGE(ok, std::string("Failed to parse json input. Error was: " + parser.error_).c_str());
+        ARMNN_ASSERT_MSG(ok, "Failed to parse json input");
 
         if (!ok)
         {
@@ -155,12 +153,12 @@ struct ParserFlatbuffersSerializeFixture
                       const float scale, const int64_t zeroPoint)
     {
         armnn::IgnoreUnused(name);
-        CHECK_EQ(shapeSize, tensors->dimensions()->size());
-        CHECK(std::equal(shape.begin(), shape.end(),
-                                      tensors->dimensions()->begin(), tensors->dimensions()->end()));
-        CHECK_EQ(tensorType.dataType(), tensors->dataType());
-        CHECK_EQ(scale, tensors->quantizationScale());
-        CHECK_EQ(zeroPoint, tensors->quantizationOffset());
+        BOOST_CHECK_EQUAL(shapeSize, tensors->dimensions()->size());
+        BOOST_CHECK_EQUAL_COLLECTIONS(shape.begin(), shape.end(),
+                                      tensors->dimensions()->begin(), tensors->dimensions()->end());
+        BOOST_CHECK_EQUAL(tensorType.dataType(), tensors->dataType());
+        BOOST_CHECK_EQUAL(scale, tensors->quantizationScale());
+        BOOST_CHECK_EQUAL(zeroPoint, tensors->quantizationOffset());
     }
 };
 
@@ -215,20 +213,19 @@ void ParserFlatbuffersSerializeFixture::RunTest(
     {
         armnn::BindingPointInfo bindingInfo = ConvertBindingInfo(
             m_Parser->GetNetworkInputBindingInfo(layersId, it.first));
-        bindingInfo.second.SetConstant(true);
         armnn::VerifyTensorInfoDataType(bindingInfo.second, ArmnnInputType);
         inputTensors.push_back({ bindingInfo.first, armnn::ConstTensor(bindingInfo.second, it.second.data()) });
     }
 
     // Allocate storage for the output tensors to be written to and setup the armnn output tensors.
-    std::map<std::string, std::vector<OutputDataType>> outputStorage;
+    std::map<std::string, boost::multi_array<OutputDataType, NumOutputDimensions>> outputStorage;
     armnn::OutputTensors outputTensors;
     for (auto&& it : expectedOutputData)
     {
         armnn::BindingPointInfo bindingInfo = ConvertBindingInfo(
             m_Parser->GetNetworkOutputBindingInfo(layersId, it.first));
         armnn::VerifyTensorInfoDataType(bindingInfo.second, ArmnnOutputType);
-        outputStorage.emplace(it.first, std::vector<OutputDataType>(bindingInfo.second.GetNumElements()));
+        outputStorage.emplace(it.first, MakeTensor<OutputDataType, NumOutputDimensions>(bindingInfo.second));
         outputTensors.push_back(
                 { bindingInfo.first, armnn::Tensor(bindingInfo.second, outputStorage.at(it.first).data()) });
     }
@@ -240,9 +237,7 @@ void ParserFlatbuffersSerializeFixture::RunTest(
     {
         armnn::BindingPointInfo bindingInfo = ConvertBindingInfo(
             m_Parser->GetNetworkOutputBindingInfo(layersId, it.first));
-        auto outputExpected = it.second;
-        auto result = CompareTensors(outputExpected, outputStorage[it.first],
-                                     bindingInfo.second.GetShape(), bindingInfo.second.GetShape());
-        CHECK_MESSAGE(result.m_Result, result.m_Message.str());
+        auto outputExpected = MakeTensor<OutputDataType, NumOutputDimensions>(bindingInfo.second, it.second);
+        BOOST_TEST(CompareTensors(outputExpected, outputStorage[it.first]));
     }
 }

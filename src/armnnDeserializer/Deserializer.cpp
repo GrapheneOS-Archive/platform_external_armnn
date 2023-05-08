@@ -1,5 +1,5 @@
 //
-// Copyright © 2017,2019-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,6 @@
 #include <armnn/TypesUtils.hpp>
 #include <armnn/LstmParams.hpp>
 #include <armnn/QuantizedLstmParams.hpp>
-#include <armnn/Logging.hpp>
 
 #include <armnnUtils/Permute.hpp>
 #include <armnnUtils/Transpose.hpp>
@@ -35,51 +34,12 @@ using namespace armnnSerializer;
 namespace armnnDeserializer
 {
 
-IDeserializer::IDeserializer() : pDeserializerImpl(new DeserializerImpl()){}
-
-IDeserializer::~IDeserializer() = default;
-
-IDeserializer *IDeserializer::CreateRaw()
-{
-    return new IDeserializer();
-}
-
-IDeserializerPtr IDeserializer::Create()
-{
-    return IDeserializerPtr(CreateRaw(), &IDeserializer::Destroy);
-}
-
-void IDeserializer::Destroy(IDeserializer *parser)
-{
-    delete parser;
-}
-
-armnn::INetworkPtr IDeserializer::CreateNetworkFromBinary(const std::vector<uint8_t> &binaryContent)
-{
-    return pDeserializerImpl->CreateNetworkFromBinary(binaryContent);
-}
-
-armnn::INetworkPtr IDeserializer::CreateNetworkFromBinary(std::istream &binaryContent)
-{
-    return pDeserializerImpl->CreateNetworkFromBinary(binaryContent);
-}
-
-BindingPointInfo IDeserializer::GetNetworkInputBindingInfo(unsigned int layerId, const std::string &name) const
-{
-    return pDeserializerImpl->GetNetworkInputBindingInfo(layerId, name);
-}
-
-BindingPointInfo IDeserializer::GetNetworkOutputBindingInfo(unsigned int layerId, const std::string &name) const
-{
-    return pDeserializerImpl->GetNetworkOutputBindingInfo(layerId, name);
-}
-
 namespace
 {
 
 const uint32_t VIRTUAL_LAYER_ID = std::numeric_limits<uint32_t>::max();
 
- void CheckGraph(const GraphPtr& graph,
+ void CheckGraph(const Deserializer::GraphPtr& graph,
                  unsigned int layersIndex,
                  const CheckLocation& location)
 {
@@ -101,7 +61,7 @@ const uint32_t VIRTUAL_LAYER_ID = std::numeric_limits<uint32_t>::max();
     }
 }
 
-void CheckLayers(const GraphPtr& graph,
+void CheckLayers(const Deserializer::GraphPtr& graph,
                  unsigned int layersIndex,
                  unsigned int layerIndex,
                  const CheckLocation& location)
@@ -135,7 +95,7 @@ void CheckLayers(const GraphPtr& graph,
     }
 }
 
-void CheckTensorPtr(TensorRawPtr rawPtr,
+void CheckTensorPtr(Deserializer::TensorRawPtr rawPtr,
                     const CheckLocation& location)
 {
     if (rawPtr == nullptr)
@@ -146,7 +106,7 @@ void CheckTensorPtr(TensorRawPtr rawPtr,
     }
 }
 
-void CheckConstTensorPtr(ConstTensorRawPtr rawPtr,
+void CheckConstTensorPtr(Deserializer::ConstTensorRawPtr rawPtr,
                          const CheckLocation& location)
 {
     if (rawPtr == nullptr)
@@ -204,83 +164,73 @@ bool CheckShape(const armnn::TensorShape& actual, const std::vector<uint32_t>& e
     return true;
 }
 
-IDeserializer::DeserializerImpl::DeserializerImpl()
+Deserializer::Deserializer()
 : m_Network(nullptr, nullptr),
 //May require LayerType_Max to be included
-m_ParserFunctions(Layer_MAX+1, &IDeserializer::DeserializerImpl::ParseUnsupportedLayer)
+m_ParserFunctions(Layer_MAX+1, &Deserializer::ParseUnsupportedLayer)
 {
     // register supported layers
-    m_ParserFunctions[Layer_AbsLayer]                    = &DeserializerImpl::ParseAbs;
-    m_ParserFunctions[Layer_ActivationLayer]             = &DeserializerImpl::ParseActivation;
-    m_ParserFunctions[Layer_AdditionLayer]               = &DeserializerImpl::ParseAdd;
-    m_ParserFunctions[Layer_ArgMinMaxLayer]              = &DeserializerImpl::ParseArgMinMax;
-    m_ParserFunctions[Layer_BatchMatMulLayer]            = &DeserializerImpl::ParseBatchMatMul;
-    m_ParserFunctions[Layer_BatchToSpaceNdLayer]         = &DeserializerImpl::ParseBatchToSpaceNd;
-    m_ParserFunctions[Layer_BatchNormalizationLayer]     = &DeserializerImpl::ParseBatchNormalization;
-    m_ParserFunctions[Layer_CastLayer]                   = &DeserializerImpl::ParseCast;
-    m_ParserFunctions[Layer_ChannelShuffleLayer]         = &DeserializerImpl::ParseChannelShuffle;
-    m_ParserFunctions[Layer_ComparisonLayer]             = &DeserializerImpl::ParseComparison;
-    m_ParserFunctions[Layer_ConcatLayer]                 = &DeserializerImpl::ParseConcat;
-    m_ParserFunctions[Layer_ConstantLayer]               = &DeserializerImpl::ParseConstant;
-    m_ParserFunctions[Layer_Convolution2dLayer]          = &DeserializerImpl::ParseConvolution2d;
-    m_ParserFunctions[Layer_Convolution3dLayer]          = &DeserializerImpl::ParseConvolution3d;
-    m_ParserFunctions[Layer_DepthToSpaceLayer]           = &DeserializerImpl::ParseDepthToSpace;
-    m_ParserFunctions[Layer_DepthwiseConvolution2dLayer] = &DeserializerImpl::ParseDepthwiseConvolution2d;
-    m_ParserFunctions[Layer_DequantizeLayer]             = &DeserializerImpl::ParseDequantize;
-    m_ParserFunctions[Layer_DetectionPostProcessLayer]   = &DeserializerImpl::ParseDetectionPostProcess;
-    m_ParserFunctions[Layer_DivisionLayer]               = &DeserializerImpl::ParseDivision;
-    m_ParserFunctions[Layer_ElementwiseBinaryLayer]      = &DeserializerImpl::ParseElementwiseBinary;
-    m_ParserFunctions[Layer_ElementwiseUnaryLayer]       = &DeserializerImpl::ParseElementwiseUnary;
-    m_ParserFunctions[Layer_EqualLayer]                  = &DeserializerImpl::ParseEqual;
-    m_ParserFunctions[Layer_FullyConnectedLayer]         = &DeserializerImpl::ParseFullyConnected;
-    m_ParserFunctions[Layer_FillLayer]                   = &DeserializerImpl::ParseFill;
-    m_ParserFunctions[Layer_FloorLayer]                  = &DeserializerImpl::ParseFloor;
-    m_ParserFunctions[Layer_GatherLayer]                 = &DeserializerImpl::ParseGather;
-    m_ParserFunctions[Layer_GatherNdLayer]               = &DeserializerImpl::ParseGatherNd;
-    m_ParserFunctions[Layer_GreaterLayer]                = &DeserializerImpl::ParseGreater;
-    m_ParserFunctions[Layer_InstanceNormalizationLayer]  = &DeserializerImpl::ParseInstanceNormalization;
-    m_ParserFunctions[Layer_L2NormalizationLayer]        = &DeserializerImpl::ParseL2Normalization;
-    m_ParserFunctions[Layer_LogicalBinaryLayer]          = &DeserializerImpl::ParseLogicalBinary;
-    m_ParserFunctions[Layer_LogSoftmaxLayer]             = &DeserializerImpl::ParseLogSoftmax;
-    m_ParserFunctions[Layer_LstmLayer]                   = &DeserializerImpl::ParseLstm;
-    m_ParserFunctions[Layer_MaximumLayer]                = &DeserializerImpl::ParseMaximum;
-    m_ParserFunctions[Layer_MeanLayer]                   = &DeserializerImpl::ParseMean;
-    m_ParserFunctions[Layer_MinimumLayer]                = &DeserializerImpl::ParseMinimum;
-    m_ParserFunctions[Layer_MergeLayer]                  = &DeserializerImpl::ParseMerge;
-    m_ParserFunctions[Layer_MergerLayer]                 = &DeserializerImpl::ParseConcat;
-    m_ParserFunctions[Layer_MultiplicationLayer]         = &DeserializerImpl::ParseMultiplication;
-    m_ParserFunctions[Layer_NormalizationLayer]          = &DeserializerImpl::ParseNormalization;
-    m_ParserFunctions[Layer_PadLayer]                    = &DeserializerImpl::ParsePad;
-    m_ParserFunctions[Layer_PermuteLayer]                = &DeserializerImpl::ParsePermute;
-    m_ParserFunctions[Layer_Pooling2dLayer]              = &DeserializerImpl::ParsePooling2d;
-    m_ParserFunctions[Layer_Pooling3dLayer]              = &DeserializerImpl::ParsePooling3d;
-    m_ParserFunctions[Layer_PreluLayer]                  = &DeserializerImpl::ParsePrelu;
-    m_ParserFunctions[Layer_QLstmLayer]                  = &DeserializerImpl::ParseQLstm;
-    m_ParserFunctions[Layer_QuantizeLayer]               = &DeserializerImpl::ParseQuantize;
-    m_ParserFunctions[Layer_QuantizedLstmLayer]          = &DeserializerImpl::ParseQuantizedLstm;
-    m_ParserFunctions[Layer_RankLayer]                   = &DeserializerImpl::ParseRank;
-    m_ParserFunctions[Layer_ReduceLayer]                 = &DeserializerImpl::ParseReduce;
-    m_ParserFunctions[Layer_ReshapeLayer]                = &DeserializerImpl::ParseReshape;
-    m_ParserFunctions[Layer_ResizeBilinearLayer]         = &DeserializerImpl::ParseResizeBilinear;
-    m_ParserFunctions[Layer_ResizeLayer]                 = &DeserializerImpl::ParseResize;
-    m_ParserFunctions[Layer_RsqrtLayer]                  = &DeserializerImpl::ParseRsqrt;
-    m_ParserFunctions[Layer_ShapeLayer]                  = &DeserializerImpl::ParseShape;
-    m_ParserFunctions[Layer_SliceLayer]                  = &DeserializerImpl::ParseSlice;
-    m_ParserFunctions[Layer_SoftmaxLayer]                = &DeserializerImpl::ParseSoftmax;
-    m_ParserFunctions[Layer_SpaceToBatchNdLayer]         = &DeserializerImpl::ParseSpaceToBatchNd;
-    m_ParserFunctions[Layer_SpaceToDepthLayer]           = &DeserializerImpl::ParseSpaceToDepth;
-    m_ParserFunctions[Layer_SplitterLayer]               = &DeserializerImpl::ParseSplitter;
-    m_ParserFunctions[Layer_StackLayer]                  = &DeserializerImpl::ParseStack;
-    m_ParserFunctions[Layer_StandInLayer]                = &DeserializerImpl::ParseStandIn;
-    m_ParserFunctions[Layer_StridedSliceLayer]           = &DeserializerImpl::ParseStridedSlice;
-    m_ParserFunctions[Layer_SubtractionLayer]            = &DeserializerImpl::ParseSubtraction;
-    m_ParserFunctions[Layer_SwitchLayer]                 = &DeserializerImpl::ParseSwitch;
-    m_ParserFunctions[Layer_TransposeConvolution2dLayer] = &DeserializerImpl::ParseTransposeConvolution2d;
-    m_ParserFunctions[Layer_TransposeLayer]              = &DeserializerImpl::ParseTranspose;
-    m_ParserFunctions[Layer_UnidirectionalSequenceLstmLayer] = &DeserializerImpl::ParseUnidirectionalSequenceLstm;
+    m_ParserFunctions[Layer_AbsLayer]                    = &Deserializer::ParseAbs;
+    m_ParserFunctions[Layer_ActivationLayer]             = &Deserializer::ParseActivation;
+    m_ParserFunctions[Layer_AdditionLayer]               = &Deserializer::ParseAdd;
+    m_ParserFunctions[Layer_ArgMinMaxLayer]              = &Deserializer::ParseArgMinMax;
+    m_ParserFunctions[Layer_BatchToSpaceNdLayer]         = &Deserializer::ParseBatchToSpaceNd;
+    m_ParserFunctions[Layer_BatchNormalizationLayer]     = &Deserializer::ParseBatchNormalization;
+    m_ParserFunctions[Layer_ComparisonLayer]             = &Deserializer::ParseComparison;
+    m_ParserFunctions[Layer_ConcatLayer]                 = &Deserializer::ParseConcat;
+    m_ParserFunctions[Layer_ConstantLayer]               = &Deserializer::ParseConstant;
+    m_ParserFunctions[Layer_Convolution2dLayer]          = &Deserializer::ParseConvolution2d;
+    m_ParserFunctions[Layer_DepthToSpaceLayer]           = &Deserializer::ParseDepthToSpace;
+    m_ParserFunctions[Layer_DepthwiseConvolution2dLayer] = &Deserializer::ParseDepthwiseConvolution2d;
+    m_ParserFunctions[Layer_DequantizeLayer]             = &Deserializer::ParseDequantize;
+    m_ParserFunctions[Layer_DetectionPostProcessLayer]   = &Deserializer::ParseDetectionPostProcess;
+    m_ParserFunctions[Layer_DivisionLayer]               = &Deserializer::ParseDivision;
+    m_ParserFunctions[Layer_ElementwiseUnaryLayer]       = &Deserializer::ParseElementwiseUnary;
+    m_ParserFunctions[Layer_EqualLayer]                  = &Deserializer::ParseEqual;
+    m_ParserFunctions[Layer_FullyConnectedLayer]         = &Deserializer::ParseFullyConnected;
+    m_ParserFunctions[Layer_FillLayer]                   = &Deserializer::ParseFill;
+    m_ParserFunctions[Layer_FloorLayer]                  = &Deserializer::ParseFloor;
+    m_ParserFunctions[Layer_GatherLayer]                 = &Deserializer::ParseGather;
+    m_ParserFunctions[Layer_GreaterLayer]                = &Deserializer::ParseGreater;
+    m_ParserFunctions[Layer_InstanceNormalizationLayer]  = &Deserializer::ParseInstanceNormalization;
+    m_ParserFunctions[Layer_L2NormalizationLayer]        = &Deserializer::ParseL2Normalization;
+    m_ParserFunctions[Layer_LogicalBinaryLayer]          = &Deserializer::ParseLogicalBinary;
+    m_ParserFunctions[Layer_LogSoftmaxLayer]             = &Deserializer::ParseLogSoftmax;
+    m_ParserFunctions[Layer_LstmLayer]                   = &Deserializer::ParseLstm;
+    m_ParserFunctions[Layer_MaximumLayer]                = &Deserializer::ParseMaximum;
+    m_ParserFunctions[Layer_MeanLayer]                   = &Deserializer::ParseMean;
+    m_ParserFunctions[Layer_MinimumLayer]                = &Deserializer::ParseMinimum;
+    m_ParserFunctions[Layer_MergeLayer]                  = &Deserializer::ParseMerge;
+    m_ParserFunctions[Layer_MergerLayer]                 = &Deserializer::ParseConcat;
+    m_ParserFunctions[Layer_MultiplicationLayer]         = &Deserializer::ParseMultiplication;
+    m_ParserFunctions[Layer_NormalizationLayer]          = &Deserializer::ParseNormalization;
+    m_ParserFunctions[Layer_PadLayer]                    = &Deserializer::ParsePad;
+    m_ParserFunctions[Layer_PermuteLayer]                = &Deserializer::ParsePermute;
+    m_ParserFunctions[Layer_Pooling2dLayer]              = &Deserializer::ParsePooling2d;
+    m_ParserFunctions[Layer_PreluLayer]                  = &Deserializer::ParsePrelu;
+    m_ParserFunctions[Layer_QLstmLayer]                  = &Deserializer::ParseQLstm;
+    m_ParserFunctions[Layer_QuantizeLayer]               = &Deserializer::ParseQuantize;
+    m_ParserFunctions[Layer_QuantizedLstmLayer]          = &Deserializer::ParseQuantizedLstm;
+    m_ParserFunctions[Layer_RankLayer]                   = &Deserializer::ParseRank;
+    m_ParserFunctions[Layer_ReshapeLayer]                = &Deserializer::ParseReshape;
+    m_ParserFunctions[Layer_ResizeBilinearLayer]         = &Deserializer::ParseResizeBilinear;
+    m_ParserFunctions[Layer_ResizeLayer]                 = &Deserializer::ParseResize;
+    m_ParserFunctions[Layer_RsqrtLayer]                  = &Deserializer::ParseRsqrt;
+    m_ParserFunctions[Layer_SliceLayer]                  = &Deserializer::ParseSlice;
+    m_ParserFunctions[Layer_SoftmaxLayer]                = &Deserializer::ParseSoftmax;
+    m_ParserFunctions[Layer_SpaceToBatchNdLayer]         = &Deserializer::ParseSpaceToBatchNd;
+    m_ParserFunctions[Layer_SpaceToDepthLayer]           = &Deserializer::ParseSpaceToDepth;
+    m_ParserFunctions[Layer_SplitterLayer]               = &Deserializer::ParseSplitter;
+    m_ParserFunctions[Layer_StackLayer]                  = &Deserializer::ParseStack;
+    m_ParserFunctions[Layer_StandInLayer]                = &Deserializer::ParseStandIn;
+    m_ParserFunctions[Layer_StridedSliceLayer]           = &Deserializer::ParseStridedSlice;
+    m_ParserFunctions[Layer_SubtractionLayer]            = &Deserializer::ParseSubtraction;
+    m_ParserFunctions[Layer_SwitchLayer]                 = &Deserializer::ParseSwitch;
+    m_ParserFunctions[Layer_TransposeConvolution2dLayer] = &Deserializer::ParseTransposeConvolution2d;
+    m_ParserFunctions[Layer_TransposeLayer]              = &Deserializer::ParseTranspose;
 }
 
-LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& graphPtr, unsigned int layerIndex)
+Deserializer::LayerBaseRawPtr Deserializer::GetBaseLayer(const GraphPtr& graphPtr, unsigned int layerIndex)
 {
     auto layerType = graphPtr->layers()->Get(layerIndex)->layer_type();
 
@@ -294,16 +244,10 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_AdditionLayer()->base();
         case Layer::Layer_ArgMinMaxLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_ArgMinMaxLayer()->base();
-        case Layer::Layer_BatchMatMulLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_BatchMatMulLayer()->base();
         case Layer::Layer_BatchToSpaceNdLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_BatchToSpaceNdLayer()->base();
         case Layer::Layer_BatchNormalizationLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_BatchNormalizationLayer()->base();
-        case Layer::Layer_CastLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_CastLayer()->base();
-        case Layer::Layer_ChannelShuffleLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_ChannelShuffleLayer()->base();
         case Layer::Layer_ComparisonLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_ComparisonLayer()->base();
         case Layer::Layer_ConcatLayer:
@@ -312,8 +256,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_ConstantLayer()->base();
         case Layer::Layer_Convolution2dLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_Convolution2dLayer()->base();
-        case Layer::Layer_Convolution3dLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_Convolution3dLayer()->base();
         case Layer::Layer_DepthToSpaceLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_DepthToSpaceLayer()->base();
         case Layer::Layer_DepthwiseConvolution2dLayer:
@@ -326,8 +268,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_DivisionLayer()->base();
         case Layer::Layer_EqualLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_EqualLayer()->base();
-        case Layer::Layer_ElementwiseBinaryLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_ElementwiseBinaryLayer()->base();
         case Layer::Layer_ElementwiseUnaryLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_ElementwiseUnaryLayer()->base();
         case Layer::Layer_FullyConnectedLayer:
@@ -338,8 +278,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_FloorLayer()->base();
         case Layer::Layer_GatherLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_GatherLayer()->base();
-        case Layer::Layer_GatherNdLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_GatherNdLayer()->base();
         case Layer::Layer_GreaterLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_GreaterLayer()->base();
         case Layer::Layer_InputLayer:
@@ -376,8 +314,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_PermuteLayer()->base();
         case Layer::Layer_Pooling2dLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_Pooling2dLayer()->base();
-        case Layer::Layer_Pooling3dLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_Pooling3dLayer()->base();
         case Layer::Layer_PreluLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_PreluLayer()->base();
         case Layer::Layer_QLstmLayer:
@@ -388,8 +324,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_QuantizedLstmLayer()->base();
         case Layer::Layer_RankLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_RankLayer()->base();
-        case Layer::Layer_ReduceLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_ReduceLayer()->base();
         case Layer::Layer_ReshapeLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_ReshapeLayer()->base();
         case Layer::Layer_ResizeBilinearLayer:
@@ -398,8 +332,6 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_ResizeLayer()->base();
         case Layer::Layer_RsqrtLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_RsqrtLayer()->base();
-        case Layer::Layer_ShapeLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_ShapeLayer()->base();
         case Layer::Layer_SliceLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_SliceLayer()->base();
         case Layer::Layer_SoftmaxLayer:
@@ -424,22 +356,20 @@ LayerBaseRawPtr IDeserializer::DeserializerImpl::GetBaseLayer(const GraphPtr& gr
             return graphPtr->layers()->Get(layerIndex)->layer_as_TransposeConvolution2dLayer()->base();
         case Layer::Layer_TransposeLayer:
             return graphPtr->layers()->Get(layerIndex)->layer_as_TransposeLayer()->base();
-        case Layer::Layer_UnidirectionalSequenceLstmLayer:
-            return graphPtr->layers()->Get(layerIndex)->layer_as_UnidirectionalSequenceLstmLayer()->base();
         case Layer::Layer_NONE:
         default:
             throw ParseException(fmt::format("Layer type {} not recognized", layerType));
     }
 }
 
-std::string IDeserializer::DeserializerImpl::GetLayerName(const GraphPtr& graph, unsigned int index)
+std::string Deserializer::GetLayerName(const GraphPtr& graph, unsigned int index)
 {
     auto layer = GetBaseLayer(graph, index);
     assert(layer);
     return layer->layerName()->str();
 }
 
-int32_t IDeserializer::DeserializerImpl::GetBindingLayerInfo(const GraphPtr& graphPtr, unsigned int layerIndex)
+int32_t Deserializer::GetBindingLayerInfo(const GraphPtr& graphPtr, unsigned int layerIndex)
 {
     auto layerType = graphPtr->layers()->Get(layerIndex)->layer_type();
 
@@ -460,10 +390,6 @@ armnn::DataLayout ToDataLayout(armnnSerializer::DataLayout dataLayout)
     {
         case armnnSerializer::DataLayout::DataLayout_NHWC:
             return armnn::DataLayout::NHWC;
-        case armnnSerializer::DataLayout::DataLayout_NDHWC:
-            return armnn::DataLayout::NDHWC;
-        case armnnSerializer::DataLayout::DataLayout_NCDHW:
-            return armnn::DataLayout::NCDHW;
         case armnnSerializer::DataLayout::DataLayout_NCHW:
         default:
             return armnn::DataLayout::NCHW;
@@ -533,25 +459,6 @@ armnn::ComparisonOperation ToComparisonOperation(armnnSerializer::ComparisonOper
     }
 }
 
-armnn::ReduceOperation ToReduceOperation(armnnSerializer::ReduceOperation operation)
-{
-    switch (operation)
-    {
-        case armnnSerializer::ReduceOperation::ReduceOperation_Sum:
-            return armnn::ReduceOperation::Sum;
-        case armnnSerializer::ReduceOperation::ReduceOperation_Max:
-            return armnn::ReduceOperation::Max;
-        case armnnSerializer::ReduceOperation::ReduceOperation_Mean:
-            return armnn::ReduceOperation::Mean;
-        case armnnSerializer::ReduceOperation::ReduceOperation_Min:
-            return armnn::ReduceOperation::Min;
-        case armnnSerializer::ReduceOperation::ReduceOperation_Prod:
-            return armnn::ReduceOperation::Prod;
-        default:
-            return armnn::ReduceOperation::Sum;
-    }
-}
-
 armnn::LogicalBinaryOperation ToLogicalBinaryOperation(armnnSerializer::LogicalBinaryOperation operation)
 {
     switch (operation)
@@ -565,35 +472,12 @@ armnn::LogicalBinaryOperation ToLogicalBinaryOperation(armnnSerializer::LogicalB
     }
 }
 
-armnn::BinaryOperation ToElementwiseBinaryOperation(armnnSerializer::BinaryOperation operation)
-{
-    switch (operation)
-    {
-        case armnnSerializer::BinaryOperation::BinaryOperation_Add:
-            return armnn::BinaryOperation::Add;
-        case armnnSerializer::BinaryOperation::BinaryOperation_Div:
-            return armnn::BinaryOperation::Div;
-        case armnnSerializer::BinaryOperation::BinaryOperation_Maximum:
-            return armnn::BinaryOperation::Maximum;
-        case armnnSerializer::BinaryOperation::BinaryOperation_Minimum:
-            return armnn::BinaryOperation::Minimum;
-        case armnnSerializer::BinaryOperation::BinaryOperation_Mul:
-            return armnn::BinaryOperation::Mul;
-        case armnnSerializer::BinaryOperation::BinaryOperation_Sub:
-            return armnn::BinaryOperation::Sub;
-        default:
-            throw armnn::InvalidArgumentException("Binary operation unknown");
-    }
-}
-
-armnn::UnaryOperation ToElementwiseUnaryOperation(armnnSerializer::UnaryOperation operation)
+armnn::UnaryOperation ToUnaryOperation(armnnSerializer::UnaryOperation operation)
 {
     switch (operation)
     {
         case armnnSerializer::UnaryOperation::UnaryOperation_Abs:
             return armnn::UnaryOperation::Abs;
-        case armnnSerializer::UnaryOperation::UnaryOperation_Ceil:
-            return armnn::UnaryOperation::Ceil;
         case armnnSerializer::UnaryOperation::UnaryOperation_Rsqrt:
             return armnn::UnaryOperation::Rsqrt;
         case armnnSerializer::UnaryOperation::UnaryOperation_Sqrt:
@@ -604,25 +488,8 @@ armnn::UnaryOperation ToElementwiseUnaryOperation(armnnSerializer::UnaryOperatio
             return armnn::UnaryOperation::Neg;
         case armnnSerializer::UnaryOperation::UnaryOperation_LogicalNot:
             return armnn::UnaryOperation::LogicalNot;
-        case armnnSerializer::UnaryOperation::UnaryOperation_Log:
-            return armnn::UnaryOperation::Log;
-        case armnnSerializer::UnaryOperation::UnaryOperation_Sin:
-            return armnn::UnaryOperation::Sin;
         default:
             throw armnn::InvalidArgumentException("Unary operation unknown");
-    }
-}
-
-armnn::PaddingMode ToPaddingMode(armnnSerializer::PaddingMode paddingMode)
-{
-    switch (paddingMode)
-    {
-        case armnnSerializer::PaddingMode::PaddingMode_Reflect:
-            return armnn::PaddingMode::Reflect;
-        case armnnSerializer::PaddingMode::PaddingMode_Symmetric:
-            return armnn::PaddingMode::Symmetric;
-        default:
-            return armnn::PaddingMode::Constant;
     }
 }
 
@@ -639,7 +506,7 @@ armnn::ResizeMethod ToResizeMethod(armnnSerializer::ResizeMethod method)
     }
 }
 
-armnn::TensorInfo ToTensorInfo(TensorRawPtr tensorPtr)
+armnn::TensorInfo ToTensorInfo(Deserializer::TensorRawPtr tensorPtr)
 {
     armnn::DataType type;
     CHECK_TENSOR_PTR(tensorPtr);
@@ -663,9 +530,6 @@ armnn::TensorInfo ToTensorInfo(TensorRawPtr tensorPtr)
         case DataType_Signed32:
             type = armnn::DataType::Signed32;
             break;
-        case DataType_Signed64:
-            type = armnn::DataType::Signed64;
-            break;
         case DataType_Float32:
             type = armnn::DataType::Float32;
             break;
@@ -685,71 +549,52 @@ armnn::TensorInfo ToTensorInfo(TensorRawPtr tensorPtr)
         }
     }
 
-    float quantizationScale = tensorPtr->quantizationScale();
-    int32_t quantizationOffset = tensorPtr->quantizationOffset();
-
     if (tensorPtr->dimensionality() == static_cast<unsigned int>(Dimensionality::Scalar))
     {
-        return armnn::TensorInfo(TensorShape{armnn::Dimensionality::Scalar},
+        float quantizationScale = tensorPtr->quantizationScale();
+        int32_t quantizationOffset = tensorPtr->quantizationOffset();
+
+        return armnn::TensorInfo(armnn::TensorShape{armnn::Dimensionality::Scalar},
                                  type,
                                  quantizationScale,
                                  quantizationOffset);
-    }
-    else if (tensorPtr->dimensionality() == static_cast<unsigned int>(Dimensionality::NotSpecified))
-    {
-        armnn::TensorInfo result(TensorShape{Dimensionality::NotSpecified},
-                                 type,
-                                 quantizationScale,
-                                 quantizationOffset);
-        return result;
     }
 
     auto dimensions = tensorPtr->dimensions();
     unsigned int size = dimensions->size();
     std::vector<unsigned int> outputDims(dimensions->begin(), dimensions->begin() + size);
-    bool dimensionsSpecificity[armnn::MaxNumOfTensorDimensions];
-    std::fill_n(dimensionsSpecificity, armnn::MaxNumOfTensorDimensions, true);
-    // For backwards compatibility check if the dimensionSpecificity vector is present first.
-    // The default is to have dimensionSpecificity set to all true's anyway.
-    if (tensorPtr->dimensionSpecificity() != nullptr)
-    {
-        auto dimensionSpecificity = tensorPtr->dimensionSpecificity();
-        size = dimensionSpecificity->size();
-        for (unsigned int i = 0; i < size; ++i)
-        {
-            dimensionsSpecificity[i] = dimensionSpecificity->Get(i);
-        }
-    }
-    // Construct a TensorShape
-    TensorShape shape(size, outputDims.data(), dimensionsSpecificity);
 
     auto quantizationScales = tensorPtr->quantizationScales();
+
     if (quantizationScales)
     {
         unsigned int quantizationScalesSize = quantizationScales->size();
         std::vector<float> scales(quantizationScales->begin(), quantizationScales->begin() + quantizationScalesSize);
         unsigned int quantizationDim = tensorPtr->quantizationDim();
-        armnn::TensorInfo result(shape,
+        armnn::TensorInfo result(size,
+                                 outputDims.data(),
                                  type,
                                  scales,
                                  quantizationDim);
         return result;
     }
 
+    float quantizationScale = tensorPtr->quantizationScale();
+    int32_t quantizationOffset = tensorPtr->quantizationOffset();
+
     // two statements (on purpose) for easier debugging:
-    armnn::TensorInfo result(shape,
+    armnn::TensorInfo result(size,
+                             outputDims.data(),
                              type,
                              quantizationScale,
                              quantizationOffset);
-    
     return result;
 }
 
-armnn::ConstTensor ToConstTensor(ConstTensorRawPtr constTensorPtr)
+armnn::ConstTensor ToConstTensor(Deserializer::ConstTensorRawPtr constTensorPtr)
 {
     CHECK_CONST_TENSOR_PTR(constTensorPtr);
     armnn::TensorInfo tensorInfo = ToTensorInfo(constTensorPtr->info());
-    tensorInfo.SetConstant();
 
     switch (constTensorPtr->data_type())
     {
@@ -788,7 +633,8 @@ armnn::ConstTensor ToConstTensor(ConstTensorRawPtr constTensorPtr)
     }
 }
 
-TensorRawPtrVector IDeserializer::DeserializerImpl::GetInputs(const GraphPtr& graphPtr, unsigned int layerIndex)
+Deserializer::TensorRawPtrVector Deserializer::GetInputs(const GraphPtr& graphPtr,
+                                                         unsigned int layerIndex)
 {
     CHECK_LAYERS(graphPtr, 0, layerIndex);
     auto layer = GetBaseLayer(graphPtr, layerIndex);
@@ -805,7 +651,8 @@ TensorRawPtrVector IDeserializer::DeserializerImpl::GetInputs(const GraphPtr& gr
    return result;
 }
 
-TensorRawPtrVector IDeserializer::DeserializerImpl::GetOutputs(const GraphPtr& graphPtr, unsigned int layerIndex)
+Deserializer::TensorRawPtrVector Deserializer::GetOutputs(const GraphPtr& graphPtr,
+                                                                    unsigned int layerIndex)
 {
     CHECK_LAYERS(graphPtr, 0, layerIndex);
     auto layer = GetBaseLayer(graphPtr, layerIndex);
@@ -820,7 +667,7 @@ TensorRawPtrVector IDeserializer::DeserializerImpl::GetOutputs(const GraphPtr& g
     return result;
 }
 
-void IDeserializer::DeserializerImpl::ParseUnsupportedLayer(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseUnsupportedLayer(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     const auto layerName = GetBaseLayer(graph, layerIndex)->layerName()->c_str();
@@ -831,38 +678,44 @@ void IDeserializer::DeserializerImpl::ParseUnsupportedLayer(GraphPtr graph, unsi
                                      CHECK_LOCATION().AsString()));
 }
 
-void IDeserializer::DeserializerImpl::ResetParser()
+void Deserializer::ResetParser()
 {
     m_Network = armnn::INetworkPtr(nullptr, nullptr);
     m_InputBindings.clear();
     m_OutputBindings.clear();
 }
 
+IDeserializer* IDeserializer::CreateRaw()
+{
+    return new Deserializer();
+}
 
-INetworkPtr IDeserializer::DeserializerImpl::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent)
+IDeserializerPtr IDeserializer::Create()
+{
+    return IDeserializerPtr(CreateRaw(), &IDeserializer::Destroy);
+}
+
+void IDeserializer::Destroy(IDeserializer* parser)
+{
+    delete parser;
+}
+
+INetworkPtr Deserializer::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent)
 {
      ResetParser();
      GraphPtr graph = LoadGraphFromBinary(binaryContent.data(), binaryContent.size());
      return CreateNetworkFromGraph(graph);
 }
 
-armnn::INetworkPtr IDeserializer::DeserializerImpl::CreateNetworkFromBinary(std::istream& binaryContent)
+armnn::INetworkPtr Deserializer::CreateNetworkFromBinary(std::istream& binaryContent)
 {
     ResetParser();
-    if (binaryContent.fail()) {
-        ARMNN_LOG(error) << (std::string("Cannot read input"));
-        throw ParseException("Unable to read Input stream data");
-    }
-    binaryContent.seekg(0, std::ios::end);
-    const std::streamoff size = binaryContent.tellg();
-    std::vector<char> content(static_cast<size_t>(size));
-    binaryContent.seekg(0);
-    binaryContent.read(content.data(), static_cast<std::streamsize>(size));
-    GraphPtr graph = LoadGraphFromBinary(reinterpret_cast<uint8_t*>(content.data()), static_cast<size_t>(size));
+    std::vector<uint8_t> content((std::istreambuf_iterator<char>(binaryContent)), std::istreambuf_iterator<char>());
+    GraphPtr graph = LoadGraphFromBinary(content.data(), content.size());
     return CreateNetworkFromGraph(graph);
 }
 
-GraphPtr IDeserializer::DeserializerImpl::LoadGraphFromBinary(const uint8_t* binaryContent, size_t len)
+Deserializer::GraphPtr Deserializer::LoadGraphFromBinary(const uint8_t* binaryContent, size_t len)
 {
     if (binaryContent == nullptr)
     {
@@ -880,7 +733,7 @@ GraphPtr IDeserializer::DeserializerImpl::LoadGraphFromBinary(const uint8_t* bin
     return GetSerializedGraph(binaryContent);
 }
 
-INetworkPtr IDeserializer::DeserializerImpl::CreateNetworkFromGraph(GraphPtr graph)
+INetworkPtr Deserializer::CreateNetworkFromGraph(GraphPtr graph)
 {
     m_Network = INetwork::Create();
     ARMNN_ASSERT(graph != nullptr);
@@ -921,7 +774,7 @@ INetworkPtr IDeserializer::DeserializerImpl::CreateNetworkFromGraph(GraphPtr gra
     return std::move(m_Network);
 }
 
-BindingPointInfo IDeserializer::DeserializerImpl::GetNetworkInputBindingInfo(unsigned int layerIndex,
+BindingPointInfo Deserializer::GetNetworkInputBindingInfo(unsigned int layerIndex,
                                                           const std::string& name) const
 {
     IgnoreUnused(layerIndex);
@@ -937,7 +790,7 @@ BindingPointInfo IDeserializer::DeserializerImpl::GetNetworkInputBindingInfo(uns
                                      CHECK_LOCATION().AsString()));
 }
 
-BindingPointInfo IDeserializer::DeserializerImpl::GetNetworkOutputBindingInfo(unsigned int layerIndex,
+BindingPointInfo Deserializer::GetNetworkOutputBindingInfo(unsigned int layerIndex,
                                                                 const std::string& name) const
 {
     IgnoreUnused(layerIndex);
@@ -953,7 +806,7 @@ BindingPointInfo IDeserializer::DeserializerImpl::GetNetworkOutputBindingInfo(un
                                      CHECK_LOCATION().AsString()));
 }
 
-unsigned int IDeserializer::DeserializerImpl::GetInputLayerInVector(GraphPtr graph, int targetId)
+unsigned int Deserializer::GetInputLayerInVector(GraphPtr graph, int targetId)
 {
     for (unsigned int i = 0; i < graph->layers()->size(); i++)
     {
@@ -970,7 +823,7 @@ unsigned int IDeserializer::DeserializerImpl::GetInputLayerInVector(GraphPtr gra
     throw ParseException("Input layer with given layerBindingId not found");
 }
 
-unsigned int IDeserializer::DeserializerImpl::GetOutputLayerInVector(GraphPtr graph, int targetId)
+unsigned int Deserializer::GetOutputLayerInVector(GraphPtr graph, int targetId)
 {
     for (unsigned int i = 0; i < graph->layers()->size(); i++)
     {
@@ -987,7 +840,7 @@ unsigned int IDeserializer::DeserializerImpl::GetOutputLayerInVector(GraphPtr gr
     throw ParseException("Output layer with given layerBindingId not found");
 }
 
-unsigned int IDeserializer::DeserializerImpl::GetLayerIndexInVector(GraphPtr graph, unsigned int targetIndex)
+unsigned int Deserializer::GetLayerIndexInVector(GraphPtr graph, unsigned int targetIndex)
 {
     for (unsigned int i = 0; i < graph->layers()->size(); i++)
     {
@@ -1000,21 +853,19 @@ unsigned int IDeserializer::DeserializerImpl::GetLayerIndexInVector(GraphPtr gra
     throw ParseException("Layer with given index not found");
 }
 
-IDeserializer::DeserializerImpl::FeatureVersions IDeserializer::DeserializerImpl::GetFeatureVersions(GraphPtr graph)
+Deserializer::FeatureVersions Deserializer::GetFeatureVersions(GraphPtr graph)
 {
-    IDeserializer::DeserializerImpl::FeatureVersions versions;
+    Deserializer::FeatureVersions versions;
 
     if (graph->featureVersions())
     {
         versions.m_BindingIdScheme = graph->featureVersions()->bindingIdsScheme();
-        versions.m_WeightsLayoutScheme = graph->featureVersions()->weightsLayoutScheme();
-        versions.m_ConstTensorsAsInputs = graph->featureVersions()->constantTensorsAsInputs();
     }
 
     return versions;
 }
 
-void IDeserializer::DeserializerImpl::SetupInputLayers(GraphPtr graph)
+void Deserializer::SetupInputLayers(GraphPtr graph)
 {
     CHECK_GRAPH(graph, 0);
     const unsigned int numInputs = graph->inputIds()->size();
@@ -1053,7 +904,7 @@ void IDeserializer::DeserializerImpl::SetupInputLayers(GraphPtr graph)
     }
 }
 
-void IDeserializer::DeserializerImpl::SetupOutputLayers(GraphPtr graph)
+void Deserializer::SetupOutputLayers(GraphPtr graph)
 {
     CHECK_GRAPH(graph, 0);
     const unsigned int numOutputs = graph->outputIds()->size();
@@ -1084,19 +935,18 @@ void IDeserializer::DeserializerImpl::SetupOutputLayers(GraphPtr graph)
             m_Network->AddOutputLayer(bindingId, baseLayer->layerName()->c_str());
 
         RegisterInputSlots(graph, outputLayerIndex, outputLayer);
+
         unsigned int sourceLayerIndex =
             GetLayerIndexInVector(graph, baseLayer->inputSlots()->Get(0)->connection()->sourceLayerIndex());
-        unsigned int outputSlotIndex =
-            GetLayerIndexInVector(graph, baseLayer->inputSlots()->Get(0)->connection()->outputSlotIndex());
         LayerBaseRawPtr sourceBaseLayer = GetBaseLayer(graph, sourceLayerIndex);
-        const armnn::TensorInfo& tensorInfo = ToTensorInfo(
-            sourceBaseLayer->outputSlots()->Get(outputSlotIndex)->tensorInfo());
+        const armnn::TensorInfo& tensorInfo = ToTensorInfo(sourceBaseLayer->outputSlots()->Get(i)->tensorInfo());
+
         BindingPointInfo bindingInfo = {bindingId, tensorInfo};
         m_OutputBindings.push_back(std::make_pair(baseLayer->layerName()->c_str(), bindingInfo));
     }
 }
 
-void IDeserializer::DeserializerImpl::RegisterOutputSlots(GraphPtr graph,
+void Deserializer::RegisterOutputSlots(GraphPtr graph,
                                        uint32_t layerIndex,
                                        IConnectableLayer* layer)
 {
@@ -1122,16 +972,14 @@ void IDeserializer::DeserializerImpl::RegisterOutputSlots(GraphPtr graph,
     }
 }
 
-void IDeserializer::DeserializerImpl::RegisterInputSlots(GraphPtr graph,
-                                                         uint32_t layerIndex,
-                                                         armnn::IConnectableLayer* layer,
-                                                         std::vector<unsigned int> ignoreSlots)
+void Deserializer::RegisterInputSlots(GraphPtr graph,
+                                      uint32_t layerIndex,
+                                      armnn::IConnectableLayer* layer)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     ARMNN_ASSERT(layer != nullptr);
     LayerBaseRawPtr baseLayer = GetBaseLayer(graph, layerIndex);
-
-    if (baseLayer->inputSlots()->size() != (layer->GetNumInputSlots() - ignoreSlots.size()))
+    if (baseLayer->inputSlots()->size() != layer->GetNumInputSlots())
     {
         throw ParseException(fmt::format("The number of inputslots ({0}) does not match the number expected ({1})"
                                          " for layer index:{2} {3}",
@@ -1143,18 +991,14 @@ void IDeserializer::DeserializerImpl::RegisterInputSlots(GraphPtr graph,
 
     for (unsigned int i = 0; i < layer->GetNumInputSlots(); ++i)
     {
-        // Check if slot should be ignored.
-        if (std::find(ignoreSlots.begin(), ignoreSlots.end(), i) == ignoreSlots.end())
-        {
-            auto fbInputSlot = baseLayer->inputSlots()->Get(i);
-            auto fbConnection = fbInputSlot->connection();
-            armnn::IInputSlot* inputSlot = &(layer->GetInputSlot(fbInputSlot->index()));
-            RegisterInputSlotOfConnection(fbConnection->sourceLayerIndex(), fbConnection->outputSlotIndex(), inputSlot);
-        }
+        auto fbInputSlot = baseLayer->inputSlots()->Get(i);
+        auto fbConnection = fbInputSlot->connection();
+        armnn::IInputSlot* inputSlot = &(layer->GetInputSlot(fbInputSlot->index()));
+        RegisterInputSlotOfConnection(fbConnection->sourceLayerIndex(), fbConnection->outputSlotIndex(), inputSlot);
     }
 }
 
-void IDeserializer::DeserializerImpl::RegisterInputSlotOfConnection(uint32_t sourceLayerIndex,
+void Deserializer::RegisterInputSlotOfConnection(uint32_t sourceLayerIndex,
                                                  uint32_t outputSlotIndex,
                                                  armnn::IInputSlot* inputSlot)
 {
@@ -1174,7 +1018,7 @@ void IDeserializer::DeserializerImpl::RegisterInputSlotOfConnection(uint32_t sou
     }
 }
 
-void IDeserializer::DeserializerImpl::RegisterOutputSlotOfConnection(uint32_t sourceLayerIndex,
+void Deserializer::RegisterOutputSlotOfConnection(uint32_t sourceLayerIndex,
                                                   uint32_t outputSlotIndex,
                                                   armnn::IOutputSlot* outputSlot)
 {
@@ -1192,7 +1036,7 @@ void IDeserializer::DeserializerImpl::RegisterOutputSlotOfConnection(uint32_t so
     connections.outputSlots[outputSlotIndex] = outputSlot;
 }
 
-void IDeserializer::DeserializerImpl::ParseAbs(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseAbs(armnnDeserializer::Deserializer::GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1213,7 +1057,7 @@ void IDeserializer::DeserializerImpl::ParseAbs(GraphPtr graph, unsigned int laye
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseActivation(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseActivation(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1241,7 +1085,7 @@ void IDeserializer::DeserializerImpl::ParseActivation(GraphPtr graph, unsigned i
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseAdd(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseAdd(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1252,8 +1096,7 @@ void IDeserializer::DeserializerImpl::ParseAdd(GraphPtr graph, unsigned int laye
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Add);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddAdditionLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -1262,7 +1105,7 @@ void IDeserializer::DeserializerImpl::ParseAdd(GraphPtr graph, unsigned int laye
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseArgMinMax(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseArgMinMax(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1288,59 +1131,28 @@ void IDeserializer::DeserializerImpl::ParseArgMinMax(GraphPtr graph, unsigned in
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseBatchMatMul(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseBatchToSpaceNd(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_LOCATION();
-    CHECK_VALID_SIZE(inputs.size(), 2);
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto serializerLayer = graph->layers()->Get(layerIndex)->layer_as_BatchMatMulLayer();
-    auto serializerDescriptor = serializerLayer->descriptor();
-
-    armnn::BatchMatMulDescriptor descriptor(serializerDescriptor->transposeX(),
-                                            serializerDescriptor->transposeY(),
-                                            serializerDescriptor->adjointX(),
-                                            serializerDescriptor->adjointY(),
-                                            ToDataLayout(serializerDescriptor->dataLayoutX()),
-                                            ToDataLayout(serializerDescriptor->dataLayoutY()));
-
-    auto layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer = m_Network->AddBatchMatMulLayer(descriptor, layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseBatchToSpaceNd(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_BatchToSpaceNdLayer()->descriptor();
     auto flatBufferCrops = flatBufferDescriptor->crops();
     auto flatBufferBlockShape = flatBufferDescriptor->blockShape();
 
-    if (flatBufferCrops->size() % 2 != 0)
+    if (flatBufferCrops->Length() % 2 != 0)
     {
         throw ParseException(fmt::format("The size of crops must be divisible by 2 {}", CHECK_LOCATION().AsString()));
     }
 
     std::vector<std::pair<unsigned int, unsigned int>> crops;
-    crops.reserve(flatBufferCrops->size() / 2);
-    for (unsigned int i = 0; i < flatBufferCrops->size() - 1; i += 2)
+    crops.reserve(flatBufferCrops->Length() / 2);
+    for (unsigned int i = 0; i < flatBufferCrops->Length() - 1; i += 2)
     {
         crops.emplace_back(flatBufferCrops->Get(i), flatBufferCrops->Get(i+1));
     }
@@ -1361,7 +1173,7 @@ void IDeserializer::DeserializerImpl::ParseBatchToSpaceNd(GraphPtr graph, unsign
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseBatchNormalization(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseBatchNormalization(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -1398,28 +1210,7 @@ void IDeserializer::DeserializerImpl::ParseBatchNormalization(GraphPtr graph, un
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseCast(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
-    CHECK_LOCATION();
-    CHECK_VALID_SIZE(inputs.size(), 1);
-
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto layerName = GetLayerName(graph, layerIndex);
-
-    IConnectableLayer* layer = m_Network->AddCastLayer(layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseConstant(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseConstant(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -1433,159 +1224,54 @@ void IDeserializer::DeserializerImpl::ParseConstant(GraphPtr graph, unsigned int
     auto serializerInput = serializerLayer->input();
 
     armnn::ConstTensor input = ToConstTensor(serializerInput);
-    IConnectableLayer* layer;
 
-    // Required for when Constant Layer is used as an inputs to DepthwiseConvolution2d Layer.
-    // Running a model that was created before weights layout scheme version was added to our flatbuffers
-    // file ensuring older models can still be read and executed. featureVersion weights layout scheme 1
-    // indicates a change in the depthwise weights layout within ArmNN from [M,I,H,W] --> [1,H,W,I*M]
-    if (this->GetFeatureVersions(graph).m_WeightsLayoutScheme <= 0)
-    {
-        // Permute weights  [ H, W, M, I ] --> [ 1, H, W, I*M ]
-        // Step1: [ M, I, H, W ] --> [ H, W, I, M]
-        PermutationVector permutationVector = { 3, 2, 0, 1 };
-        armnn::TensorInfo weightsInfo = input.GetInfo();
-        std::unique_ptr<unsigned char[]> permuteBuffer(new unsigned char[weightsInfo.GetNumBytes()]);
-        weightsInfo = armnnUtils::Permuted(weightsInfo, permutationVector);
-        armnnUtils::Permute(weightsInfo.GetShape(), permutationVector,
-                            input.GetMemoryArea(), permuteBuffer.get(),
-                            GetDataTypeSize(weightsInfo.GetDataType()));
-
-        // Step2: Reshape [ H, W, I, M] --> [ 1, H, W, I*M ]
-        auto weightsShape = weightsInfo.GetShape();
-        weightsInfo.SetShape({1,
-                              weightsShape[0],
-                              weightsShape[1],
-                              weightsShape[2]*weightsShape[3]});
-        weightsInfo.SetConstant(true);
-
-        armnn::ConstTensor weightsPermuted(weightsInfo, permuteBuffer.get());
-
-        layer = m_Network->AddConstantLayer(weightsPermuted, layerName.c_str());
-
-        layer->GetOutputSlot(0).SetTensorInfo(weightsPermuted.GetInfo());
-
-        RegisterOutputSlots(graph, layerIndex, layer);
-
-        return;
-    }
-    else
-    {
-        layer = m_Network->AddConstantLayer(input, layerName.c_str());
-
-        armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-        outputTensorInfo.SetConstant(true);
-        layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-    }
-
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseConvolution2d(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_LOCATION();
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto flatBufferLayer = graph->layers()->Get(layerIndex)->layer_as_Convolution2dLayer();
-
-    auto layerName = GetLayerName(graph, layerIndex);
-    auto flatbufferDescriptor = flatBufferLayer->descriptor();
-
-    armnn::Convolution2dDescriptor descriptor;
-    descriptor.m_PadLeft = flatbufferDescriptor->padLeft();
-    descriptor.m_PadRight = flatbufferDescriptor->padRight();
-    descriptor.m_PadTop = flatbufferDescriptor->padTop();
-    descriptor.m_PadBottom = flatbufferDescriptor->padBottom();
-    descriptor.m_StrideX = flatbufferDescriptor->strideX();
-    descriptor.m_StrideY = flatbufferDescriptor->strideY();;
-    descriptor.m_DilationX = flatbufferDescriptor->dilationX();
-    descriptor.m_DilationY = flatbufferDescriptor->dilationY();;
-    descriptor.m_BiasEnabled = flatbufferDescriptor->biasEnabled();;
-    descriptor.m_DataLayout = ToDataLayout(flatbufferDescriptor->dataLayout());
-
-    armnn::IConnectableLayer* layer;
-    std::vector<unsigned int> ignoreSlots {};
-
-    armnn::ConstTensor biasTensor;
-    // Weights and biases used to be always constant and were stored as members of the layer. This has changed and
-    // they are now passed as inputs. If they are constant then they will be stored in a ConstantLayer.
-    if (this->GetFeatureVersions(graph).m_ConstTensorsAsInputs <= 0)
-    {
-        // If the model stores weights and biases as members of the layer we have to read them from there
-        // but add them to their own ConstantLayer for compatibility
-        CHECK_VALID_SIZE(inputs.size(), 1);
-
-        layer = m_Network->AddConvolution2dLayer(descriptor,
-                                                 layerName.c_str());
-
-        armnn::ConstTensor weightsTensor = ToConstTensor(flatBufferLayer->weights());
-        auto weightsLayer = m_Network->AddConstantLayer(weightsTensor);
-        weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
-        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsTensor.GetInfo());
-        ignoreSlots.emplace_back(1u);
-
-        if (descriptor.m_BiasEnabled)
-        {
-            biasTensor = ToConstTensor(flatBufferLayer->biases());
-            auto biasLayer = m_Network->AddConstantLayer(biasTensor);
-            biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
-            biasLayer->GetOutputSlot(0).SetTensorInfo(biasTensor.GetInfo());
-            ignoreSlots.emplace_back(2u);
-        }
-    }
-    else
-    {
-        layer = m_Network->AddConvolution2dLayer(descriptor,
-                                                 layerName.c_str());
-        uint32_t numInputs = descriptor.GetNumInputs();
-        CHECK_VALID_SIZE(inputs.size(), numInputs);
-    }
+    IConnectableLayer* layer = m_Network->AddConstantLayer(input, layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
-    RegisterInputSlots(graph, layerIndex, layer, ignoreSlots);
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseConvolution3d(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseConvolution2d(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
     CHECK_LOCATION();
+    CHECK_VALID_SIZE(inputs.size(), 1);
 
     auto outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
-    auto serializerLayer = graph->layers()->Get(layerIndex)->layer_as_Convolution3dLayer();
+    auto serializerLayer = graph->layers()->Get(layerIndex)->layer_as_Convolution2dLayer();
     auto layerName = GetLayerName(graph, layerIndex);
     auto serializerDescriptor = serializerLayer->descriptor();
 
-    armnn::Convolution3dDescriptor descriptor;
+    armnn::Convolution2dDescriptor descriptor;
     descriptor.m_PadLeft = serializerDescriptor->padLeft();
     descriptor.m_PadRight = serializerDescriptor->padRight();
     descriptor.m_PadTop = serializerDescriptor->padTop();
     descriptor.m_PadBottom = serializerDescriptor->padBottom();
-    descriptor.m_PadFront = serializerDescriptor->padFront();
-    descriptor.m_PadBack = serializerDescriptor->padBack();
     descriptor.m_StrideX = serializerDescriptor->strideX();
-    descriptor.m_StrideY = serializerDescriptor->strideY();
-    descriptor.m_StrideZ = serializerDescriptor->strideZ();
+    descriptor.m_StrideY = serializerDescriptor->strideY();;
     descriptor.m_DilationX = serializerDescriptor->dilationX();
-    descriptor.m_DilationY = serializerDescriptor->dilationY();
-    descriptor.m_DilationZ = serializerDescriptor->dilationZ();
-    descriptor.m_BiasEnabled = serializerDescriptor->biasEnabled();
+    descriptor.m_DilationY = serializerDescriptor->dilationY();;
+    descriptor.m_BiasEnabled = serializerDescriptor->biasEnabled();;
     descriptor.m_DataLayout = ToDataLayout(serializerDescriptor->dataLayout());
 
-    uint32_t numInputs = descriptor.GetNumInputs();
-    CHECK_VALID_SIZE(inputs.size(), numInputs);
+    armnn::ConstTensor weights = ToConstTensor(serializerLayer->weights());
+    armnn::ConstTensor biases;
 
-    IConnectableLayer* layer = m_Network->AddConvolution3dLayer(descriptor, layerName.c_str());
-
+    armnn::Optional<armnn::ConstTensor> optionalBiases = armnn::EmptyOptional();
+    if (descriptor.m_BiasEnabled)
+    {
+        biases = ToConstTensor(serializerLayer->biases());
+        optionalBiases = armnn::Optional<armnn::ConstTensor>(biases);
+    }
+    IConnectableLayer* layer = m_Network->AddConvolution2dLayer(descriptor,
+                                                                weights,
+                                                                optionalBiases,
+                                                                layerName.c_str());
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
@@ -1593,7 +1279,7 @@ void IDeserializer::DeserializerImpl::ParseConvolution3d(GraphPtr graph, unsigne
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseDepthToSpace(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseDepthToSpace(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -1619,11 +1305,12 @@ void IDeserializer::DeserializerImpl::ParseDepthToSpace(GraphPtr graph, unsigned
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseDepthwiseConvolution2d(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseDepthwiseConvolution2d(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
     CHECK_LOCATION();
+    CHECK_VALID_SIZE(inputs.size(), 1);
 
     auto outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
@@ -1633,93 +1320,39 @@ void IDeserializer::DeserializerImpl::ParseDepthwiseConvolution2d(GraphPtr graph
     auto serializerDescriptor = serializerLayer->descriptor();
 
     armnn::DepthwiseConvolution2dDescriptor descriptor;
-    descriptor.m_PadLeft = serializerDescriptor->padLeft();
-    descriptor.m_PadRight = serializerDescriptor->padRight();
-    descriptor.m_PadTop = serializerDescriptor->padTop();
-    descriptor.m_PadBottom = serializerDescriptor->padBottom();
-    descriptor.m_StrideX = serializerDescriptor->strideX();
-    descriptor.m_StrideY = serializerDescriptor->strideY();
-    descriptor.m_DilationX = serializerDescriptor->dilationX();
-    descriptor.m_DilationY = serializerDescriptor->dilationY();
-    descriptor.m_BiasEnabled = serializerDescriptor->biasEnabled();
-    descriptor.m_DataLayout = ToDataLayout(serializerDescriptor->dataLayout());
+    descriptor.m_PadLeft     = serializerDescriptor->padLeft();
+    descriptor.m_PadRight    = serializerDescriptor->padRight();
+    descriptor.m_PadTop      = serializerDescriptor->padTop();
+    descriptor.m_PadBottom   = serializerDescriptor->padBottom();
+    descriptor.m_StrideX     = serializerDescriptor->strideX();
+    descriptor.m_StrideY     = serializerDescriptor->strideY();
+    descriptor.m_DilationX   = serializerDescriptor->dilationX();
+    descriptor.m_DilationY   = serializerDescriptor->dilationY();
+    descriptor.m_BiasEnabled = serializerDescriptor->biasEnabled();;
+    descriptor.m_DataLayout  = ToDataLayout(serializerDescriptor->dataLayout());
 
-    IConnectableLayer* layer;
-    std::vector<unsigned int> ignoreSlots {};
+    armnn::ConstTensor weights = ToConstTensor(serializerLayer->weights());
+    armnn::ConstTensor biases;
 
-    // Weights and biases used to be always constant and were stored as members of the layer. This has changed and
-    // they are now passed as inputs. If they are constant then they will be stored in a ConstantLayer.
-    if (this->GetFeatureVersions(graph).m_ConstTensorsAsInputs <= 0)
+    armnn::Optional<armnn::ConstTensor> optionalBiases = armnn::EmptyOptional();
+    if (descriptor.m_BiasEnabled)
     {
-        CHECK_VALID_SIZE(inputs.size(), 1);
-
-        // If the model stores weights and biases as members of the layer we have to read them from there
-        // but add them to their own ConstantLayer for compatibility
-        armnn::ConstTensor weights = ToConstTensor(serializerLayer->weights());
-        ignoreSlots.emplace_back(1u);
-
-        layer = m_Network->AddDepthwiseConvolution2dLayer(descriptor,
-                                                          layerName.c_str());
-
-        armnn::Optional<armnn::ConstTensor> optionalBiases = armnn::EmptyOptional();
-        if (descriptor.m_BiasEnabled)
-        {
-            armnn::ConstTensor biases = ToConstTensor(serializerLayer->biases());
-            ignoreSlots.emplace_back(2u);
-
-            auto biasLayer = m_Network->AddConstantLayer(biases);
-            biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
-            biasLayer->GetOutputSlot(0).SetTensorInfo(biases.GetInfo());
-        }
-
-        if (this->GetFeatureVersions(graph).m_WeightsLayoutScheme <= 0)
-        {
-            // Permute weights  [ H, W, M, I ] --> [ 1, H, W, I*M ]
-            // Step1: [ M, I, H, W ] --> [ H, W, I, M]
-            PermutationVector permutationVector = { 3, 2, 0, 1 };
-            armnn::TensorInfo weightsInfo = weights.GetInfo();
-            std::unique_ptr<unsigned char[]> permuteBuffer(new unsigned char[weightsInfo.GetNumBytes()]);
-            weightsInfo = armnnUtils::Permuted(weightsInfo, permutationVector);
-            armnnUtils::Permute(weightsInfo.GetShape(), permutationVector,
-                                weights.GetMemoryArea(), permuteBuffer.get(),
-                                GetDataTypeSize(weightsInfo.GetDataType()));
-
-            // Step2: Reshape [ H, W, I, M] --> [ 1, H, W, I*M ]
-            auto weightsShape = weightsInfo.GetShape();
-            weightsInfo.SetShape({1,
-                                  weightsShape[0],
-                                  weightsShape[1],
-                                  weightsShape[2]*weightsShape[3]});
-
-            armnn::ConstTensor weightsPermuted(weightsInfo, permuteBuffer.get());
-
-            auto weightsLayer = m_Network->AddConstantLayer(weightsPermuted);
-            weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
-            weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsPermuted.GetInfo());
-        }
-        else
-        {
-            auto weightsLayer = m_Network->AddConstantLayer(weights);
-            weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
-            weightsLayer->GetOutputSlot(0).SetTensorInfo(weights.GetInfo());
-        }
+        biases = ToConstTensor(serializerLayer->biases());
+        optionalBiases = armnn::Optional<armnn::ConstTensor>(biases);
     }
-    else
-    {
-        layer = m_Network->AddDepthwiseConvolution2dLayer(descriptor,
-                                                          layerName.c_str());
-        uint32_t numInputs = descriptor.GetNumInputs();
-        CHECK_VALID_SIZE(inputs.size(), numInputs);
-    }
+    IConnectableLayer* layer = m_Network->AddDepthwiseConvolution2dLayer(descriptor,
+                                                                         weights,
+                                                                         optionalBiases,
+                                                                         layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
-    RegisterInputSlots(graph, layerIndex, layer, ignoreSlots);
+    RegisterInputSlots(graph, layerIndex, layer);
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseDetectionPostProcess(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseDetectionPostProcess(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1761,7 +1394,7 @@ void IDeserializer::DeserializerImpl::ParseDetectionPostProcess(GraphPtr graph, 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseDivision(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseDivision(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1772,8 +1405,7 @@ void IDeserializer::DeserializerImpl::ParseDivision(GraphPtr graph, unsigned int
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Div);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddDivisionLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -1782,7 +1414,7 @@ void IDeserializer::DeserializerImpl::ParseDivision(GraphPtr graph, unsigned int
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseEqual(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseEqual(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1803,7 +1435,7 @@ void IDeserializer::DeserializerImpl::ParseEqual(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseFill(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseFill(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1814,8 +1446,7 @@ void IDeserializer::DeserializerImpl::ParseFill(GraphPtr graph, unsigned int lay
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::FillDescriptor descriptor;
-    descriptor.m_Value = graph->layers()->Get(layerIndex)->layer_as_FillLayer()->descriptor()->value();
+    armnn::FillDescriptor descriptor(1.0f);
     IConnectableLayer* layer = m_Network->AddFillLayer(descriptor, layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
@@ -1825,7 +1456,7 @@ void IDeserializer::DeserializerImpl::ParseFill(GraphPtr graph, unsigned int lay
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseGreater(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseGreater(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1846,7 +1477,7 @@ void IDeserializer::DeserializerImpl::ParseGreater(GraphPtr graph, unsigned int 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseInstanceNormalization(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseInstanceNormalization(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -1875,7 +1506,7 @@ void IDeserializer::DeserializerImpl::ParseInstanceNormalization(GraphPtr graph,
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseL2Normalization(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseL2Normalization(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -1901,7 +1532,7 @@ void IDeserializer::DeserializerImpl::ParseL2Normalization(GraphPtr graph, unsig
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseLogicalBinary(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseLogicalBinary(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -1928,14 +1559,14 @@ void IDeserializer::DeserializerImpl::ParseLogicalBinary(GraphPtr graph, unsigne
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseLogSoftmax(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseLogSoftmax(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     armnn::LogSoftmaxDescriptor descriptor;
@@ -1952,7 +1583,7 @@ void IDeserializer::DeserializerImpl::ParseLogSoftmax(GraphPtr graph, unsigned i
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseMinimum(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseMinimum(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1963,8 +1594,7 @@ void IDeserializer::DeserializerImpl::ParseMinimum(GraphPtr graph, unsigned int 
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Minimum);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddMinimumLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -1973,7 +1603,7 @@ void IDeserializer::DeserializerImpl::ParseMinimum(GraphPtr graph, unsigned int 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseMaximum(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseMaximum(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -1984,8 +1614,7 @@ void IDeserializer::DeserializerImpl::ParseMaximum(GraphPtr graph, unsigned int 
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Maximum);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddMaximumLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -2009,31 +1638,8 @@ const armnnSerializer::OriginsDescriptor* GetOriginsDescriptor(const armnnSerial
             throw armnn::Exception("unknown layer type, should be concat or merger");
     }
 }
-void IDeserializer::DeserializerImpl::ParseChannelShuffle(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 1);
-
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    armnn::ChannelShuffleDescriptor descriptor;
-    descriptor.m_Axis = graph->layers()->Get(layerIndex)->layer_as_ChannelShuffleLayer()->descriptor()->axis();
-    descriptor.m_NumGroups =
-                   graph->layers()->Get(layerIndex)->layer_as_ChannelShuffleLayer()->descriptor()->numGroups();
-
-    auto layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer = m_Network->AddChannelShuffleLayer(descriptor, layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-void IDeserializer::DeserializerImpl::ParseComparison(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseComparison(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -2060,34 +1666,7 @@ void IDeserializer::DeserializerImpl::ParseComparison(GraphPtr graph, unsigned i
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseElementwiseBinary(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-    CHECK_LOCATION();
-
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 2);
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto fbLayer      = graph->layers()->Get(layerIndex)->layer_as_ElementwiseBinaryLayer();
-    auto fbDescriptor = fbLayer->descriptor();
-
-    armnn::ElementwiseBinaryDescriptor descriptor;
-    descriptor.m_Operation = ToElementwiseBinaryOperation(fbDescriptor->operation());
-
-    const std::string& layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer     = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseElementwiseUnary(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseElementwiseUnary(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -2102,7 +1681,7 @@ void IDeserializer::DeserializerImpl::ParseElementwiseUnary(GraphPtr graph, unsi
     auto fbDescriptor = fbLayer->descriptor();
 
     armnn::ElementwiseUnaryDescriptor descriptor;
-    descriptor.m_Operation = ToElementwiseUnaryOperation(fbDescriptor->operation());
+    descriptor.m_Operation = ToUnaryOperation(fbDescriptor->operation());
 
     const std::string& layerName = GetLayerName(graph, layerIndex);
     IConnectableLayer* layer     = m_Network->AddElementwiseUnaryLayer(descriptor, layerName.c_str());
@@ -2114,7 +1693,7 @@ void IDeserializer::DeserializerImpl::ParseElementwiseUnary(GraphPtr graph, unsi
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseConcat(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseConcat(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -2152,7 +1731,7 @@ void IDeserializer::DeserializerImpl::ParseConcat(GraphPtr graph, unsigned int l
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseMultiplication(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseMultiplication(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -2163,8 +1742,7 @@ void IDeserializer::DeserializerImpl::ParseMultiplication(GraphPtr graph, unsign
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Mul);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddMultiplicationLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -2173,7 +1751,7 @@ void IDeserializer::DeserializerImpl::ParseMultiplication(GraphPtr graph, unsign
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseFloor(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseFloor(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     CHECK_LOCATION();
@@ -2197,11 +1775,12 @@ void IDeserializer::DeserializerImpl::ParseFloor(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseFullyConnected(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseFullyConnected(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
     CHECK_LOCATION();
+    CHECK_VALID_SIZE(inputs.size(), 1);
 
     auto outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
@@ -2213,80 +1792,56 @@ void IDeserializer::DeserializerImpl::ParseFullyConnected(GraphPtr graph, unsign
     armnn::FullyConnectedDescriptor fullyConnectedDescriptor;
     fullyConnectedDescriptor.m_BiasEnabled = flatBufferDescriptor->biasEnabled();
     fullyConnectedDescriptor.m_TransposeWeightMatrix = flatBufferDescriptor->transposeWeightsMatrix();
-    fullyConnectedDescriptor.m_ConstantWeights = flatBufferDescriptor->constantWeights();
+
+    armnn::ConstTensor weightsTensor = ToConstTensor(flatBufferLayer->weights());
 
     armnn::IConnectableLayer* layer;
-    std::vector<unsigned int> ignoreSlots {};
-
-    // Weights and biases used to be always constant and were stored as members of the layer. This has changed and
-    // they are now passed as inputs. If they are constant then they will be stored in a ConstantLayer.
-    if (this->GetFeatureVersions(graph).m_ConstTensorsAsInputs <= 0)
+    armnn::Optional<armnn::ConstTensor> optionalBiases = armnn::EmptyOptional();
+    if (flatBufferDescriptor->biasEnabled())
     {
-        // If the model stores weights and biases as members of the layer we have to read them from there
-        // but add them to their own ConstantLayer for compatibility
-        CHECK_VALID_SIZE(inputs.size(), 1);
-        layer = m_Network->AddFullyConnectedLayer(fullyConnectedDescriptor,
-                                                  layerName.c_str());
-
-        armnn::ConstTensor weightsTensor = ToConstTensor(flatBufferLayer->weights());
-        auto weightsLayer = m_Network->AddConstantLayer(weightsTensor);
-        weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
-        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsTensor.GetInfo());
-        ignoreSlots.emplace_back(1u);
-
-        if (fullyConnectedDescriptor.m_BiasEnabled)
-        {
-            armnn::ConstTensor biasTensor = ToConstTensor(flatBufferLayer->biases());
-            auto biasLayer = m_Network->AddConstantLayer(biasTensor);
-            biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
-            biasLayer->GetOutputSlot(0).SetTensorInfo(biasTensor.GetInfo());
-            ignoreSlots.emplace_back(2u);
-        }
+        armnn::ConstTensor biasTensorData = ToConstTensor(flatBufferLayer->biases());
+        optionalBiases = armnn::Optional<armnn::ConstTensor>(biasTensorData);
     }
-    else
-    {
-        layer = m_Network->AddFullyConnectedLayer(fullyConnectedDescriptor,
-                                                  layerName.c_str());
-        uint32_t numInputs = fullyConnectedDescriptor.GetNumInputs();
-        CHECK_VALID_SIZE(inputs.size(), numInputs);
-    }
+    layer = m_Network->AddFullyConnectedLayer(fullyConnectedDescriptor,
+                                              weightsTensor,
+                                              optionalBiases,
+                                              layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
-    RegisterInputSlots(graph, layerIndex, layer, ignoreSlots);
+    RegisterInputSlots(graph, layerIndex, layer);
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParsePad(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParsePad(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_PadLayer()->descriptor();
     auto flatBufferPadList = flatBufferDescriptor->padList();
-    auto paddingMode = flatBufferDescriptor->paddingMode();
     float padValue = flatBufferDescriptor->padValue();
 
-    if (flatBufferPadList->size() % 2 != 0)
+    if (flatBufferPadList->Length() % 2 != 0)
     {
         throw ParseException(fmt::format("The size of the pad list must be divisible by 2 {}",
                                          CHECK_LOCATION().AsString()));
     }
 
     std::vector<std::pair<unsigned int, unsigned int>> padList;
-    padList.reserve(flatBufferPadList->size() / 2);
-    for (unsigned int i = 0; i < flatBufferPadList->size() - 1; i += 2)
+    padList.reserve(flatBufferPadList->Length() / 2);
+    for (unsigned int i = 0; i < flatBufferPadList->Length() - 1; i += 2)
     {
         padList.emplace_back(flatBufferPadList->Get(i), flatBufferPadList->Get(i+1));
     }
 
-    armnn::PadDescriptor descriptor(padList, padValue, ToPaddingMode(paddingMode));
+    armnn::PadDescriptor descriptor(padList, padValue);
 
     auto layerName = GetLayerName(graph, layerIndex);
     IConnectableLayer* layer = m_Network->AddPadLayer(descriptor, layerName.c_str());
@@ -2298,7 +1853,7 @@ void IDeserializer::DeserializerImpl::ParsePad(GraphPtr graph, unsigned int laye
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParsePermute(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParsePermute(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -2313,7 +1868,7 @@ void IDeserializer::DeserializerImpl::ParsePermute(GraphPtr graph, unsigned int 
     auto outputInfo = ToTensorInfo(outputs[0]);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    const armnn::PermuteDescriptor descriptor(armnn::PermutationVector(dimsMapping->data(), dimsMapping->size()));
+    const armnn::PermuteDescriptor descriptor(armnn::PermutationVector(dimsMapping->data(), dimsMapping->Length()));
 
     IConnectableLayer* layer = m_Network->AddPermuteLayer(descriptor, layerName.c_str());
     layer->GetOutputSlot(0).SetTensorInfo(outputInfo);
@@ -2322,7 +1877,7 @@ void IDeserializer::DeserializerImpl::ParsePermute(GraphPtr graph, unsigned int 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-armnn::Pooling2dDescriptor IDeserializer::DeserializerImpl::GetPooling2dDescriptor(Pooling2dDescriptor pooling2dDesc,
+armnn::Pooling2dDescriptor Deserializer::GetPoolingDescriptor(Deserializer::PoolingDescriptor pooling2dDesc,
                                                               unsigned int layerIndex)
 {
     IgnoreUnused(layerIndex);
@@ -2338,11 +1893,6 @@ armnn::Pooling2dDescriptor IDeserializer::DeserializerImpl::GetPooling2dDescript
         case PoolingAlgorithm_Max:
         {
             desc.m_PoolType = armnn::PoolingAlgorithm::Max;
-            break;
-        }
-        case PoolingAlgorithm_L2:
-        {
-            desc.m_PoolType = armnn::PoolingAlgorithm::L2;
             break;
         }
         default:
@@ -2417,106 +1967,7 @@ armnn::Pooling2dDescriptor IDeserializer::DeserializerImpl::GetPooling2dDescript
     return desc;
 }
 
-armnn::Pooling3dDescriptor IDeserializer::DeserializerImpl::GetPooling3dDescriptor(Pooling3dDescriptor pooling3dDesc,
-                                                              unsigned int layerIndex)
-{
-    IgnoreUnused(layerIndex);
-    armnn::Pooling3dDescriptor desc;
-
-    switch (pooling3dDesc->poolType())
-    {
-        case PoolingAlgorithm_Average:
-        {
-            desc.m_PoolType = armnn::PoolingAlgorithm::Average;
-            break;
-        }
-        case PoolingAlgorithm_Max:
-        {
-            desc.m_PoolType = armnn::PoolingAlgorithm::Max;
-            break;
-        }
-        case PoolingAlgorithm_L2:
-        {
-            desc.m_PoolType = armnn::PoolingAlgorithm::L2;
-            break;
-        }
-        default:
-        {
-            ARMNN_ASSERT_MSG(false, "Unsupported pooling algorithm");
-        }
-    }
-
-    switch (pooling3dDesc->outputShapeRounding())
-    {
-        case OutputShapeRounding_Floor:
-        {
-            desc.m_OutputShapeRounding = armnn::OutputShapeRounding::Floor;
-            break;
-        }
-        case OutputShapeRounding_Ceiling:
-        {
-            desc.m_OutputShapeRounding = armnn::OutputShapeRounding::Ceiling;
-            break;
-        }
-        default:
-        {
-            ARMNN_ASSERT_MSG(false, "Unsupported output shape rounding");
-        }
-    }
-
-    switch (pooling3dDesc->paddingMethod())
-    {
-        case PaddingMethod_Exclude:
-        {
-            desc.m_PaddingMethod = armnn::PaddingMethod::Exclude;
-            break;
-        }
-        case PaddingMethod_IgnoreValue:
-        {
-            desc.m_PaddingMethod = armnn::PaddingMethod::IgnoreValue;
-            break;
-        }
-        default:
-        {
-            ARMNN_ASSERT_MSG(false, "Unsupported padding method");
-        }
-    }
-
-    switch (pooling3dDesc->dataLayout())
-    {
-        case DataLayout_NCDHW:
-        {
-            desc.m_DataLayout = armnn::DataLayout::NCDHW;
-            break;
-        }
-        case DataLayout_NDHWC:
-        {
-            desc.m_DataLayout = armnn::DataLayout::NDHWC;
-            break;
-        }
-        default:
-        {
-            ARMNN_ASSERT_MSG(false, "Unsupported data layout");
-        }
-    }
-
-    desc.m_PadRight   = pooling3dDesc->padRight();
-    desc.m_PadLeft    = pooling3dDesc->padLeft();
-    desc.m_PadBottom  = pooling3dDesc->padBottom();
-    desc.m_PadTop     = pooling3dDesc->padTop();
-    desc.m_PadFront   = pooling3dDesc->padFront();
-    desc.m_PadBack    = pooling3dDesc->padBack();
-    desc.m_StrideX    = pooling3dDesc->strideX();
-    desc.m_StrideY    = pooling3dDesc->strideY();
-    desc.m_StrideZ    = pooling3dDesc->strideZ();
-    desc.m_PoolWidth  = pooling3dDesc->poolWidth();
-    desc.m_PoolHeight = pooling3dDesc->poolHeight();
-    desc.m_PoolDepth  = pooling3dDesc->poolDepth();
-
-    return desc;
-}
-
-void IDeserializer::DeserializerImpl::ParsePooling2d(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParsePooling2d(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -2528,7 +1979,7 @@ void IDeserializer::DeserializerImpl::ParsePooling2d(GraphPtr graph, unsigned in
     CHECK_VALID_SIZE(outputs.size(), 1);
     auto outputInfo = ToTensorInfo(outputs[0]);
 
-    auto pooling2dDescriptor = GetPooling2dDescriptor(pooling2dDes, layerIndex);
+    auto pooling2dDescriptor = GetPoolingDescriptor(pooling2dDes, layerIndex);
     auto layerName = GetLayerName(graph, layerIndex);
     IConnectableLayer* layer = m_Network->AddPooling2dLayer(pooling2dDescriptor, layerName.c_str());
     layer->GetOutputSlot(0).SetTensorInfo(outputInfo);
@@ -2537,28 +1988,7 @@ void IDeserializer::DeserializerImpl::ParsePooling2d(GraphPtr graph, unsigned in
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParsePooling3d(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-
-    auto pooling3dDes = graph->layers()->Get(layerIndex)->layer_as_Pooling3dLayer()->descriptor();
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 1);
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-    auto outputInfo = ToTensorInfo(outputs[0]);
-
-    auto pooling3dDescriptor = GetPooling3dDescriptor(pooling3dDes, layerIndex);
-    auto layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer = m_Network->AddPooling3dLayer(pooling3dDescriptor, layerName.c_str());
-    layer->GetOutputSlot(0).SetTensorInfo(outputInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseQuantize(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseQuantize(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -2577,7 +2007,7 @@ void IDeserializer::DeserializerImpl::ParseQuantize(GraphPtr graph, unsigned int
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-armnn::TensorInfo IDeserializer::DeserializerImpl::OutputShapeOfReshape(const armnn::TensorInfo& inputTensorInfo,
+armnn::TensorInfo Deserializer::OutputShapeOfReshape(const armnn::TensorInfo& inputTensorInfo,
                                                           const std::vector<uint32_t>& targetDimsIn)
 {
     std::vector<unsigned int> outputDims(targetDimsIn.begin(), targetDimsIn.end());
@@ -2607,14 +2037,14 @@ armnn::TensorInfo IDeserializer::DeserializerImpl::OutputShapeOfReshape(const ar
     return reshapeInfo;
 }
 
-void IDeserializer::DeserializerImpl::ParseRank(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseRank(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
@@ -2627,37 +2057,7 @@ void IDeserializer::DeserializerImpl::ParseRank(GraphPtr graph, unsigned int lay
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseReduce(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-    CHECK_LOCATION();
-
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 1);
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto fbLayer      = graph->layers()->Get(layerIndex)->layer_as_ReduceLayer();
-    auto fbDescriptor = fbLayer->descriptor();
-    auto flatBufferAxis = fbDescriptor->axis();
-
-    armnn::ReduceDescriptor descriptor;
-    descriptor.m_KeepDims     = fbDescriptor->keepDims();
-    descriptor.m_vAxis = std::vector<unsigned int>(flatBufferAxis->begin(), flatBufferAxis->end());
-    descriptor.m_ReduceOperation = ToReduceOperation(fbDescriptor->reduceOperation());
-
-    const std::string& layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer     = m_Network->AddReduceLayer(descriptor, layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseReshape(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseReshape(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -2671,7 +2071,7 @@ void IDeserializer::DeserializerImpl::ParseReshape(GraphPtr graph, unsigned int 
     const auto targetDims = graph->layers()->Get(layerIndex)->layer_as_ReshapeLayer()->descriptor()->targetShape();
     std::vector<uint32_t> outputDims(targetDims->begin(), targetDims->begin() + targetDims->size());
 
-    armnn::TensorInfo reshapeOutputTensorInfo = DeserializerImpl::OutputShapeOfReshape(inputTensorInfo, outputDims);
+    armnn::TensorInfo reshapeOutputTensorInfo = Deserializer::OutputShapeOfReshape(inputTensorInfo, outputDims);
     const armnn::TensorShape& reshapeOutputTensorShape = reshapeOutputTensorInfo.GetShape();
 
     const std::vector<uint32_t> expectedDims(outputs[0]->dimensions()->begin(),
@@ -2700,14 +2100,14 @@ void IDeserializer::DeserializerImpl::ParseReshape(GraphPtr graph, unsigned int 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseResize(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseResize(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_ResizeLayer()->descriptor();
@@ -2730,17 +2130,14 @@ void IDeserializer::DeserializerImpl::ParseResize(GraphPtr graph, unsigned int l
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-
-/// @Note The ResizeBiliniar operation was deprecated and removed in favor of the Resize operation.
-///       This function is kept for backwards compatibility.
-void IDeserializer::DeserializerImpl::ParseResizeBilinear(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseResizeBilinear(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_ResizeBilinearLayer()->descriptor();
@@ -2763,39 +2160,18 @@ void IDeserializer::DeserializerImpl::ParseResizeBilinear(GraphPtr graph, unsign
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseShape(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSoftmax(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer = m_Network->AddShapeLayer( layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseSoftmax(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 1);
-
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     armnn::SoftmaxDescriptor descriptor;
     descriptor.m_Beta = graph->layers()->Get(layerIndex)->layer_as_SoftmaxLayer()->descriptor()->beta();
-    descriptor.m_Axis = graph->layers()->Get(layerIndex)->layer_as_SoftmaxLayer()->descriptor()->axis();
     auto layerName = GetLayerName(graph, layerIndex);
 
     IConnectableLayer* layer = m_Network->AddSoftmaxLayer(descriptor, layerName.c_str());
@@ -2807,29 +2183,29 @@ void IDeserializer::DeserializerImpl::ParseSoftmax(GraphPtr graph, unsigned int 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSpaceToBatchNd(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSpaceToBatchNd(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_SpaceToBatchNdLayer()->descriptor();
     auto flatBufferPadList = flatBufferDescriptor->padList();
     auto flatBufferBlockShape = flatBufferDescriptor->blockShape();
 
-    if (flatBufferPadList->size() % 2 != 0)
+    if (flatBufferPadList->Length() % 2 != 0)
     {
         throw ParseException(fmt::format("The size of the pad list must be divisible by 2 {}",
                                          CHECK_LOCATION().AsString()));
     }
 
     std::vector<std::pair<unsigned int, unsigned int>> padList;
-    padList.reserve(flatBufferPadList->size() / 2);
-    for (unsigned int i = 0; i < flatBufferPadList->size() - 1; i += 2)
+    padList.reserve(flatBufferPadList->Length() / 2);
+    for (unsigned int i = 0; i < flatBufferPadList->Length() - 1; i += 2)
     {
         padList.emplace_back(flatBufferPadList->Get(i), flatBufferPadList->Get(i+1));
     }
@@ -2850,14 +2226,14 @@ void IDeserializer::DeserializerImpl::ParseSpaceToBatchNd(GraphPtr graph, unsign
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSpaceToDepth(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSpaceToDepth(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_SpaceToDepthLayer()->descriptor();
@@ -2876,8 +2252,8 @@ void IDeserializer::DeserializerImpl::ParseSpaceToDepth(GraphPtr graph, unsigned
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-armnn::NormalizationDescriptor IDeserializer::DeserializerImpl::GetNormalizationDescriptor(
-    NormalizationDescriptorPtr normalizationDescriptor,
+armnn::NormalizationDescriptor Deserializer::GetNormalizationDescriptor(
+    Deserializer::NormalizationDescriptorPtr normalizationDescriptor,
     unsigned int layerIndex)
 {
     IgnoreUnused(layerIndex);
@@ -2945,16 +2321,16 @@ armnn::NormalizationDescriptor IDeserializer::DeserializerImpl::GetNormalization
     return desc;
 }
 
-void IDeserializer::DeserializerImpl::ParseNormalization(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseNormalization(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
     auto normalizationDes = graph->layers()->Get(layerIndex)->layer_as_NormalizationLayer()->descriptor();
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto outputInfo = ToTensorInfo(outputs[0]);
@@ -2969,7 +2345,7 @@ void IDeserializer::DeserializerImpl::ParseNormalization(GraphPtr graph, unsigne
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseRsqrt(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseRsqrt(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -2990,7 +2366,7 @@ void IDeserializer::DeserializerImpl::ParseRsqrt(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSlice(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSlice(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3005,7 +2381,7 @@ void IDeserializer::DeserializerImpl::ParseSlice(GraphPtr graph, unsigned int la
     auto fbBegin = fbDescriptor->begin();
     auto fbSize  = fbDescriptor->size();
 
-    if (fbBegin->size() != fbSize->size())
+    if (fbBegin->Length() != fbSize->Length())
     {
         throw ParseException(fmt::format("Begin and size descriptors must have the same length {}",
                                          CHECK_LOCATION().AsString()));
@@ -3025,14 +2401,14 @@ void IDeserializer::DeserializerImpl::ParseSlice(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseStridedSlice(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseStridedSlice(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_StridedSliceLayer()->descriptor();
@@ -3041,8 +2417,8 @@ void IDeserializer::DeserializerImpl::ParseStridedSlice(GraphPtr graph, unsigned
     auto flatBufferEnd = flatBufferDescriptor->end();
     auto flatBufferStride = flatBufferDescriptor->stride();
 
-    if (!(flatBufferBegin->size() == flatBufferEnd->size() &&
-          flatBufferBegin->size() == flatBufferStride->size()))
+    if (!(flatBufferBegin->Length() == flatBufferEnd->Length() &&
+          flatBufferBegin->Length() == flatBufferStride->Length()))
     {
         throw ParseException(fmt::format("The size of the begin, end, and stride must be equal {}",
                                          CHECK_LOCATION().AsString()));
@@ -3070,7 +2446,7 @@ void IDeserializer::DeserializerImpl::ParseStridedSlice(GraphPtr graph, unsigned
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSubtraction(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSubtraction(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -3081,8 +2457,7 @@ void IDeserializer::DeserializerImpl::ParseSubtraction(GraphPtr graph, unsigned 
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    armnn::ElementwiseBinaryDescriptor descriptor(armnn::BinaryOperation::Sub);
-    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(descriptor, layerName.c_str());
+    IConnectableLayer* layer = m_Network->AddSubtractionLayer(layerName.c_str());
 
     armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
@@ -3091,14 +2466,14 @@ void IDeserializer::DeserializerImpl::ParseSubtraction(GraphPtr graph, unsigned 
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseGather(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseGather(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 2);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     armnn::GatherDescriptor descriptor;
@@ -3114,34 +2489,14 @@ void IDeserializer::DeserializerImpl::ParseGather(GraphPtr graph, unsigned int l
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseGatherNd(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseMean(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 2);
-
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 1);
-
-    auto layerName = GetLayerName(graph, layerIndex);
-    IConnectableLayer* layer = m_Network->AddGatherNdLayer(layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-void IDeserializer::DeserializerImpl::ParseMean(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     auto flatBufferDescriptor = graph->layers()->Get(layerIndex)->layer_as_MeanLayer()->descriptor();
@@ -3162,14 +2517,14 @@ void IDeserializer::DeserializerImpl::ParseMean(GraphPtr graph, unsigned int lay
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSplitter(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSplitter(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
 
     auto flatBufferViewsDescriptor = graph->layers()->Get(layerIndex)->layer_as_SplitterLayer()->descriptor();
     auto flatBufferViewSizes = flatBufferViewsDescriptor->viewSizes();
@@ -3206,7 +2561,7 @@ void IDeserializer::DeserializerImpl::ParseSplitter(GraphPtr graph, unsigned int
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-armnn::LstmDescriptor IDeserializer::DeserializerImpl::GetLstmDescriptor(LstmDescriptorPtr lstmDescriptor)
+armnn::LstmDescriptor Deserializer::GetLstmDescriptor(Deserializer::LstmDescriptorPtr lstmDescriptor)
 {
     armnn::LstmDescriptor desc;
 
@@ -3221,7 +2576,7 @@ armnn::LstmDescriptor IDeserializer::DeserializerImpl::GetLstmDescriptor(LstmDes
     return desc;
 }
 
-void IDeserializer::DeserializerImpl::ParseLstm(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseLstm(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3337,7 +2692,7 @@ void IDeserializer::DeserializerImpl::ParseLstm(GraphPtr graph, unsigned int lay
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-armnn::QLstmDescriptor IDeserializer::DeserializerImpl::GetQLstmDescriptor(QLstmDescriptorPtr qLstmDescriptor)
+armnn::QLstmDescriptor Deserializer::GetQLstmDescriptor(Deserializer::QLstmDescriptorPtr qLstmDescriptor)
 {
     armnn::QLstmDescriptor desc;
 
@@ -3360,7 +2715,7 @@ armnn::QLstmDescriptor IDeserializer::DeserializerImpl::GetQLstmDescriptor(QLstm
     return desc;
 }
 
-void IDeserializer::DeserializerImpl::ParseQLstm(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseQLstm(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3486,7 +2841,7 @@ void IDeserializer::DeserializerImpl::ParseQLstm(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseQuantizedLstm(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseQuantizedLstm(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3540,14 +2895,14 @@ void IDeserializer::DeserializerImpl::ParseQuantizedLstm(GraphPtr graph, unsigne
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseDequantize(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseDequantize(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 1);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     const std::string layerName = GetLayerName(graph, layerIndex);
@@ -3560,14 +2915,14 @@ void IDeserializer::DeserializerImpl::ParseDequantize(GraphPtr graph, unsigned i
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseMerge(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseMerge(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
-    TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector inputs = GetInputs(graph, layerIndex);
     CHECK_VALID_SIZE(inputs.size(), 2);
 
-    TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
+    Deserializer::TensorRawPtrVector outputs = GetOutputs(graph, layerIndex);
     CHECK_VALID_SIZE(outputs.size(), 1);
 
     const std::string layerName = GetLayerName(graph, layerIndex);
@@ -3580,7 +2935,7 @@ void IDeserializer::DeserializerImpl::ParseMerge(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseSwitch(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseSwitch(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -3603,7 +2958,7 @@ void IDeserializer::DeserializerImpl::ParseSwitch(GraphPtr graph, unsigned int l
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParsePrelu(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParsePrelu(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -3623,7 +2978,7 @@ void IDeserializer::DeserializerImpl::ParsePrelu(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseTranspose(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseTranspose(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3637,7 +2992,7 @@ void IDeserializer::DeserializerImpl::ParseTranspose(GraphPtr graph, unsigned in
     auto outputInfo = ToTensorInfo(outputs[0]);
 
     auto layerName = GetLayerName(graph, layerIndex);
-    const armnn::TransposeDescriptor descriptor(armnn::PermutationVector(dimsMapping->data(), dimsMapping->size()));
+    const armnn::TransposeDescriptor descriptor(armnn::PermutationVector(dimsMapping->data(), dimsMapping->Length()));
 
     IConnectableLayer* layer = m_Network->AddTransposeLayer(descriptor, layerName.c_str());
     layer->GetOutputSlot(0).SetTensorInfo(outputInfo);
@@ -3646,7 +3001,7 @@ void IDeserializer::DeserializerImpl::ParseTranspose(GraphPtr graph, unsigned in
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseTransposeConvolution2d(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseTransposeConvolution2d(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3691,7 +3046,7 @@ void IDeserializer::DeserializerImpl::ParseTransposeConvolution2d(GraphPtr graph
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseStack(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseStack(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
     auto inputs = GetInputs(graph, layerIndex);
@@ -3739,7 +3094,7 @@ void IDeserializer::DeserializerImpl::ParseStack(GraphPtr graph, unsigned int la
     RegisterOutputSlots(graph, layerIndex, layer);
 }
 
-void IDeserializer::DeserializerImpl::ParseStandIn(GraphPtr graph, unsigned int layerIndex)
+void Deserializer::ParseStandIn(GraphPtr graph, unsigned int layerIndex)
 {
     CHECK_LAYERS(graph, 0, layerIndex);
 
@@ -3764,142 +3119,6 @@ void IDeserializer::DeserializerImpl::ParseStandIn(GraphPtr graph, unsigned int 
         armnn::TensorInfo outputInfo = ToTensorInfo(outputs[i]);
         layer->GetOutputSlot(i).SetTensorInfo(outputInfo);
     }
-
-    RegisterInputSlots(graph, layerIndex, layer);
-    RegisterOutputSlots(graph, layerIndex, layer);
-}
-
-armnn::UnidirectionalSequenceLstmDescriptor IDeserializer::DeserializerImpl::GetUnidirectionalSequenceLstmDescriptor(
-    UnidirectionalSequenceLstmDescriptorPtr descriptor)
-{
-    armnn::UnidirectionalSequenceLstmDescriptor desc;
-
-    desc.m_ActivationFunc = descriptor->activationFunc();
-    desc.m_ClippingThresCell = descriptor->clippingThresCell();
-    desc.m_ClippingThresProj = descriptor->clippingThresProj();
-    desc.m_CifgEnabled = descriptor->cifgEnabled();
-    desc.m_PeepholeEnabled = descriptor->peepholeEnabled();
-    desc.m_ProjectionEnabled = descriptor->projectionEnabled();
-    desc.m_LayerNormEnabled = descriptor->layerNormEnabled();
-    desc.m_TimeMajor = descriptor->timeMajor();
-
-    return desc;
-}
-
-void IDeserializer::DeserializerImpl::ParseUnidirectionalSequenceLstm(GraphPtr graph, unsigned int layerIndex)
-{
-    CHECK_LAYERS(graph, 0, layerIndex);
-
-    auto inputs = GetInputs(graph, layerIndex);
-    CHECK_VALID_SIZE(inputs.size(), 3);
-
-    auto outputs = GetOutputs(graph, layerIndex);
-    CHECK_VALID_SIZE(outputs.size(), 3);
-
-    auto flatBufferLayer = graph->layers()->Get(layerIndex)->layer_as_UnidirectionalSequenceLstmLayer();
-    auto layerName = GetLayerName(graph, layerIndex);
-    auto flatBufferDescriptor = flatBufferLayer->descriptor();
-    auto flatBufferInputParams = flatBufferLayer->inputParams();
-
-    auto descriptor = GetUnidirectionalSequenceLstmDescriptor(flatBufferDescriptor);
-
-    armnn::LstmInputParams lstmInputParams;
-
-    armnn::ConstTensor inputToForgetWeights = ToConstTensor(flatBufferInputParams->inputToForgetWeights());
-    armnn::ConstTensor inputToCellWeights = ToConstTensor(flatBufferInputParams->inputToCellWeights());
-    armnn::ConstTensor inputToOutputWeights = ToConstTensor(flatBufferInputParams->inputToOutputWeights());
-    armnn::ConstTensor recurrentToForgetWeights = ToConstTensor(flatBufferInputParams->recurrentToForgetWeights());
-    armnn::ConstTensor recurrentToCellWeights = ToConstTensor(flatBufferInputParams->recurrentToCellWeights());
-    armnn::ConstTensor recurrentToOutputWeights = ToConstTensor(flatBufferInputParams->recurrentToOutputWeights());
-    armnn::ConstTensor forgetGateBias = ToConstTensor(flatBufferInputParams->forgetGateBias());
-    armnn::ConstTensor cellBias = ToConstTensor(flatBufferInputParams->cellBias());
-    armnn::ConstTensor outputGateBias = ToConstTensor(flatBufferInputParams->outputGateBias());
-
-    lstmInputParams.m_InputToForgetWeights = &inputToForgetWeights;
-    lstmInputParams.m_InputToCellWeights = &inputToCellWeights;
-    lstmInputParams.m_InputToOutputWeights = &inputToOutputWeights;
-    lstmInputParams.m_RecurrentToForgetWeights = &recurrentToForgetWeights;
-    lstmInputParams.m_RecurrentToCellWeights = &recurrentToCellWeights;
-    lstmInputParams.m_RecurrentToOutputWeights = &recurrentToOutputWeights;
-    lstmInputParams.m_ForgetGateBias = &forgetGateBias;
-    lstmInputParams.m_CellBias = &cellBias;
-    lstmInputParams.m_OutputGateBias = &outputGateBias;
-
-    armnn::ConstTensor inputToInputWeights;
-    armnn::ConstTensor recurrentToInputWeights;
-    armnn::ConstTensor cellToInputWeights;
-    armnn::ConstTensor inputGateBias;
-    if (!descriptor.m_CifgEnabled)
-    {
-        inputToInputWeights = ToConstTensor(flatBufferInputParams->inputToInputWeights());
-        recurrentToInputWeights = ToConstTensor(flatBufferInputParams->recurrentToInputWeights());
-        inputGateBias = ToConstTensor(flatBufferInputParams->inputGateBias());
-
-        lstmInputParams.m_InputToInputWeights = &inputToInputWeights;
-        lstmInputParams.m_RecurrentToInputWeights = &recurrentToInputWeights;
-        lstmInputParams.m_InputGateBias = &inputGateBias;
-
-        if (descriptor.m_PeepholeEnabled)
-        {
-            cellToInputWeights = ToConstTensor(flatBufferInputParams->cellToInputWeights());
-            lstmInputParams.m_CellToInputWeights = &cellToInputWeights;
-        }
-    }
-
-    armnn::ConstTensor projectionWeights;
-    armnn::ConstTensor projectionBias;
-    if (descriptor.m_ProjectionEnabled)
-    {
-        projectionWeights = ToConstTensor(flatBufferInputParams->projectionWeights());
-        projectionBias = ToConstTensor(flatBufferInputParams->projectionBias());
-
-        lstmInputParams.m_ProjectionWeights = &projectionWeights;
-        lstmInputParams.m_ProjectionBias = &projectionBias;
-    }
-
-    armnn::ConstTensor cellToForgetWeights;
-    armnn::ConstTensor cellToOutputWeights;
-    if (descriptor.m_PeepholeEnabled)
-    {
-        cellToForgetWeights = ToConstTensor(flatBufferInputParams->cellToForgetWeights());
-        cellToOutputWeights = ToConstTensor(flatBufferInputParams->cellToOutputWeights());
-
-        lstmInputParams.m_CellToForgetWeights = &cellToForgetWeights;
-        lstmInputParams.m_CellToOutputWeights = &cellToOutputWeights;
-    }
-
-    armnn::ConstTensor inputLayerNormWeights;
-    armnn::ConstTensor forgetLayerNormWeights;
-    armnn::ConstTensor cellLayerNormWeights;
-    armnn::ConstTensor outputLayerNormWeights;
-    if (descriptor.m_LayerNormEnabled)
-    {
-        if (!descriptor.m_CifgEnabled)
-        {
-            inputLayerNormWeights = ToConstTensor(flatBufferInputParams->inputLayerNormWeights());
-            lstmInputParams.m_InputLayerNormWeights = &inputLayerNormWeights;
-        }
-        forgetLayerNormWeights = ToConstTensor(flatBufferInputParams->forgetLayerNormWeights());
-        cellLayerNormWeights = ToConstTensor(flatBufferInputParams->cellLayerNormWeights());
-        outputLayerNormWeights = ToConstTensor(flatBufferInputParams->outputLayerNormWeights());
-
-        lstmInputParams.m_ForgetLayerNormWeights = &forgetLayerNormWeights;
-        lstmInputParams.m_CellLayerNormWeights = &cellLayerNormWeights;
-        lstmInputParams.m_OutputLayerNormWeights = &outputLayerNormWeights;
-    }
-
-    IConnectableLayer* layer = m_Network->AddUnidirectionalSequenceLstmLayer(descriptor,
-                                                                             lstmInputParams,
-                                                                             layerName.c_str());
-
-    armnn::TensorInfo outputTensorInfo0 = ToTensorInfo(outputs[0]);
-    layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo0);
-
-    armnn::TensorInfo outputTensorInfo1 = ToTensorInfo(outputs[1]);
-    layer->GetOutputSlot(1).SetTensorInfo(outputTensorInfo1);
-
-    armnn::TensorInfo outputTensorInfo2 = ToTensorInfo(outputs[2]);
-    layer->GetOutputSlot(2).SetTensorInfo(outputTensorInfo2);
 
     RegisterInputSlots(graph, layerIndex, layer);
     RegisterOutputSlots(graph, layerIndex, layer);

@@ -10,13 +10,15 @@
 namespace armnn
 {
 
-void PreluImpl(const TensorInfo& inputInfo,
-               const TensorInfo& alphaInfo,
-               const TensorInfo& outputInfo,
+void PreluImpl(const PreluQueueDescriptor& data,
                Decoder<float>& inputData,
                Decoder<float>& alphaData,
                Encoder<float>& outputData)
 {
+    const TensorInfo& inputInfo  = GetTensorInfo(data.m_Inputs[0]);
+    const TensorInfo& alphaInfo  = GetTensorInfo(data.m_Inputs[1]);
+    const TensorInfo& outputInfo = GetTensorInfo(data.m_Outputs[0]);
+
     const TensorShape& inputShape  = inputInfo.GetShape();
     const TensorShape& alphaShape  = alphaInfo.GetShape();
     const TensorShape& outputShape = outputInfo.GetShape();

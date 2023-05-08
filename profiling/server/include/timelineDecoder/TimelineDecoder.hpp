@@ -6,8 +6,6 @@
 
 #include "ITimelineDecoder.hpp"
 
-#include <mutex>
-#include <utility>
 #include <vector>
 
 namespace arm
@@ -42,11 +40,7 @@ public:
     virtual TimelineStatus CreateLabel(const Label &) override;
     virtual TimelineStatus CreateRelationship(const Relationship &) override;
 
-    template<class F>
-    decltype(auto) ApplyToModel(F&& f){
-        std::lock_guard<std::mutex> lock(m_ModelMutex);
-        return f(m_Model);
-    }
+    const Model& GetModel();
 
     TimelineStatus SetEntityCallback(const OnNewEntityCallback);
     TimelineStatus SetEventClassCallback(const OnNewEventClassCallback);
@@ -60,7 +54,6 @@ public:
 
 private:
     Model m_Model;
-    std::mutex m_ModelMutex;
 
     OnNewEntityCallback m_OnNewEntityCallback;
     OnNewEventClassCallback m_OnNewEventClassCallback;

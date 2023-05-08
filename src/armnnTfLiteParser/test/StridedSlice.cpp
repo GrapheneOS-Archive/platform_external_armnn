@@ -1,13 +1,16 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
 
-TEST_SUITE("TensorflowLiteParser_StridedSlice")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct StridedSliceFixture : public ParserFlatbuffersFixture
 {
     explicit StridedSliceFixture(const std::string & inputShape,
@@ -112,7 +115,7 @@ struct StridedSlice4DFixture : StridedSliceFixture
                                                  ) {}
 };
 
-TEST_CASE_FIXTURE(StridedSlice4DFixture, "StridedSlice4D")
+BOOST_FIXTURE_TEST_CASE(StridedSlice4D, StridedSlice4DFixture)
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -144,7 +147,7 @@ struct StridedSlice4DReverseFixture : StridedSliceFixture
                                                         ) {}
 };
 
-TEST_CASE_FIXTURE(StridedSlice4DReverseFixture, "StridedSlice4DReverse")
+BOOST_FIXTURE_TEST_CASE(StridedSlice4DReverse, StridedSlice4DReverseFixture)
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -167,7 +170,7 @@ struct StridedSliceSimpleStrideFixture : StridedSliceFixture
                                                  ) {}
 };
 
-TEST_CASE_FIXTURE(StridedSliceSimpleStrideFixture, "StridedSliceSimpleStride")
+BOOST_FIXTURE_TEST_CASE(StridedSliceSimpleStride, StridedSliceSimpleStrideFixture)
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -194,7 +197,7 @@ struct StridedSliceSimpleRangeMaskFixture : StridedSliceFixture
                                                  ) {}
 };
 
-TEST_CASE_FIXTURE(StridedSliceSimpleRangeMaskFixture, "StridedSliceSimpleRangeMask")
+BOOST_FIXTURE_TEST_CASE(StridedSliceSimpleRangeMask, StridedSliceSimpleRangeMaskFixture)
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -211,4 +214,4 @@ TEST_CASE_FIXTURE(StridedSliceSimpleRangeMaskFixture, "StridedSliceSimpleRangeMa
                           5.0f, 5.0f, 5.0f, 6.0f, 6.0f, 6.0f }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

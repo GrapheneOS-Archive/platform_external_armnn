@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -31,16 +31,9 @@ arm_compute::Status ClInstanceNormalizationWorkloadValidate(const TensorInfo& in
 
 ClInstanceNormalizationWorkload::ClInstanceNormalizationWorkload(
     const InstanceNormalizationQueueDescriptor& descriptor,
-    const WorkloadInfo& info,
-    const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<InstanceNormalizationQueueDescriptor>(descriptor, info)
+    const WorkloadInfo& info)
+    : BaseWorkload<InstanceNormalizationQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClInstanceNormalizationWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("ClInstanceNormalizationWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -50,20 +43,16 @@ ClInstanceNormalizationWorkload::ClInstanceNormalizationWorkload(
     input.info()->set_data_layout(aclDataLayout);
     output.info()->set_data_layout(aclDataLayout);
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClInstanceNormalizationWorkload_configure");
-        m_Layer.configure(clCompileContext,
-                          &input,
-                          &output,
-                          descriptor.m_Parameters.m_Gamma,
-                          descriptor.m_Parameters.m_Beta,
-                          descriptor.m_Parameters.m_Eps);
-    }
+    m_Layer.configure(&input,
+                      &output,
+                      descriptor.m_Parameters.m_Gamma,
+                      descriptor.m_Parameters.m_Beta,
+                      descriptor.m_Parameters.m_Eps);
 };
 
 void ClInstanceNormalizationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClInstanceNormalizationWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClInstanceNormalizationWorkload_Execute");
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -24,7 +24,7 @@ arm_compute::Status NeonRsqrtWorkloadValidate(const TensorInfo& input, const Ten
 }
 
 NeonRsqrtWorkload::NeonRsqrtWorkload(const RsqrtQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : NeonBaseWorkload<RsqrtQueueDescriptor>(descriptor, info)
+    : BaseWorkload<RsqrtQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonRsqrtWorkload", 1, 1);
 
@@ -36,7 +36,7 @@ NeonRsqrtWorkload::NeonRsqrtWorkload(const RsqrtQueueDescriptor& descriptor, con
 
 void NeonRsqrtWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonRsqrtWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonRsqrtWorkload_Execute");
     m_RsqrtLayer.run();
 }
 

@@ -1,15 +1,19 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-using armnnTfLiteParser::TfLiteParserImpl;
+using armnnTfLiteParser::TfLiteParser;
 
-TEST_SUITE("TensorflowLiteParser_Constant")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct ConstantAddFixture : public ParserFlatbuffersFixture
 {
     explicit ConstantAddFixture(const std::string & inputShape,
@@ -97,7 +101,7 @@ struct SimpleConstantAddFixture : ConstantAddFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleConstantAddFixture, "SimpleConstantAdd")
+BOOST_FIXTURE_TEST_CASE(SimpleConstantAdd, SimpleConstantAddFixture)
 {
     RunTest<2, armnn::DataType::QAsymmU8>(
                 0,
@@ -106,4 +110,4 @@ TEST_CASE_FIXTURE(SimpleConstantAddFixture, "SimpleConstantAdd")
                 );
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

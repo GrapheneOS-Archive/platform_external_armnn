@@ -1,5 +1,5 @@
 //
-// Copyright © 2020,2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -18,15 +18,10 @@ template<typename Function,
         typename Reference =
         typename std::result_of<const Function(typename std::iterator_traits<Iterator>::reference)>::type
 >
-class TransformIterator
+class TransformIterator : public std::iterator<Category, T, Distance, Pointer, Reference>
 {
-public:
-    using iterator_category = Category;
-    using value_type = T;
-    using difference_type = Distance;
-    using pointer = Pointer;
-    using reference = Reference;
 
+public:
 
     TransformIterator() = default;
     TransformIterator(TransformIterator const& transformIterator) = default;
@@ -37,18 +32,14 @@ public:
 
     ~TransformIterator() = default;
 
-    TransformIterator& operator=(TransformIterator const& rhs)
+    TransformIterator operator=(TransformIterator const& transformIterator)
     {
-        m_fn = rhs.m_fn;
-        m_it = rhs.m_it;
-        return *this;
+        return{ transformIterator.it, transformIterator.fn};
     }
 
-    TransformIterator& operator=(TransformIterator&& rhs)
+    TransformIterator operator=(TransformIterator&& transformIterator)
     {
-        m_fn = std::move(rhs.m_fn);
-        m_it = std::move(rhs.m_it);
-        return *this;
+        return{ transformIterator.it, transformIterator.fn};
     }
 
     TransformIterator operator++() {++m_it; return *this;}
@@ -79,7 +70,7 @@ public:
 
 private:
     Iterator m_it;
-    Function m_fn;
+    const Function m_fn;
 };
 
 template<typename Function, typename Iterator>

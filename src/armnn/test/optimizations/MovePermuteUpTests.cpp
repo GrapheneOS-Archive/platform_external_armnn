@@ -1,19 +1,18 @@
 //
-// Copyright © 2017,2019-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <TestUtils.hpp>
+#include "../TestUtils.hpp"
 
 #include <Optimizer.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("Optimizer")
-{
+BOOST_AUTO_TEST_SUITE(Optimizer)
 using namespace armnn::optimizations;
 
-TEST_CASE("MovePermuteUpTest")
+BOOST_AUTO_TEST_CASE(MovePermuteUpTest)
 {
     const armnn::TensorInfo info({ 1, 5, 2, 3 }, armnn::DataType::Float32);
     const armnn::TensorInfo permuted({ 1, 3, 5, 2 }, armnn::DataType::Float32);
@@ -36,7 +35,7 @@ TEST_CASE("MovePermuteUpTest")
     head = graph.InsertNewLayer<armnn::ActivationLayer>(head->GetInputSlot(0), armnn::ActivationDescriptor{}, "");
     head->GetOutputHandler().SetTensorInfo(info);
 
-    head = graph.InsertNewLayer<armnn::ElementwiseBinaryLayer>(head->GetInputSlot(0), armnn::BinaryOperation::Add, "");
+    head = graph.InsertNewLayer<armnn::AdditionLayer>(head->GetInputSlot(0), "");
     head->GetOutputHandler().SetTensorInfo(info);
 
     // Inserts input for 2nd input of Addition.
@@ -54,7 +53,7 @@ TEST_CASE("MovePermuteUpTest")
     head = graph.InsertNewLayer<armnn::MemCopyLayer>(head->GetInputSlot(0), "");
     head->GetOutputHandler().SetTensorInfo(info);
 
-    head = graph.InsertNewLayer<armnn::ElementwiseBinaryLayer>(head->GetInputSlot(0), armnn::BinaryOperation::Mul, "");
+    head = graph.InsertNewLayer<armnn::MultiplicationLayer>(head->GetInputSlot(0), "");
     head->GetOutputHandler().SetTensorInfo(info);
 
     // Inserts input for 2nd input of Multiplication.
@@ -67,28 +66,27 @@ TEST_CASE("MovePermuteUpTest")
         ->GetOutputHandler()
         .SetTensorInfo(info);
 
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::InputLayer>, &IsLayerOfType<armnn::InputLayer>,
-                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::MemCopyLayer>,
+                             &IsLayerOfType<armnn::MultiplicationLayer>, &IsLayerOfType<armnn::MemCopyLayer>,
                              &IsLayerOfType<armnn::FloorLayer>, &IsLayerOfType<armnn::FakeQuantizationLayer>,
-                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::ActivationLayer>,
+                             &IsLayerOfType<armnn::AdditionLayer>, &IsLayerOfType<armnn::ActivationLayer>,
                              &IsLayerOfType<armnn::PermuteLayer>, &IsLayerOfType<armnn::OutputLayer>));
 
     armnn::Optimizer::Pass(graph, armnn::MakeOptimizations(MovePermuteUp()));
 
     // The permute is moved to the top. New permutes for layers with multiple inputs.
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::InputLayer>, &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::PermuteLayer>, &IsLayerOfType<armnn::PermuteLayer>,
-                             &IsLayerOfType<armnn::PermuteLayer>, &IsLayerOfType<armnn::ElementwiseBinaryLayer>,
+                             &IsLayerOfType<armnn::PermuteLayer>, &IsLayerOfType<armnn::MultiplicationLayer>,
                              &IsLayerOfType<armnn::MemCopyLayer>, &IsLayerOfType<armnn::FloorLayer>,
-                             &IsLayerOfType<armnn::FakeQuantizationLayer>,
-                             &IsLayerOfType<armnn::ElementwiseBinaryLayer>, &IsLayerOfType<armnn::ActivationLayer>,
-                             &IsLayerOfType<armnn::OutputLayer>));
+                             &IsLayerOfType<armnn::FakeQuantizationLayer>, &IsLayerOfType<armnn::AdditionLayer>,
+                             &IsLayerOfType<armnn::ActivationLayer>, &IsLayerOfType<armnn::OutputLayer>));
 
     std::list<std::string> testRelatedLayers = { permuteLayerName };
 
-    CHECK(CheckRelatedLayers<armnn::PermuteLayer>(graph, testRelatedLayers));
+    BOOST_TEST(CheckRelatedLayers<armnn::PermuteLayer>(graph, testRelatedLayers));
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -5,80 +5,80 @@
 
 #include <armnn/Types.hpp>
 
-#include <common/include/LabelsAndEventClasses.hpp>
+#include "LabelsAndEventClasses.hpp"
+#include "ProfilingGuidGenerator.hpp"
 
-#include <algorithm>
-#include <functional>
 #include <set>
-#include <doctest/doctest.h>
+
+#include <boost/test/unit_test.hpp>
 #include <fmt/format.h>
 #include <thread>
 
-using namespace arm::pipe;
+using namespace armnn::profiling;
 
-TEST_SUITE("ProfilingGuidTests")
-{
-TEST_CASE("GuidTest")
+BOOST_AUTO_TEST_SUITE(ProfilingGuidTests)
+
+BOOST_AUTO_TEST_CASE(GuidTest)
 {
     ProfilingGuid guid0(0);
     ProfilingGuid guid1(1);
     ProfilingGuid guid2(1);
 
-    CHECK(guid0 != guid1);
-    CHECK(guid1 == guid2);
-    CHECK(guid0 < guid1);
-    CHECK(guid0 <= guid1);
-    CHECK(guid1 <= guid2);
-    CHECK(guid1 > guid0);
-    CHECK(guid1 >= guid0);
-    CHECK(guid1 >= guid2);
+    BOOST_TEST(guid0 != guid1);
+    BOOST_TEST(guid1 == guid2);
+    BOOST_TEST(guid0 < guid1);
+    BOOST_TEST(guid0 <= guid1);
+    BOOST_TEST(guid1 <= guid2);
+    BOOST_TEST(guid1 > guid0);
+    BOOST_TEST(guid1 >= guid0);
+    BOOST_TEST(guid1 >= guid2);
 }
 
-TEST_CASE("StaticGuidTest")
+BOOST_AUTO_TEST_CASE(StaticGuidTest)
 {
     ProfilingStaticGuid guid0(0);
     ProfilingStaticGuid guid1(1);
     ProfilingStaticGuid guid2(1);
 
-    CHECK(guid0 != guid1);
-    CHECK(guid1 == guid2);
-    CHECK(guid0 < guid1);
-    CHECK(guid0 <= guid1);
-    CHECK(guid1 <= guid2);
-    CHECK(guid1 > guid0);
-    CHECK(guid1 >= guid0);
-    CHECK(guid1 >= guid2);
+    BOOST_TEST(guid0 != guid1);
+    BOOST_TEST(guid1 == guid2);
+    BOOST_TEST(guid0 < guid1);
+    BOOST_TEST(guid0 <= guid1);
+    BOOST_TEST(guid1 <= guid2);
+    BOOST_TEST(guid1 > guid0);
+    BOOST_TEST(guid1 >= guid0);
+    BOOST_TEST(guid1 >= guid2);
 }
 
-TEST_CASE("DynamicGuidTest")
+BOOST_AUTO_TEST_CASE(DynamicGuidTest)
 {
     ProfilingDynamicGuid guid0(0);
     ProfilingDynamicGuid guid1(1);
     ProfilingDynamicGuid guid2(1);
 
-    CHECK(guid0 != guid1);
-    CHECK(guid1 == guid2);
-    CHECK(guid0 < guid1);
-    CHECK(guid0 <= guid1);
-    CHECK(guid1 <= guid2);
-    CHECK(guid1 > guid0);
-    CHECK(guid1 >= guid0);
-    CHECK(guid1 >= guid2);
+    BOOST_TEST(guid0 != guid1);
+    BOOST_TEST(guid1 == guid2);
+    BOOST_TEST(guid0 < guid1);
+    BOOST_TEST(guid0 <= guid1);
+    BOOST_TEST(guid1 <= guid2);
+    BOOST_TEST(guid1 > guid0);
+    BOOST_TEST(guid1 >= guid0);
+    BOOST_TEST(guid1 >= guid2);
 }
 
 void CheckStaticGuid(uint64_t guid, uint64_t expectedGuid)
 {
-    CHECK(guid == expectedGuid);
-    CHECK(guid >= MIN_STATIC_GUID);
+    BOOST_TEST(guid == expectedGuid);
+    BOOST_TEST(guid >= MIN_STATIC_GUID);
 }
 
 void CheckDynamicGuid(uint64_t guid, uint64_t expectedGuid)
 {
-    CHECK(guid == expectedGuid);
-    CHECK(guid < MIN_STATIC_GUID);
+    BOOST_TEST(guid == expectedGuid);
+    BOOST_TEST(guid < MIN_STATIC_GUID);
 }
 
-TEST_CASE("StaticGuidGeneratorCollisionTest")
+BOOST_AUTO_TEST_CASE(StaticGuidGeneratorCollisionTest)
 {
     ProfilingGuidGenerator generator;
     std::set<uint64_t> guids;
@@ -93,13 +93,13 @@ TEST_CASE("StaticGuidGeneratorCollisionTest")
             // If we're running on a 32bit system it is more likely to get a GUID clash over 1 million executions.
             // We can generally detect this when the GUID turns out to be MIN_STATIC_GUID. Output a warning
             // message rather than error in this case.
-            if (guid == ProfilingGuid(MIN_STATIC_GUID))
+            if (guid == ProfilingGuid(armnn::profiling::MIN_STATIC_GUID))
             {
-                WARN("MIN_STATIC_GUID returned more than once from GenerateStaticId.");
-            }
+                BOOST_WARN("MIN_STATIC_GUID returned more than once from GenerateStaticId.");
+            } 
             else
             {
-                FAIL(fmt::format("GUID collision occurred: {} -> {}", str, guid));
+                BOOST_ERROR(fmt::format("GUID collision occurred: {} -> {}", str, guid));
             }
             break;
         }
@@ -107,24 +107,24 @@ TEST_CASE("StaticGuidGeneratorCollisionTest")
     }
 }
 
-TEST_CASE("StaticGuidGeneratorTest")
+BOOST_AUTO_TEST_CASE(StaticGuidGeneratorTest)
 {
     ProfilingGuidGenerator generator;
 
     ProfilingStaticGuid staticGuid0 = generator.GenerateStaticId("name");
     CheckStaticGuid(staticGuid0, LabelsAndEventClasses::NAME_GUID);
-    CHECK(staticGuid0 != generator.GenerateStaticId("Name"));
+    BOOST_TEST(staticGuid0 != generator.GenerateStaticId("Name"));
 
     ProfilingStaticGuid staticGuid1 = generator.GenerateStaticId("type");
     CheckStaticGuid(staticGuid1, LabelsAndEventClasses::TYPE_GUID);
-    CHECK(staticGuid1 != generator.GenerateStaticId("Type"));
+    BOOST_TEST(staticGuid1 != generator.GenerateStaticId("Type"));
 
     ProfilingStaticGuid staticGuid2 = generator.GenerateStaticId("index");
     CheckStaticGuid(staticGuid2, LabelsAndEventClasses::INDEX_GUID);
-    CHECK(staticGuid2 != generator.GenerateStaticId("Index"));
+    BOOST_TEST(staticGuid2 != generator.GenerateStaticId("Index"));
 }
 
-TEST_CASE("DynamicGuidGeneratorTest")
+BOOST_AUTO_TEST_CASE(DynamicGuidGeneratorTest)
 {
     ProfilingGuidGenerator generator;
 
@@ -135,29 +135,28 @@ TEST_CASE("DynamicGuidGeneratorTest")
     }
 }
 
-void GenerateProfilingGUID(ProfilingGuidGenerator& guidGenerator)
-{
-    for (int i = 0; i < 1000; ++i)
-    {
-        guidGenerator.NextGuid();
-    }
-}
-
-TEST_CASE("ProfilingGuidThreadTest")
+BOOST_AUTO_TEST_CASE (ProfilingGuidThreadTest)
 {
     ProfilingGuidGenerator profilingGuidGenerator;
-    std::vector<std::thread> threads;
-    for (unsigned int i = 0; i < 3; ++i)
+
+    auto guidGenerator = [&profilingGuidGenerator]()
     {
-        threads.push_back(std::thread(GenerateProfilingGUID, std::ref(profilingGuidGenerator)));
-    }
-    std::for_each(threads.begin(), threads.end(), [](std::thread& theThread)
-    {
-        theThread.join();
-    });
+        for (int i = 0; i < 1000; ++i)
+        {
+            profilingGuidGenerator.NextGuid();
+        }
+    };
+
+    std::thread t1(guidGenerator);
+    std::thread t2(guidGenerator);
+    std::thread t3(guidGenerator);
+
+    t1.join();
+    t2.join();
+    t3.join();
 
     uint64_t guid = profilingGuidGenerator.NextGuid();
-    CHECK(guid == 3000u);
+    BOOST_CHECK(guid == 3000u);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

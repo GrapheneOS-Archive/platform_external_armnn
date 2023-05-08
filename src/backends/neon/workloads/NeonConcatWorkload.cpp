@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,7 +9,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 namespace armnn
@@ -18,9 +18,9 @@ using namespace armcomputetensorutils;
 
 namespace
 {
-size_t CalcAxis(const armnn::OriginsDescriptor& descriptor)
+size_t CalcAxis(const armnn::OriginsDescriptor& desc)
 {
-    return (descriptor.GetNumDimensions() - descriptor.GetConcatAxis()) - 1;
+    return (desc.GetNumDimensions() - desc.GetConcatAxis()) - 1;
 }
 } //namespace
 
@@ -48,14 +48,8 @@ arm_compute::Status NeonConcatWorkloadValidate(const std::vector<const TensorInf
 
 NeonConcatWorkload::NeonConcatWorkload(
 const ConcatQueueDescriptor& descriptor, const WorkloadInfo& info)
-        : NeonBaseWorkload<ConcatQueueDescriptor>(descriptor, info)
+        : BaseWorkload<ConcatQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonConcatWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     bool allInputsAreSubtensors = true;
 
     // Check that all inputs are sub-tensors
@@ -99,7 +93,7 @@ void NeonConcatWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonConcatWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonConcatWorkload_Execute");
         m_Layer->run();
     }
 }

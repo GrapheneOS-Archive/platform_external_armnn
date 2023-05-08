@@ -8,9 +8,9 @@
 
 #include <armnn/INetwork.hpp>
 
-#include <TestUtils.hpp>
+#include <test/TestUtils.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 namespace {
 
@@ -27,7 +27,7 @@ armnn::INetworkPtr CreateLogSoftmaxNetwork(const armnn::TensorShape& inputShape,
     // Builds up the structure of the network.
     INetworkPtr net(INetwork::Create());
 
-    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset, true);
+    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset);
 
     LogSoftmaxDescriptor logSoftmaxDesc;
     logSoftmaxDesc.m_Beta = beta;
@@ -60,7 +60,7 @@ void LogSoftmaxEndToEnd(const std::vector<armnn::BackendId>& backends,
                                                                  beta,
                                                                  axis);
 
-    CHECK(net);
+    BOOST_TEST_CHECKPOINT("Create a network");
 
     std::map<int, std::vector<float>> inputTensorData = { {0, inputData} };
     std::map<int, std::vector<float>> expectedOutputTensorData = { {0, expectedOutputData} };

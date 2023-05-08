@@ -6,7 +6,6 @@
 %{
 #define SWIG_FILE_WITH_INIT
 #include "armnn/Types.hpp"
-#include "ProfilingGuid.hpp"
 %}
 
 //typemap definitions and other common stuff
@@ -14,7 +13,6 @@
 
 //armnn api submodules
 %include "modules/armnn_backend.i"
-%include "modules/armnn_backend_opt.i"
 %include "modules/armnn_types.i"
 %include "modules/armnn_descriptors.i"
 %include "modules/armnn_lstmparam.i"

@@ -1,12 +1,14 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
-TEST_SUITE("TensorflowLiteParser_Transpose")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct TransposeFixture : public ParserFlatbuffersFixture
 {
     explicit TransposeFixture(const std::string & inputShape,
@@ -116,14 +118,14 @@ struct TransposeFixtureWithPermuteData : TransposeFixture
                                                          "[ 2, 3, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(TransposeFixtureWithPermuteData, "TransposeWithPermuteData")
+BOOST_FIXTURE_TEST_CASE(TransposeWithPermuteData, TransposeFixtureWithPermuteData)
 {
     RunTest<3, armnn::DataType::Float32>(
       0,
       {{"inputTensor", { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }}},
       {{"outputTensor", { 1, 4, 2, 5, 3, 6, 7, 10, 8, 11, 9, 12 }}});
 
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({2,3,2})));
 }
 
@@ -137,15 +139,15 @@ struct TransposeFixtureWithoutPermuteData : TransposeFixture
                                                             "[ 3, 2, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(TransposeFixtureWithoutPermuteData, "TransposeWithoutPermuteDims")
+BOOST_FIXTURE_TEST_CASE(TransposeWithoutPermuteDims, TransposeFixtureWithoutPermuteData)
 {
     RunTest<3, armnn::DataType::Float32>(
         0,
         {{"inputTensor", { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }}},
         {{"outputTensor", { 1, 7, 4, 10, 2, 8, 5, 11, 3, 9, 6, 12 }}});
 
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({3,2,2})));
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

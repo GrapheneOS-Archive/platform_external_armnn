@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 namespace armnn
 {
@@ -32,14 +32,8 @@ arm_compute::Status NeonComparisonWorkloadValidate(const TensorInfo& input0,
 }
 
 NeonComparisonWorkload::NeonComparisonWorkload(const ComparisonQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : NeonBaseWorkload<ComparisonQueueDescriptor>(descriptor, info)
+    : BaseWorkload<ComparisonQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonComparisonWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonComparisonWorkload", 2, 1);
 
     arm_compute::ITensor& input0 = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -53,7 +47,7 @@ NeonComparisonWorkload::NeonComparisonWorkload(const ComparisonQueueDescriptor& 
 
 void NeonComparisonWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonComparisonWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonComparisonWorkload_Execute");
     m_ComparisonLayer.run();
 }
 

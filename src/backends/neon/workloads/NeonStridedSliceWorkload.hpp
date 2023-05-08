@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/IFunction.h>
@@ -21,7 +21,7 @@ arm_compute::Status NeonStridedSliceWorkloadValidate(const TensorInfo& input,
                                                      const TensorInfo& output,
                                                      const StridedSliceDescriptor& descriptor);
 
-class NeonStridedSliceWorkload : public NeonBaseWorkload<StridedSliceQueueDescriptor>
+class NeonStridedSliceWorkload : public BaseWorkload<StridedSliceQueueDescriptor>
 {
 public:
     NeonStridedSliceWorkload(const StridedSliceQueueDescriptor& descriptor, const WorkloadInfo& info);

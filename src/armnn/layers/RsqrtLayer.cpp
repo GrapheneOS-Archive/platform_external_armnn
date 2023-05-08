@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -21,11 +21,10 @@ RsqrtLayer::RsqrtLayer(const char* name)
 
 std::unique_ptr<IWorkload> RsqrtLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    ElementwiseUnaryQueueDescriptor descriptor;
-    descriptor.m_Parameters.m_Operation = UnaryOperation::Rsqrt;
+    RsqrtQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::ElementwiseUnary, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateRsqrt(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 RsqrtLayer* RsqrtLayer::Clone(Graph& graph) const
@@ -48,9 +47,9 @@ void RsqrtLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "RsqrtLayer");
 }
 
-void RsqrtLayer::ExecuteStrategy(IStrategy& strategy) const
+void RsqrtLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitRsqrtLayer(this, GetName());
 }
 
 } // namespace armnn

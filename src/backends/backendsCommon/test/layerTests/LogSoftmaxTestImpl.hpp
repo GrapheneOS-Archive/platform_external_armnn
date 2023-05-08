@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include <armnnTestUtils/LayerTestResult.hpp>
+#include "LayerTestResult.hpp"
 
 #include <ResolveType.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> LogSoftmaxTest1(

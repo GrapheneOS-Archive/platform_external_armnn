@@ -96,9 +96,9 @@ TEST_CASE("Test Adding Inference output to frame")
 
     std::string testResources = TEST_RESOURCE_DIR;
     REQUIRE(testResources != "");
-    std::vector<std::tuple<std::string, common::BBoxColor>> labels;
+    std::vector<std::tuple<std::string, od::BBoxColor>> labels;
 
-    common::BBoxColor c
+    od::BBoxColor c
     {
         .colorCode = std::make_tuple (0, 0, 255)
     };

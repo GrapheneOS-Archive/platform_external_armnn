@@ -5,48 +5,47 @@
 
 #include <reference/RefMemoryManager.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("RefMemoryManagerTests")
-{
+BOOST_AUTO_TEST_SUITE(RefMemoryManagerTests)
 using namespace armnn;
 using Pool = RefMemoryManager::Pool;
 
-TEST_CASE("ManageOneThing")
+BOOST_AUTO_TEST_CASE(ManageOneThing)
 {
     RefMemoryManager memoryManager;
 
     Pool* pool = memoryManager.Manage(10);
 
-    CHECK(pool);
+    BOOST_CHECK(pool);
 
     memoryManager.Acquire();
 
-    CHECK(memoryManager.GetPointer(pool) != nullptr); // Yields a valid pointer
+    BOOST_CHECK(memoryManager.GetPointer(pool) != nullptr); // Yields a valid pointer
 
     memoryManager.Release();
 }
 
-TEST_CASE("ManageTwoThings")
+BOOST_AUTO_TEST_CASE(ManageTwoThings)
 {
     RefMemoryManager memoryManager;
 
     Pool* pool1 = memoryManager.Manage(10);
     Pool* pool2 = memoryManager.Manage(5);
 
-    CHECK(pool1);
-    CHECK(pool2);
+    BOOST_CHECK(pool1);
+    BOOST_CHECK(pool2);
 
     memoryManager.Acquire();
 
     void *p1 = memoryManager.GetPointer(pool1);
     void *p2 = memoryManager.GetPointer(pool2);
 
-    CHECK(p1);
-    CHECK(p2);
-    CHECK(p1 != p2);
+    BOOST_CHECK(p1);
+    BOOST_CHECK(p2);
+    BOOST_CHECK(p1 != p2);
 
     memoryManager.Release();
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

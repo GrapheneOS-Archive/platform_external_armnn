@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Squeeze")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SqueezeFixture : public ParserFlatbuffersFixture
 {
     explicit SqueezeFixture(const std::string& inputShape,
@@ -78,11 +82,11 @@ struct SqueezeFixtureWithSqueezeDims : SqueezeFixture
     SqueezeFixtureWithSqueezeDims() : SqueezeFixture("[ 1, 2, 2, 1 ]", "[ 2, 2, 1 ]", "[ 0, 1, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(SqueezeFixtureWithSqueezeDims, "ParseSqueezeWithSqueezeDims")
+BOOST_FIXTURE_TEST_CASE(ParseSqueezeWithSqueezeDims, SqueezeFixtureWithSqueezeDims)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<3, armnn::DataType::QAsymmU8>(0, { 1, 2, 3, 4 }, { 1, 2, 3, 4 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
         == armnn::TensorShape({2,2,1})));
 
 }
@@ -92,11 +96,11 @@ struct SqueezeFixtureWithoutSqueezeDims : SqueezeFixture
     SqueezeFixtureWithoutSqueezeDims() : SqueezeFixture("[ 1, 2, 2, 1 ]", "[ 2, 2 ]", "") {}
 };
 
-TEST_CASE_FIXTURE(SqueezeFixtureWithoutSqueezeDims, "ParseSqueezeWithoutSqueezeDims")
+BOOST_FIXTURE_TEST_CASE(ParseSqueezeWithoutSqueezeDims, SqueezeFixtureWithoutSqueezeDims)
 {
     SetupSingleInputSingleOutput("inputTensor", "outputTensor");
     RunTest<2, armnn::DataType::QAsymmU8>(0, { 1, 2, 3, 4 }, { 1, 2, 3, 4 });
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
         == armnn::TensorShape({2,2})));
 }
 
@@ -105,10 +109,10 @@ struct SqueezeFixtureWithInvalidInput : SqueezeFixture
     SqueezeFixtureWithInvalidInput() : SqueezeFixture("[ 1, 2, 2, 1, 2, 2 ]", "[ 1, 2, 2, 1, 2 ]", "[ ]") {}
 };
 
-TEST_CASE_FIXTURE(SqueezeFixtureWithInvalidInput, "ParseSqueezeInvalidInput")
+BOOST_FIXTURE_TEST_CASE(ParseSqueezeInvalidInput, SqueezeFixtureWithInvalidInput)
 {
     static_assert(armnn::MaxNumOfTensorDimensions == 5, "Please update SqueezeFixtureWithInvalidInput");
-    CHECK_THROWS_AS((SetupSingleInputSingleOutput("inputTensor", "outputTensor")),
+    BOOST_CHECK_THROW((SetupSingleInputSingleOutput("inputTensor", "outputTensor")),
                       armnn::InvalidArgumentException);
 }
 
@@ -119,53 +123,23 @@ struct SqueezeFixtureWithSqueezeDimsSizeInvalid : SqueezeFixture
                                                                 "[ 1, 2, 2, 2, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(SqueezeFixtureWithSqueezeDimsSizeInvalid, "ParseSqueezeInvalidSqueezeDims")
+BOOST_FIXTURE_TEST_CASE(ParseSqueezeInvalidSqueezeDims, SqueezeFixtureWithSqueezeDimsSizeInvalid)
 {
-    CHECK_THROWS_AS((SetupSingleInputSingleOutput("inputTensor", "outputTensor")), armnn::ParseException);
+    BOOST_CHECK_THROW((SetupSingleInputSingleOutput("inputTensor", "outputTensor")), armnn::ParseException);
 }
 
 
-struct SqueezeFixtureWithNegativeSqueezeDims1 : SqueezeFixture
+struct SqueezeFixtureWithNegativeSqueezeDims : SqueezeFixture
 {
-    SqueezeFixtureWithNegativeSqueezeDims1() : SqueezeFixture("[ 1, 2, 2, 1 ]",
-                                                             "[ 2, 2, 1 ]",
-                                                             "[ -1 ]") {}
+    SqueezeFixtureWithNegativeSqueezeDims() : SqueezeFixture("[ 1, 2, 2, 1 ]",
+                                                             "[ 1, 2, 2, 1 ]",
+                                                             "[ -2 , 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(SqueezeFixtureWithNegativeSqueezeDims1, "ParseSqueezeNegativeSqueezeDims1")
+BOOST_FIXTURE_TEST_CASE(ParseSqueezeNegativeSqueezeDims, SqueezeFixtureWithNegativeSqueezeDims)
 {
-    SetupSingleInputSingleOutput("inputTensor", "outputTensor");
-    RunTest<3, armnn::DataType::QAsymmU8>(0, { 1, 2, 3, 4 }, { 1, 2, 3, 4 });
-            CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
-                   == armnn::TensorShape({ 2, 2, 1 })));
-}
-
-struct SqueezeFixtureWithNegativeSqueezeDims2 : SqueezeFixture
-{
-    SqueezeFixtureWithNegativeSqueezeDims2() : SqueezeFixture("[ 1, 2, 2, 1 ]",
-                                                              "[ 1, 2, 2 ]",
-                                                              "[ -1 ]") {}
-};
-
-TEST_CASE_FIXTURE(SqueezeFixtureWithNegativeSqueezeDims2, "ParseSqueezeNegativeSqueezeDims2")
-{
-    SetupSingleInputSingleOutput("inputTensor", "outputTensor");
-    RunTest<3, armnn::DataType::QAsymmU8>(0, { 1, 2, 3, 4 }, { 1, 2, 3, 4 });
-            CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
-                   == armnn::TensorShape({ 1, 2, 2 })));
-}
-
-struct SqueezeFixtureWithNegativeSqueezeDimsInvalid : SqueezeFixture
-{
-    SqueezeFixtureWithNegativeSqueezeDimsInvalid() : SqueezeFixture("[ 1, 2, 2, 1 ]",
-                                                                    "[ 1, 2, 2, 1 ]",
-                                                                    "[ -2 , 2 ]") {}
-};
-
-TEST_CASE_FIXTURE(SqueezeFixtureWithNegativeSqueezeDimsInvalid, "ParseSqueezeNegativeSqueezeDimsInvalid")
-{
-    CHECK_THROWS_AS((SetupSingleInputSingleOutput("inputTensor", "outputTensor")), armnn::ParseException);
+    BOOST_CHECK_THROW((SetupSingleInputSingleOutput("inputTensor", "outputTensor")), armnn::ParseException);
 }
 
 
-}
+BOOST_AUTO_TEST_SUITE_END()

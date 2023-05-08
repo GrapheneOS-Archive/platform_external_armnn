@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 #include <arm_compute/runtime/CL/functions/CLBatchToSpaceLayer.h>
 
 namespace armnn
@@ -13,14 +13,12 @@ namespace armnn
 
 arm_compute::Status ClBatchToSpaceNdWorkloadValidate(const TensorInfo& input,
                                                      const TensorInfo& output,
-                                                     const BatchToSpaceNdDescriptor& descriptor);
+                                                     const BatchToSpaceNdDescriptor& desc);
 
-class ClBatchToSpaceNdWorkload : public ClBaseWorkload<BatchToSpaceNdQueueDescriptor>
+class ClBatchToSpaceNdWorkload : public BaseWorkload<BatchToSpaceNdQueueDescriptor>
 {
 public:
-    ClBatchToSpaceNdWorkload(const BatchToSpaceNdQueueDescriptor& descriptor,
-                             const WorkloadInfo& info,
-                             const arm_compute::CLCompileContext& clCompileContext);
+    ClBatchToSpaceNdWorkload(const BatchToSpaceNdQueueDescriptor& descriptor, const WorkloadInfo& info);
 
     void Execute() const override;
 

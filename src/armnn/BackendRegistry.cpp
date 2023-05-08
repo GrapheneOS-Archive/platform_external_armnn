@@ -5,9 +5,7 @@
 
 #include <armnn/BackendRegistry.hpp>
 #include <armnn/Exceptions.hpp>
-#include <armnn/profiling/ArmNNProfiling.hpp>
-
-#include <client/include/IProfilingService.hpp>
+#include <ProfilingService.hpp>
 
 namespace armnn
 {
@@ -32,7 +30,7 @@ void BackendRegistry::Register(const BackendId& id, BackendRegistry::FactoryFunc
     {
         if (m_ProfilingService.has_value() && m_ProfilingService.value().IsProfilingEnabled())
         {
-            m_ProfilingService.value().IncrementCounterValue(arm::pipe::REGISTERED_BACKENDS);
+            m_ProfilingService.value().IncrementCounterValue(armnn::profiling::REGISTERED_BACKENDS);
         }
     }
 
@@ -41,11 +39,10 @@ void BackendRegistry::Register(const BackendId& id, BackendRegistry::FactoryFunc
 void BackendRegistry::Deregister(const BackendId& id)
 {
     m_Factories.erase(id);
-    DeregisterAllocator(id);
 
     if (m_ProfilingService.has_value() && m_ProfilingService.value().IsProfilingEnabled())
     {
-        m_ProfilingService.value().IncrementCounterValue(arm::pipe::UNREGISTERED_BACKENDS);
+        m_ProfilingService.value().IncrementCounterValue(armnn::profiling::UNREGISTERED_BACKENDS);
     }
 }
 
@@ -104,52 +101,10 @@ void BackendRegistry::Swap(BackendRegistry& instance, BackendRegistry::FactorySt
     std::swap(instance.m_Factories, other);
 }
 
-void BackendRegistry::SetProfilingService(armnn::Optional<arm::pipe::IProfilingService&> profilingService)
+void BackendRegistry::SetProfilingService(armnn::Optional<profiling::ProfilingService&> profilingService)
 {
     m_ProfilingService = profilingService;
 }
 
-void BackendRegistry::RegisterAllocator(const BackendId& id, std::shared_ptr<ICustomAllocator> alloc)
-{
-    if (m_CustomMemoryAllocatorMap.find(id) != m_CustomMemoryAllocatorMap.end())
-    {
-        throw InvalidArgumentException(
-            std::string(id) + " already has an allocator associated with it",
-            CHECK_LOCATION());
-    }
-    m_CustomMemoryAllocatorMap[id] = alloc;
-}
-
-void BackendRegistry::DeregisterAllocator(const BackendId& id)
-{
-    m_CustomMemoryAllocatorMap.erase(id);
-}
-
-std::unordered_map<BackendId, std::shared_ptr<ICustomAllocator>> BackendRegistry::GetAllocators()
-{
-    return m_CustomMemoryAllocatorMap;
-}
-
-void BackendRegistry::RegisterMemoryOptimizerStrategy(const BackendId& id,
-                                                      std::shared_ptr<IMemoryOptimizerStrategy> strategy)
-{
-    if (m_MemoryOptimizerStrategyMap.find(id) != m_MemoryOptimizerStrategyMap.end())
-    {
-        throw InvalidArgumentException(
-            std::string(id) + " already has an memory optimizer strategy associated with it",
-            CHECK_LOCATION());
-    }
-    m_MemoryOptimizerStrategyMap[id] = strategy;
-}
-
-void BackendRegistry::DeregisterMemoryOptimizerStrategy(const BackendId &id)
-{
-    m_MemoryOptimizerStrategyMap.erase(id);
-}
-
-MemoryOptimizerStrategiesMapRef BackendRegistry::GetMemoryOptimizerStrategies()
-{
-    return m_MemoryOptimizerStrategyMap;
-}
 
 } // namespace armnn

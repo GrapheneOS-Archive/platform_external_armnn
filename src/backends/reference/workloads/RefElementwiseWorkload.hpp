@@ -1,13 +1,13 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
 #include <armnn/Types.hpp>
-#include "RefBaseWorkload.hpp"
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 #include "BaseIterator.hpp"
 #include "ElementwiseFunction.hpp"
 #include "Maximum.hpp"
@@ -18,19 +18,21 @@ namespace armnn
 {
 
 template <typename Functor, typename ParentDescriptor, typename armnn::StringMapping::Id DebugString>
-class RefElementwiseWorkload : public RefBaseWorkload<ParentDescriptor>
+class RefElementwiseWorkload : public BaseWorkload<ParentDescriptor>
 {
 public:
-    RefElementwiseWorkload(const ParentDescriptor& descriptor, const WorkloadInfo& info);
-    void Execute() const override;
-    void ExecuteAsync(ExecutionData& executionData)  override;
-
-private:
     using InType = typename ElementwiseBinaryFunction<Functor>::InType;
     using OutType = typename ElementwiseBinaryFunction<Functor>::OutType;
-    using RefBaseWorkload<ParentDescriptor>::m_Data;
+    using BaseWorkload<ParentDescriptor>::m_Data;
 
-    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
+    RefElementwiseWorkload(const ParentDescriptor& descriptor, const WorkloadInfo& info);
+    void PostAllocationConfigure() override;
+    void Execute() const override;
+
+private:
+    std::unique_ptr<Decoder<InType>> m_Input0;
+    std::unique_ptr<Decoder<InType>> m_Input1;
+    std::unique_ptr<Encoder<OutType>> m_Output;
 };
 
 template <typename DataType = float>

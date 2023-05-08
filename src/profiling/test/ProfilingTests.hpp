@@ -7,26 +7,65 @@
 
 #include "ProfilingMocks.hpp"
 
+#include <armnn/Logging.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <client/src/IProfilingConnection.hpp>
-#include <client/src/ProfilingService.hpp>
-
-#include <armnn/profiling/ArmNNProfiling.hpp>
+#include <IProfilingConnection.hpp>
+#include <ProfilingService.hpp>
 
 #include <common/include/CommandHandlerFunctor.hpp>
-#include <common/include/Logging.hpp>
 
-#include <doctest/doctest.h>
+
+#include <boost/test/unit_test.hpp>
 
 #include <chrono>
 #include <thread>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
+
+struct LogLevelSwapper
+{
+public:
+    LogLevelSwapper(armnn::LogSeverity severity)
+    {
+        // Set the new log level
+        armnn::ConfigureLogging(true, true, severity);
+    }
+    ~LogLevelSwapper()
+    {
+        // The default log level for unit tests is "Fatal"
+        armnn::ConfigureLogging(true, true, armnn::LogSeverity::Fatal);
+    }
+};
+
+struct StreamRedirector
+{
+public:
+    StreamRedirector(std::ostream& stream, std::streambuf* newStreamBuffer)
+        : m_Stream(stream)
+        , m_BackupBuffer(m_Stream.rdbuf(newStreamBuffer))
+    {}
+
+    ~StreamRedirector() { CancelRedirect(); }
+
+    void CancelRedirect()
+    {
+        // Only cancel the redirect once.
+        if (m_BackupBuffer != nullptr )
+        {
+            m_Stream.rdbuf(m_BackupBuffer);
+            m_BackupBuffer = nullptr;
+        }
+    }
+
+private:
+    std::ostream& m_Stream;
+    std::streambuf* m_BackupBuffer;
+};
 
 class TestProfilingConnectionBase : public IProfilingConnection
 {
@@ -40,7 +79,7 @@ public:
 
     bool WritePacket(const unsigned char* buffer, uint32_t length) override
     {
-        arm::pipe::IgnoreUnused(buffer, length);
+        IgnoreUnused(buffer, length);
 
         return false;
     }
@@ -57,7 +96,7 @@ public:
         else
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
-            throw arm::pipe::TimeoutException("Simulate a timeout error\n");
+            throw armnn::TimeoutException("Simulate a timeout error\n");
         }
     }
 
@@ -78,7 +117,7 @@ public:
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
             ++m_ReadRequests;
-            throw arm::pipe::TimeoutException("Simulate a timeout error\n");
+            throw armnn::TimeoutException("Simulate a timeout error\n");
         }
 
         return arm::pipe::Packet(65536);
@@ -102,9 +141,9 @@ public:
 
     arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        arm::pipe::IgnoreUnused(timeout);
+        IgnoreUnused(timeout);
         ++m_ReadRequests;
-        throw arm::pipe::ProfilingException("Simulate a non-timeout error");
+        throw armnn::Exception("Simulate a non-timeout error");
     }
 
     int ReadCalledCount()
@@ -121,7 +160,7 @@ class TestProfilingConnectionBadAckPacket : public TestProfilingConnectionBase
 public:
     arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        arm::pipe::IgnoreUnused(timeout);
+        IgnoreUnused(timeout);
         // Connection Acknowledged Packet header (word 0, word 1 is always zero):
         // 26:31 [6]  packet_family: Control Packet Family, value 0b000000
         // 16:25 [10] packet_id: Packet identifier, value 0b0000000001
@@ -144,7 +183,7 @@ public:
 
     void operator()(const arm::pipe::Packet& packet) override
     {
-        arm::pipe::IgnoreUnused(packet);
+        IgnoreUnused(packet);
         m_Count++;
     }
 
@@ -167,28 +206,22 @@ class SwapProfilingConnectionFactoryHelper : public ProfilingService
 public:
     using MockProfilingConnectionFactoryPtr = std::unique_ptr<MockProfilingConnectionFactory>;
 
-    SwapProfilingConnectionFactoryHelper(uint16_t maxGlobalCounterId,
-                                         IInitialiseProfilingService& initialiser,
-                                         ProfilingService& profilingService)
-        : ProfilingService(maxGlobalCounterId,
-                           initialiser,
-                           arm::pipe::ARMNN_SOFTWARE_INFO,
-                           arm::pipe::ARMNN_SOFTWARE_VERSION,
-                           arm::pipe::ARMNN_HARDWARE_VERSION)
+    SwapProfilingConnectionFactoryHelper(armnn::profiling::ProfilingService& profilingService)
+        : ProfilingService()
         , m_ProfilingService(profilingService)
         , m_MockProfilingConnectionFactory(new MockProfilingConnectionFactory())
         , m_BackupProfilingConnectionFactory(nullptr)
 
     {
-        CHECK(m_MockProfilingConnectionFactory);
+        BOOST_CHECK(m_MockProfilingConnectionFactory);
         SwapProfilingConnectionFactory(m_ProfilingService,
                                        m_MockProfilingConnectionFactory.get(),
                                        m_BackupProfilingConnectionFactory);
-        CHECK(m_BackupProfilingConnectionFactory);
+        BOOST_CHECK(m_BackupProfilingConnectionFactory);
     }
     ~SwapProfilingConnectionFactoryHelper()
     {
-        CHECK(m_BackupProfilingConnectionFactory);
+        BOOST_CHECK(m_BackupProfilingConnectionFactory);
         IProfilingConnectionFactory* temp = nullptr;
         SwapProfilingConnectionFactory(m_ProfilingService,
                                        m_BackupProfilingConnectionFactory,
@@ -198,7 +231,7 @@ public:
     MockProfilingConnection* GetMockProfilingConnection()
     {
         IProfilingConnection* profilingConnection = GetProfilingConnection(m_ProfilingService);
-        return armnn::PolymorphicDowncast<MockProfilingConnection*>(profilingConnection);
+        return PolymorphicDowncast<MockProfilingConnection*>(profilingConnection);
     }
 
     void ForceTransitionToState(ProfilingState newState)
@@ -239,11 +272,11 @@ public:
     }
 
 private:
-    ProfilingService& m_ProfilingService;
+    armnn::profiling::ProfilingService& m_ProfilingService;
     MockProfilingConnectionFactoryPtr m_MockProfilingConnectionFactory;
     IProfilingConnectionFactory* m_BackupProfilingConnectionFactory;
 };
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

@@ -1,9 +1,8 @@
 //
-// Copyright © 2017,2019-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "Serializer.hpp"
-#include "SerializerUtils.hpp"
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/LstmParams.hpp>
@@ -11,8 +10,11 @@
 #include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/utility/NumericCast.hpp>
 
-#include <fmt/format.h>
 #include <iostream>
+
+#include <flatbuffers/util.h>
+
+#include "SerializerUtils.hpp"
 
 using namespace armnn;
 namespace fb = flatbuffers;
@@ -20,37 +22,6 @@ namespace serializer = armnnSerializer;
 
 namespace armnnSerializer
 {
-
-ISerializer::ISerializer() : pSerializerImpl(new SerializerImpl())
-{
-}
-
-ISerializer::~ISerializer() = default;
-
-ISerializer* ISerializer::CreateRaw()
-{
-    return new ISerializer();
-}
-
-ISerializerPtr ISerializer::Create()
-{
-    return ISerializerPtr(CreateRaw(), &ISerializer::Destroy);
-}
-
-void ISerializer::Destroy(ISerializer* serializer)
-{
-    delete serializer;
-}
-
-void ISerializer::Serialize(const armnn::INetwork& inNetwork)
-{
-    pSerializerImpl->Serialize(inNetwork);
-}
-
-bool ISerializer::SaveSerializedToStream(std::ostream& stream)
-{
-    return pSerializerImpl->SaveSerializedToStream(stream);
-}
 
 serializer::ActivationFunction GetFlatBufferActivationFunction(armnn::ActivationFunction function)
 {
@@ -95,7 +66,7 @@ serializer::ArgMinMaxFunction GetFlatBufferArgMinMaxFunction(armnn::ArgMinMaxFun
     }
 }
 
-uint32_t SerializerStrategy::GetSerializedId(LayerGuid guid)
+uint32_t SerializerVisitor::GetSerializedId(armnn::LayerGuid guid)
 {
     if (m_guidMap.empty())
     {
@@ -112,7 +83,7 @@ uint32_t SerializerStrategy::GetSerializedId(LayerGuid guid)
 }
 
 // Build FlatBuffer for Input Layer
-void SerializerStrategy::SerializeInputLayer(const armnn::IConnectableLayer* layer, LayerBindingId id, const char* name)
+void SerializerVisitor::VisitInputLayer(const armnn::IConnectableLayer* layer, LayerBindingId id, const char* name)
 {
     IgnoreUnused(name);
 
@@ -134,8 +105,7 @@ void SerializerStrategy::SerializeInputLayer(const armnn::IConnectableLayer* lay
 }
 
 // Build FlatBuffer for Output Layer
-void SerializerStrategy::SerializeOutputLayer(const armnn::IConnectableLayer* layer,
-                                              LayerBindingId id, const char* name)
+void SerializerVisitor::VisitOutputLayer(const armnn::IConnectableLayer* layer, LayerBindingId id, const char* name)
 {
     IgnoreUnused(name);
 
@@ -155,10 +125,19 @@ void SerializerStrategy::SerializeOutputLayer(const armnn::IConnectableLayer* la
     CreateAnyLayer(flatBufferOutputLayer.o, serializer::Layer::Layer_OutputLayer);
 }
 
+void SerializerVisitor::VisitAbsLayer(const armnn::IConnectableLayer* layer, const char* name)
+{
+    IgnoreUnused(name);
+    auto flatBufferBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Abs);
+    auto flatBufferAbsLayer  = serializer::CreateAbsLayer(m_flatBufferBuilder, flatBufferBaseLayer);
+
+    CreateAnyLayer(flatBufferAbsLayer.o, serializer::Layer::Layer_AbsLayer);
+}
+
 // Build FlatBuffer for Activation Layer
-void SerializerStrategy::SerializeActivationLayer(const armnn::IConnectableLayer* layer,
-                                                  const armnn::ActivationDescriptor& descriptor,
-                                                  const char* name)
+void SerializerVisitor::VisitActivationLayer(const armnn::IConnectableLayer* layer,
+                                             const armnn::ActivationDescriptor& descriptor,
+                                             const char* name)
 {
     IgnoreUnused(name);
 
@@ -181,7 +160,7 @@ void SerializerStrategy::SerializeActivationLayer(const armnn::IConnectableLayer
 }
 
 // Build FlatBuffer for Addition Layer
-void SerializerStrategy::SerializeAdditionLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitAdditionLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -196,9 +175,9 @@ void SerializerStrategy::SerializeAdditionLayer(const armnn::IConnectableLayer* 
 }
 
 // Build FlatBuffer for ArgMinMax Layer
-void SerializerStrategy::SerializeArgMinMaxLayer(const armnn::IConnectableLayer *layer,
-                                                 const armnn::ArgMinMaxDescriptor& descriptor,
-                                                 const char *name)
+void SerializerVisitor::VisitArgMinMaxLayer(const armnn::IConnectableLayer *layer,
+                                            const armnn::ArgMinMaxDescriptor& descriptor,
+                                            const char *name)
 {
     IgnoreUnused(name);
 
@@ -218,37 +197,10 @@ void SerializerStrategy::SerializeArgMinMaxLayer(const armnn::IConnectableLayer 
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_ArgMinMaxLayer);
 }
 
-void SerializerStrategy::SerializeBatchMatMulLayer(const armnn::IConnectableLayer* layer,
-                                                   const armnn::BatchMatMulDescriptor& descriptor,
-                                                   const char* name)
-{
-    IgnoreUnused(name);
-
-    // Create FlatBuffer BaseLayer
-    auto flatBufferBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_BatchMatMul);
-
-    // Create the FlatBuffer BatchMatMulDescriptor
-    auto flatBufferDescriptor = CreateBatchMatMulDescriptor(m_flatBufferBuilder,
-                                                            descriptor.m_TransposeX,
-                                                            descriptor.m_TransposeY,
-                                                            descriptor.m_AdjointX,
-                                                            descriptor.m_AdjointY,
-                                                            GetFlatBufferDataLayout(descriptor.m_DataLayoutX),
-                                                            GetFlatBufferDataLayout(descriptor.m_DataLayoutY));
-
-    // Create the FlatBuffer BatchMatMulLayer
-    auto flatBufferBatchMatMulLayer = CreateBatchMatMulLayer(m_flatBufferBuilder,
-                                                             flatBufferBaseLayer,
-                                                             flatBufferDescriptor);
-
-    // Add the AnyLayer to the FlatBufferLayers
-    CreateAnyLayer(flatBufferBatchMatMulLayer.o, serializer::Layer::Layer_BatchMatMulLayer);
-}
-
 // Build FlatBuffer for BatchToSpaceNd Layer
-void SerializerStrategy::SerializeBatchToSpaceNdLayer(const armnn::IConnectableLayer* layer,
-                                                      const armnn::BatchToSpaceNdDescriptor& descriptor,
-                                                      const char* name)
+void SerializerVisitor::VisitBatchToSpaceNdLayer(const armnn::IConnectableLayer* layer,
+                                                 const armnn::BatchToSpaceNdDescriptor& descriptor,
+                                                 const char* name)
 {
     IgnoreUnused(name);
 
@@ -276,18 +228,15 @@ void SerializerStrategy::SerializeBatchToSpaceNdLayer(const armnn::IConnectableL
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_BatchToSpaceNdLayer);
 }
 
-void SerializerStrategy::SerializeBatchNormalizationLayer(
-        const armnn::IConnectableLayer* layer,
-        const armnn::BatchNormalizationDescriptor& batchNormDescriptor,
-        const std::vector<armnn::ConstTensor>& constants,
-        const char* name)
+void SerializerVisitor::VisitBatchNormalizationLayer(const armnn::IConnectableLayer* layer,
+                                                     const armnn::BatchNormalizationDescriptor& batchNormDescriptor,
+                                                     const armnn::ConstTensor& mean,
+                                                     const armnn::ConstTensor& variance,
+                                                     const armnn::ConstTensor& beta,
+                                                     const armnn::ConstTensor& gamma,
+                                                     const char* name)
 {
     IgnoreUnused(name);
-
-    const armnn::ConstTensor& mean     = constants[0];
-    const armnn::ConstTensor& variance = constants[1];
-    const armnn::ConstTensor& beta     = constants[2];
-    const armnn::ConstTensor& gamma    = constants[3];
 
     auto fbBatchNormalizationBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_BatchNormalization);
     auto fbBatchNormalizationDescriptor = serializer::CreateBatchNormalizationDescriptor(
@@ -310,30 +259,7 @@ void SerializerStrategy::SerializeBatchNormalizationLayer(
     CreateAnyLayer(fbBatchNormalizationLayer.o, serializer::Layer::Layer_BatchNormalizationLayer);
 }
 
-void SerializerStrategy::SerializeCastLayer(const armnn::IConnectableLayer* layer,
-                                            const char* name)
-{
-    IgnoreUnused(name);
-
-    auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_Cast);
-    auto fbCastLayer = serializer::CreateCastLayer(m_flatBufferBuilder, fbBaseLayer);
-    CreateAnyLayer(fbCastLayer.o, serializer::Layer::Layer_CastLayer);
-}
-
-void SerializerStrategy::SerializeChannelShuffleLayer(const armnn::IConnectableLayer* layer,
-                                                      const armnn::ChannelShuffleDescriptor& descriptor,
-                                                      const char* name)
-{
-    IgnoreUnused(name);
-    auto fbDescriptor = CreateChannelShuffleDescriptor(m_flatBufferBuilder,
-                                                       descriptor.m_Axis,
-                                                       descriptor.m_NumGroups);
-    auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_ChannelShuffle);
-    auto fbChannelShuffleLayer = serializer::CreateChannelShuffleLayer(m_flatBufferBuilder, fbBaseLayer, fbDescriptor);
-    CreateAnyLayer(fbChannelShuffleLayer.o, serializer::Layer::Layer_ChannelShuffleLayer);
-}
-
-void SerializerStrategy::SerializeComparisonLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitComparisonLayer(const armnn::IConnectableLayer* layer,
                                              const armnn::ComparisonDescriptor& descriptor,
                                              const char* name)
 {
@@ -349,13 +275,11 @@ void SerializerStrategy::SerializeComparisonLayer(const armnn::IConnectableLayer
 }
 
 // Build FlatBuffer for Constant Layer
-void SerializerStrategy::SerializeConstantLayer(const armnn::IConnectableLayer* layer,
-                                                const std::vector<armnn::ConstTensor>& constants,
-                                                const char* name)
+void SerializerVisitor::VisitConstantLayer(const armnn::IConnectableLayer* layer,
+                                           const armnn::ConstTensor& input,
+                                           const char* name)
 {
     IgnoreUnused(name);
-
-    armnn::ConstTensor input = constants[0];
 
     // Create FlatBuffer BaseLayer
     auto flatBufferConstantBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Constant);
@@ -372,9 +296,11 @@ void SerializerStrategy::SerializeConstantLayer(const armnn::IConnectableLayer* 
 }
 
 // Build FlatBuffer for Convolution2dLayer
-void SerializerStrategy::SerializeConvolution2dLayer(const armnn::IConnectableLayer* layer,
-                                                     const armnn::Convolution2dDescriptor& descriptor,
-                                                     const char* name)
+void SerializerVisitor::VisitConvolution2dLayer(const armnn::IConnectableLayer* layer,
+                                                const armnn::Convolution2dDescriptor& descriptor,
+                                                const armnn::ConstTensor& weights,
+                                                const armnn::Optional<armnn::ConstTensor>& biases,
+                                                const char* name)
 {
     IgnoreUnused(name);
 
@@ -392,52 +318,26 @@ void SerializerStrategy::SerializeConvolution2dLayer(const armnn::IConnectableLa
                                                               descriptor.m_DilationY,
                                                               descriptor.m_BiasEnabled,
                                                               GetFlatBufferDataLayout(descriptor.m_DataLayout));
+    auto flatBufferWeightsConstTensorInfo = CreateConstTensorInfo(weights);
+    flatbuffers::Offset<serializer::ConstTensor> flatBufferBiasesConstTensorInfo;
+
+    if (biases.has_value())
+    {
+        flatBufferBiasesConstTensorInfo = CreateConstTensorInfo(biases.value());
+    }
 
     // Create the FlatBuffer Convolution2dLayer
     auto flatBufferLayer = CreateConvolution2dLayer(m_flatBufferBuilder,
                                                     flatBufferBaseLayer,
-                                                    flatBufferDescriptor);
+                                                    flatBufferDescriptor,
+                                                    flatBufferWeightsConstTensorInfo,
+                                                    flatBufferBiasesConstTensorInfo);
 
     // Add the AnyLayer to the FlatBufferLayers
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_Convolution2dLayer);
 }
 
-// Build FlatBuffer for Convolution3dLayer
-void SerializerStrategy::SerializeConvolution3dLayer(const armnn::IConnectableLayer* layer,
-                                                     const armnn::Convolution3dDescriptor& descriptor,
-                                                     const char* name)
-{
-    IgnoreUnused(name);
-
-    // Create FlatBuffer BaseLayer
-    auto flatBufferBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Convolution3d);
-
-    auto flatBufferDescriptor = CreateConvolution3dDescriptor(m_flatBufferBuilder,
-                                                              descriptor.m_PadLeft,
-                                                              descriptor.m_PadRight,
-                                                              descriptor.m_PadTop,
-                                                              descriptor.m_PadBottom,
-                                                              descriptor.m_PadFront,
-                                                              descriptor.m_PadBack,
-                                                              descriptor.m_StrideX,
-                                                              descriptor.m_StrideY,
-                                                              descriptor.m_StrideZ,
-                                                              descriptor.m_DilationX,
-                                                              descriptor.m_DilationY,
-                                                              descriptor.m_DilationZ,
-                                                              descriptor.m_BiasEnabled,
-                                                              GetFlatBufferDataLayout(descriptor.m_DataLayout));
-
-    // Create the FlatBuffer Convolution3dLayer
-    auto flatBufferLayer = CreateConvolution3dLayer(m_flatBufferBuilder,
-                                                    flatBufferBaseLayer,
-                                                    flatBufferDescriptor);
-
-    // Add the AnyLayer to the FlatBufferLayers
-    CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_Convolution3dLayer);
-}
-
-void SerializerStrategy::SerializeDepthToSpaceLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitDepthToSpaceLayer(const armnn::IConnectableLayer* layer,
                                                const armnn::DepthToSpaceDescriptor& descriptor,
                                                const char* name)
 {
@@ -453,9 +353,11 @@ void SerializerStrategy::SerializeDepthToSpaceLayer(const armnn::IConnectableLay
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_DepthToSpaceLayer);
 }
 
-void SerializerStrategy::SerializeDepthwiseConvolution2dLayer(const armnn::IConnectableLayer* layer,
-                                                              const armnn::DepthwiseConvolution2dDescriptor& descriptor,
-                                                              const char* name)
+void SerializerVisitor::VisitDepthwiseConvolution2dLayer(const armnn::IConnectableLayer* layer,
+                                                         const armnn::DepthwiseConvolution2dDescriptor& descriptor,
+                                                         const armnn::ConstTensor& weights,
+                                                         const armnn::Optional<armnn::ConstTensor>& biases,
+                                                         const char* name)
 {
     IgnoreUnused(name);
 
@@ -472,14 +374,23 @@ void SerializerStrategy::SerializeDepthwiseConvolution2dLayer(const armnn::IConn
                                                                descriptor.m_BiasEnabled,
                                                                GetFlatBufferDataLayout(descriptor.m_DataLayout));
 
+    flatbuffers::Offset<serializer::ConstTensor> fbWeightsConstTensorInfo = CreateConstTensorInfo(weights);
+    flatbuffers::Offset<serializer::ConstTensor> fbBiasesConstTensorInfo;
+    if (biases.has_value())
+    {
+        fbBiasesConstTensorInfo = CreateConstTensorInfo(biases.value());
+    }
+
     auto flatBufferLayer = CreateDepthwiseConvolution2dLayer(m_flatBufferBuilder,
                                                              fbBaseLayer,
-                                                             fbDescriptor);
+                                                             fbDescriptor,
+                                                             fbWeightsConstTensorInfo,
+                                                             fbBiasesConstTensorInfo);
 
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_DepthwiseConvolution2dLayer);
 }
 
-void SerializerStrategy::SerializeDequantizeLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitDequantizeLayer(const armnn::IConnectableLayer* layer,
                                              const char* name)
 {
     IgnoreUnused(name);
@@ -490,14 +401,12 @@ void SerializerStrategy::SerializeDequantizeLayer(const armnn::IConnectableLayer
     CreateAnyLayer(fbDequantizeLayer.o, serializer::Layer::Layer_DequantizeLayer);
 }
 
-void SerializerStrategy::SerializeDetectionPostProcessLayer(const armnn::IConnectableLayer* layer,
-                                                            const armnn::DetectionPostProcessDescriptor& descriptor,
-                                                            const std::vector<armnn::ConstTensor>& constants,
-                                                            const char* name)
+void SerializerVisitor::VisitDetectionPostProcessLayer(const armnn::IConnectableLayer* layer,
+                                                       const armnn::DetectionPostProcessDescriptor& descriptor,
+                                                       const armnn::ConstTensor& anchors,
+                                                       const char* name)
 {
     IgnoreUnused(name);
-
-    const armnn::ConstTensor& anchors = constants[0];
 
     auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_DetectionPostProcess);
     auto fbDescriptor = CreateDetectionPostProcessDescriptor(m_flatBufferBuilder,
@@ -523,7 +432,7 @@ void SerializerStrategy::SerializeDetectionPostProcessLayer(const armnn::IConnec
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_DetectionPostProcessLayer);
 }
 
-void SerializerStrategy::SerializeDivisionLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitDivisionLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -533,22 +442,7 @@ void SerializerStrategy::SerializeDivisionLayer(const armnn::IConnectableLayer* 
     CreateAnyLayer(fbDivisionLayer.o, serializer::Layer::Layer_DivisionLayer);
 }
 
-void SerializerStrategy::SerializeElementwiseBinaryLayer(const armnn::IConnectableLayer* layer,
-                                                         const armnn::ElementwiseBinaryDescriptor& descriptor,
-                                                         const char* name)
-{
-    IgnoreUnused(name);
-
-    auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_ElementwiseBinary);
-    auto fbDescriptor = serializer::CreateElementwiseBinaryDescriptor(
-            m_flatBufferBuilder,
-            GetFlatBufferBinaryOperation(descriptor.m_Operation));
-
-    auto fbLayer = serializer::CreateElementwiseBinaryLayer(m_flatBufferBuilder, fbBaseLayer, fbDescriptor);
-    CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_ElementwiseBinaryLayer);
-}
-
-void SerializerStrategy::SerializeElementwiseUnaryLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitElementwiseUnaryLayer(const armnn::IConnectableLayer* layer,
                                                    const armnn::ElementwiseUnaryDescriptor& descriptor,
                                                    const char* name)
 {
@@ -563,7 +457,17 @@ void SerializerStrategy::SerializeElementwiseUnaryLayer(const armnn::IConnectabl
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_ElementwiseUnaryLayer);
 }
 
-void SerializerStrategy::SerializeFillLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitEqualLayer(const armnn::IConnectableLayer* layer, const char* name)
+{
+    IgnoreUnused(name);
+
+    auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_Equal);
+    auto fbEqualLayer = serializer::CreateEqualLayer(m_flatBufferBuilder, fbBaseLayer);
+
+    CreateAnyLayer(fbEqualLayer.o, serializer::Layer::Layer_EqualLayer);
+}
+
+void SerializerVisitor::VisitFillLayer(const armnn::IConnectableLayer* layer,
                                        const armnn::FillDescriptor& fillDescriptor,
                                        const char* name)
 {
@@ -578,7 +482,7 @@ void SerializerStrategy::SerializeFillLayer(const armnn::IConnectableLayer* laye
     CreateAnyLayer(fbFillLayer.o, serializer::Layer::Layer_FillLayer);
 }
 
-void SerializerStrategy::SerializeFloorLayer(const armnn::IConnectableLayer *layer, const char *name)
+void SerializerVisitor::VisitFloorLayer(const armnn::IConnectableLayer *layer, const char *name)
 {
     IgnoreUnused(name);
 
@@ -588,7 +492,14 @@ void SerializerStrategy::SerializeFloorLayer(const armnn::IConnectableLayer *lay
     CreateAnyLayer(flatBufferFloorLayer.o, serializer::Layer::Layer_FloorLayer);
 }
 
-void SerializerStrategy::SerializeGatherLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitGatherLayer(const armnn::IConnectableLayer* layer,
+                                         const char* name)
+{
+    armnn::GatherDescriptor gatherDescriptor{};
+    VisitGatherLayer(layer, gatherDescriptor, name);
+}
+
+void SerializerVisitor::VisitGatherLayer(const armnn::IConnectableLayer* layer,
                                          const armnn::GatherDescriptor& gatherDescriptor,
                                          const char* name)
 {
@@ -602,18 +513,17 @@ void SerializerStrategy::SerializeGatherLayer(const armnn::IConnectableLayer* la
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_GatherLayer);
 }
 
-void SerializerStrategy::SerializeGatherNdLayer(const armnn::IConnectableLayer* layer,
-                                                const char* name)
+void SerializerVisitor::VisitGreaterLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
-    auto fbGatherNdBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_GatherNd);
-    auto flatBufferLayer     = serializer::CreateGatherNdLayer(m_flatBufferBuilder, fbGatherNdBaseLayer);
+    auto fbGreaterBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Greater);
+    auto fbGreaterLayer = serializer::CreateGreaterLayer(m_flatBufferBuilder, fbGreaterBaseLayer);
 
-    CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_GatherNdLayer);
+    CreateAnyLayer(fbGreaterLayer.o, serializer::Layer::Layer_GreaterLayer);
 }
 
-void SerializerStrategy::SerializeInstanceNormalizationLayer(
+void SerializerVisitor::VisitInstanceNormalizationLayer(
     const armnn::IConnectableLayer* layer,
     const armnn::InstanceNormalizationDescriptor& instanceNormalizationDescriptor,
     const char* name)
@@ -633,7 +543,7 @@ void SerializerStrategy::SerializeInstanceNormalizationLayer(
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_InstanceNormalizationLayer);
 }
 
-void SerializerStrategy::SerializeL2NormalizationLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitL2NormalizationLayer(const armnn::IConnectableLayer* layer,
                                                   const armnn::L2NormalizationDescriptor& l2NormalizationDescriptor,
                                                   const char* name)
 {
@@ -654,7 +564,7 @@ void SerializerStrategy::SerializeL2NormalizationLayer(const armnn::IConnectable
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_L2NormalizationLayer);
 }
 
-void SerializerStrategy::SerializeLogicalBinaryLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitLogicalBinaryLayer(const armnn::IConnectableLayer* layer,
                                                 const armnn::LogicalBinaryDescriptor& descriptor,
                                                 const char* name)
 {
@@ -669,7 +579,7 @@ void SerializerStrategy::SerializeLogicalBinaryLayer(const armnn::IConnectableLa
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_LogicalBinaryLayer);
 }
 
-void SerializerStrategy::SerializeLogSoftmaxLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitLogSoftmaxLayer(const armnn::IConnectableLayer* layer,
                                              const armnn::LogSoftmaxDescriptor& logSoftmaxDescriptor,
                                              const char* name)
 {
@@ -693,10 +603,10 @@ void SerializerStrategy::SerializeLogSoftmaxLayer(const armnn::IConnectableLayer
     CreateAnyLayer(flatBufferLogSoftmaxLayer.o, serializer::Layer::Layer_LogSoftmaxLayer);
 }
 
-void SerializerStrategy::SerializeLstmLayer(const armnn::IConnectableLayer* layer,
-                                            const armnn::LstmDescriptor& descriptor,
-                                            const std::vector<armnn::ConstTensor>& constants,
-                                            const char* name)
+void SerializerVisitor::VisitLstmLayer(const armnn::IConnectableLayer* layer,
+                                       const armnn::LstmDescriptor& descriptor,
+                                       const armnn::LstmInputParams& params,
+                                       const char* name)
 {
     IgnoreUnused(name);
 
@@ -712,21 +622,16 @@ void SerializerStrategy::SerializeLstmLayer(const armnn::IConnectableLayer* laye
         descriptor.m_ProjectionEnabled,
         descriptor.m_LayerNormEnabled);
 
-    // Index for constants vector
-    std::size_t i = 0;
-
-    // Get mandatory/basic input parameters
-    auto inputToForgetWeights     = CreateConstTensorInfo(constants[i++]); //InputToForgetWeights
-    auto inputToCellWeights       = CreateConstTensorInfo(constants[i++]); //InputToCellWeights
-    auto inputToOutputWeights     = CreateConstTensorInfo(constants[i++]); //InputToOutputWeights
-    auto recurrentToForgetWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToForgetWeights
-    auto recurrentToCellWeights   = CreateConstTensorInfo(constants[i++]); //RecurrentToCellWeights
-    auto recurrentToOutputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToOutputWeights
-    auto forgetGateBias           = CreateConstTensorInfo(constants[i++]); //ForgetGateBias
-    auto cellBias                 = CreateConstTensorInfo(constants[i++]); //CellBias
-    auto outputGateBias           = CreateConstTensorInfo(constants[i++]); //OutputGateBias
-
-
+    // Get mandatory input parameters
+    auto inputToForgetWeights = CreateConstTensorInfo(*params.m_InputToForgetWeights);
+    auto inputToCellWeights = CreateConstTensorInfo(*params.m_InputToCellWeights);
+    auto inputToOutputWeights = CreateConstTensorInfo(*params.m_InputToOutputWeights);
+    auto recurrentToForgetWeights = CreateConstTensorInfo(*params.m_RecurrentToForgetWeights);
+    auto recurrentToCellWeights = CreateConstTensorInfo(*params.m_RecurrentToCellWeights);
+    auto recurrentToOutputWeights = CreateConstTensorInfo(*params.m_RecurrentToOutputWeights);
+    auto forgetGateBias = CreateConstTensorInfo(*params.m_ForgetGateBias);
+    auto cellBias = CreateConstTensorInfo(*params.m_CellBias);
+    auto outputGateBias = CreateConstTensorInfo(*params.m_OutputGateBias);
 
     //Define optional parameters, these will be set depending on configuration in Lstm descriptor
     flatbuffers::Offset<serializer::ConstTensor> inputToInputWeights;
@@ -744,36 +649,33 @@ void SerializerStrategy::SerializeLstmLayer(const armnn::IConnectableLayer* laye
 
     if (!descriptor.m_CifgEnabled)
     {
-        inputToInputWeights = CreateConstTensorInfo(constants[i++]); //InputToInputWeights
-        recurrentToInputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToInputWeights
-        inputGateBias = CreateConstTensorInfo(constants[i++]); //InputGateBias
-    }
-
-    if (descriptor.m_PeepholeEnabled)
-    {
-        if (!descriptor.m_CifgEnabled)
-        {
-            cellToInputWeights = CreateConstTensorInfo(constants[i++]); //CellToInputWeights
-        }
-        cellToForgetWeights = CreateConstTensorInfo(constants[i++]); //CellToForgetWeights
-        cellToOutputWeights = CreateConstTensorInfo(constants[i++]); //CellToOutputWeights
+        inputToInputWeights = CreateConstTensorInfo(*params.m_InputToInputWeights);
+        recurrentToInputWeights = CreateConstTensorInfo(*params.m_RecurrentToInputWeights);
+        cellToInputWeights = CreateConstTensorInfo(*params.m_CellToInputWeights);
+        inputGateBias = CreateConstTensorInfo(*params.m_InputGateBias);
     }
 
     if (descriptor.m_ProjectionEnabled)
     {
-        projectionWeights = CreateConstTensorInfo(constants[i++]); //ProjectionWeights
-        projectionBias = CreateConstTensorInfo(constants[i++]); //ProjectionBias
+        projectionWeights = CreateConstTensorInfo(*params.m_ProjectionWeights);
+        projectionBias = CreateConstTensorInfo(*params.m_ProjectionBias);
+    }
+
+    if (descriptor.m_PeepholeEnabled)
+    {
+        cellToForgetWeights = CreateConstTensorInfo(*params.m_CellToForgetWeights);
+        cellToOutputWeights = CreateConstTensorInfo(*params.m_CellToOutputWeights);
     }
 
     if (descriptor.m_LayerNormEnabled)
     {
         if (!descriptor.m_CifgEnabled)
         {
-            inputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //InputLayerNormWeights
+            inputLayerNormWeights = CreateConstTensorInfo((*params.m_InputLayerNormWeights));
         }
-        forgetLayerNormWeights = CreateConstTensorInfo(constants[i++]); //ForgetLayerNormWeights
-        cellLayerNormWeights   = CreateConstTensorInfo(constants[i++]); //CellLayerNormWeights
-        outputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //OutputLayerNormWeights
+        forgetLayerNormWeights = CreateConstTensorInfo(*params.m_ForgetLayerNormWeights);
+        cellLayerNormWeights   = CreateConstTensorInfo(*params.m_CellLayerNormWeights);
+        outputLayerNormWeights = CreateConstTensorInfo(*params.m_OutputLayerNormWeights);
     }
 
     auto fbLstmParams = serializer::CreateLstmInputParams(
@@ -809,7 +711,7 @@ void SerializerStrategy::SerializeLstmLayer(const armnn::IConnectableLayer* laye
     CreateAnyLayer(fbLstmLayer.o, serializer::Layer::Layer_LstmLayer);
 }
 
-void SerializerStrategy::SerializeMaximumLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitMaximumLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -819,7 +721,7 @@ void SerializerStrategy::SerializeMaximumLayer(const armnn::IConnectableLayer* l
     CreateAnyLayer(fbMaximumLayer.o, serializer::Layer::Layer_MaximumLayer);
 }
 
-void SerializerStrategy::SerializeMeanLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitMeanLayer(const armnn::IConnectableLayer* layer,
                                        const armnn::MeanDescriptor& descriptor,
                                        const char* name)
 {
@@ -837,7 +739,7 @@ void SerializerStrategy::SerializeMeanLayer(const armnn::IConnectableLayer* laye
     CreateAnyLayer(fbMeanLayer.o, serializer::Layer::Layer_MeanLayer);
 }
 
-void SerializerStrategy::SerializeMinimumLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitMinimumLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -847,7 +749,7 @@ void SerializerStrategy::SerializeMinimumLayer(const armnn::IConnectableLayer* l
     CreateAnyLayer(fbMinimumLayer.o, serializer::Layer::Layer_MinimumLayer);
 }
 
-void SerializerStrategy::SerializeMergeLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitMergeLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -857,7 +759,14 @@ void SerializerStrategy::SerializeMergeLayer(const armnn::IConnectableLayer* lay
     CreateAnyLayer(fbMergeLayer.o, serializer::Layer::Layer_MergeLayer);
 }
 
-void SerializerStrategy::SerializeConcatLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitMergerLayer(const armnn::IConnectableLayer* layer,
+                                         const armnn::MergerDescriptor& mergerDescriptor,
+                                         const char* name)
+{
+    VisitConcatLayer(layer, mergerDescriptor, name);
+}
+
+void SerializerVisitor::VisitConcatLayer(const armnn::IConnectableLayer* layer,
                                          const armnn::ConcatDescriptor& concatDescriptor,
                                          const char* name)
 {
@@ -892,7 +801,7 @@ void SerializerStrategy::SerializeConcatLayer(const armnn::IConnectableLayer* la
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_ConcatLayer);
 }
 
-void SerializerStrategy::SerializeMultiplicationLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitMultiplicationLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -903,7 +812,7 @@ void SerializerStrategy::SerializeMultiplicationLayer(const armnn::IConnectableL
     CreateAnyLayer(fbMultiplicationLayer.o, serializer::Layer::Layer_MultiplicationLayer);
 }
 
-void SerializerStrategy::SerializePadLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitPadLayer(const armnn::IConnectableLayer* layer,
                                       const armnn::PadDescriptor& padDescriptor,
                                       const char* name)
 {
@@ -920,8 +829,7 @@ void SerializerStrategy::SerializePadLayer(const armnn::IConnectableLayer* layer
 
     auto flatBufferPadDesc = serializer::CreatePadDescriptor(m_flatBufferBuilder,
                                                              m_flatBufferBuilder.CreateVector(padList),
-                                                             padDescriptor.m_PadValue,
-                                                             GetFlatBufferPaddingMode(padDescriptor.m_PaddingMode));
+                                                             padDescriptor.m_PadValue);
 
     auto flatBufferPadLayer = serializer::CreatePadLayer(m_flatBufferBuilder,
                                                          flatBufferBaseLayer,
@@ -930,7 +838,7 @@ void SerializerStrategy::SerializePadLayer(const armnn::IConnectableLayer* layer
     CreateAnyLayer(flatBufferPadLayer.o, serializer::Layer::Layer_PadLayer);
 }
 
-void SerializerStrategy::SerializePermuteLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitPermuteLayer(const armnn::IConnectableLayer* layer,
                                           const armnn::PermuteDescriptor& permuteDescriptor,
                                           const char* name)
 {
@@ -958,7 +866,7 @@ void SerializerStrategy::SerializePermuteLayer(const armnn::IConnectableLayer* l
 }
 
 // Build FlatBuffer for Rank Layer
-void SerializerStrategy::SerializeRankLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitRankLayer(const armnn::IConnectableLayer* layer,
                                        const char* name)
 {
     IgnoreUnused(name);
@@ -967,25 +875,8 @@ void SerializerStrategy::SerializeRankLayer(const armnn::IConnectableLayer* laye
 
     CreateAnyLayer(flatBufferRankLayer.o, serializer::Layer::Layer_RankLayer);
 }
-
-void SerializerStrategy::SerializeReduceLayer(const armnn::IConnectableLayer* layer,
-                                             const armnn::ReduceDescriptor& reduceDescriptor,
-                                             const char*)
-{
-    auto fbReduceBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Reduce);
-    auto fbDescriptor = CreateReduceDescriptor(m_flatBufferBuilder,
-                                               reduceDescriptor.m_KeepDims,
-                                               m_flatBufferBuilder.CreateVector(reduceDescriptor.m_vAxis),
-                                               GetFlatBufferReduceOperation(reduceDescriptor.m_ReduceOperation));
-    auto fbReduceLayer = serializer::CreateReduceLayer(m_flatBufferBuilder,
-                                                       fbReduceBaseLayer,
-                                                       fbDescriptor);
-
-    CreateAnyLayer(fbReduceLayer.o, serializer::Layer::Layer_ReduceLayer);
-}
-
 // Build FlatBuffer for Reshape Layer
-void SerializerStrategy::SerializeReshapeLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitReshapeLayer(const armnn::IConnectableLayer* layer,
                                           const armnn::ReshapeDescriptor& reshapeDescriptor,
                                           const char* name)
 {
@@ -1011,7 +902,30 @@ void SerializerStrategy::SerializeReshapeLayer(const armnn::IConnectableLayer* l
     CreateAnyLayer(flatBufferReshapeLayer.o, serializer::Layer::Layer_ReshapeLayer);
 }
 
-void SerializerStrategy::SerializeResizeLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitResizeBilinearLayer(const armnn::IConnectableLayer* layer,
+                                                 const armnn::ResizeBilinearDescriptor& resizeDescriptor,
+                                                 const char* name)
+{
+    IgnoreUnused(name);
+
+    auto flatBufferBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_ResizeBilinear);
+
+    auto flatBufferDescriptor =
+        CreateResizeBilinearDescriptor(m_flatBufferBuilder,
+                                       resizeDescriptor.m_TargetWidth,
+                                       resizeDescriptor.m_TargetHeight,
+                                       GetFlatBufferDataLayout(resizeDescriptor.m_DataLayout),
+                                       resizeDescriptor.m_AlignCorners,
+                                       resizeDescriptor.m_HalfPixelCenters);
+
+    auto flatBufferLayer = serializer::CreateResizeBilinearLayer(m_flatBufferBuilder,
+                                                                 flatBufferBaseLayer,
+                                                                 flatBufferDescriptor);
+
+    CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_ResizeBilinearLayer);
+}
+
+void SerializerVisitor::VisitResizeLayer(const armnn::IConnectableLayer* layer,
                                          const armnn::ResizeDescriptor& resizeDescriptor,
                                          const char* name)
 {
@@ -1035,7 +949,17 @@ void SerializerStrategy::SerializeResizeLayer(const armnn::IConnectableLayer* la
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_ResizeLayer);
 }
 
-void SerializerStrategy::SerializeSliceLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitRsqrtLayer(const armnn::IConnectableLayer* layer, const char* name)
+{
+    IgnoreUnused(name);
+
+    auto fbRsqrtBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Rsqrt);
+    auto fbRsqrtLayer     = serializer::CreateRsqrtLayer(m_flatBufferBuilder, fbRsqrtBaseLayer);
+
+    CreateAnyLayer(fbRsqrtLayer.o, serializer::Layer::Layer_RsqrtLayer);
+}
+
+void SerializerVisitor::VisitSliceLayer(const armnn::IConnectableLayer* layer,
                                         const armnn::SliceDescriptor& sliceDescriptor,
                                         const char* name)
 {
@@ -1052,7 +976,7 @@ void SerializerStrategy::SerializeSliceLayer(const armnn::IConnectableLayer* lay
 }
 
 // Build FlatBuffer for Softmax Layer
-void SerializerStrategy::SerializeSoftmaxLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitSoftmaxLayer(const armnn::IConnectableLayer* layer,
                                           const armnn::SoftmaxDescriptor& softmaxDescriptor,
                                           const char* name)
 {
@@ -1063,9 +987,7 @@ void SerializerStrategy::SerializeSoftmaxLayer(const armnn::IConnectableLayer* l
 
     // Create the FlatBuffer SoftmaxDescriptor
     auto flatBufferSoftmaxDesc =
-        serializer::CreateSoftmaxDescriptor(m_flatBufferBuilder,
-                                            softmaxDescriptor.m_Beta,
-                                            softmaxDescriptor.m_Axis);
+        serializer::CreateSoftmaxDescriptor(m_flatBufferBuilder, softmaxDescriptor.m_Beta);
 
     // Create the FlatBuffer SoftmaxLayer
     auto flatBufferSoftmaxLayer =
@@ -1076,7 +998,7 @@ void SerializerStrategy::SerializeSoftmaxLayer(const armnn::IConnectableLayer* l
     CreateAnyLayer(flatBufferSoftmaxLayer.o, serializer::Layer::Layer_SoftmaxLayer);
 }
 
-void SerializerStrategy::SerializePooling2dLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitPooling2dLayer(const armnn::IConnectableLayer* layer,
                                             const armnn::Pooling2dDescriptor& pooling2dDescriptor,
                                             const char* name)
 {
@@ -1105,40 +1027,7 @@ void SerializerStrategy::SerializePooling2dLayer(const armnn::IConnectableLayer*
     CreateAnyLayer(fbPooling2dLayer.o, serializer::Layer::Layer_Pooling2dLayer);
 }
 
-void SerializerStrategy::SerializePooling3dLayer(const armnn::IConnectableLayer* layer,
-                                            const armnn::Pooling3dDescriptor& pooling3dDescriptor,
-                                            const char* name)
-{
-    IgnoreUnused(name);
-
-    auto fbPooling3dBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_Pooling3d);
-    auto fbPooling3dDescriptor = serializer::CreatePooling3dDescriptor(
-        m_flatBufferBuilder,
-        GetFlatBufferPoolingAlgorithm(pooling3dDescriptor.m_PoolType),
-        pooling3dDescriptor.m_PadLeft,
-        pooling3dDescriptor.m_PadRight,
-        pooling3dDescriptor.m_PadTop,
-        pooling3dDescriptor.m_PadBottom,
-        pooling3dDescriptor.m_PadFront,
-        pooling3dDescriptor.m_PadBack,
-        pooling3dDescriptor.m_PoolWidth,
-        pooling3dDescriptor.m_PoolHeight,
-        pooling3dDescriptor.m_PoolDepth,
-        pooling3dDescriptor.m_StrideX,
-        pooling3dDescriptor.m_StrideY,
-        pooling3dDescriptor.m_StrideZ,
-        GetFlatBufferOutputShapeRounding(pooling3dDescriptor.m_OutputShapeRounding),
-        GetFlatBufferPaddingMethod(pooling3dDescriptor.m_PaddingMethod),
-        GetFlatBufferDataLayout(pooling3dDescriptor.m_DataLayout));
-
-    auto fbPooling3dLayer = serializer::CreatePooling3dLayer(m_flatBufferBuilder,
-                                                             fbPooling3dBaseLayer,
-                                                             fbPooling3dDescriptor);
-
-    CreateAnyLayer(fbPooling3dLayer.o, serializer::Layer::Layer_Pooling3dLayer);
-}
-
-void SerializerStrategy::SerializePreluLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitPreluLayer(const armnn::IConnectableLayer* layer,
                                         const char* name)
 {
     IgnoreUnused(name);
@@ -1153,7 +1042,7 @@ void SerializerStrategy::SerializePreluLayer(const armnn::IConnectableLayer* lay
     CreateAnyLayer(flatBufferPreluLayer.o, serializer::Layer::Layer_PreluLayer);
 }
 
-void SerializerStrategy::SerializeQuantizeLayer(const armnn::IConnectableLayer *layer, const char *name)
+void SerializerVisitor::VisitQuantizeLayer(const armnn::IConnectableLayer *layer, const char *name)
 {
     IgnoreUnused(name);
 
@@ -1164,10 +1053,14 @@ void SerializerStrategy::SerializeQuantizeLayer(const armnn::IConnectableLayer *
 }
 
 // Build FlatBuffer for FullyConnected Layer
-void SerializerStrategy::SerializeFullyConnectedLayer(const armnn::IConnectableLayer* layer,
-                                                      const armnn::FullyConnectedDescriptor& fullyConnectedDescriptor,
-                                                      const char*)
+void SerializerVisitor::VisitFullyConnectedLayer(const armnn::IConnectableLayer* layer,
+                                                 const armnn::FullyConnectedDescriptor& fullyConnectedDescriptor,
+                                                 const armnn::ConstTensor& weights,
+                                                 const armnn::Optional<armnn::ConstTensor>& biases,
+                                                 const char* name)
 {
+    IgnoreUnused(name);
+
     // Create FlatBuffer BaseLayer
     auto flatBufferBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_FullyConnected);
 
@@ -1175,20 +1068,31 @@ void SerializerStrategy::SerializeFullyConnectedLayer(const armnn::IConnectableL
     auto flatBufferDescriptor =
         serializer::CreateFullyConnectedDescriptor(m_flatBufferBuilder,
                                                    fullyConnectedDescriptor.m_BiasEnabled,
-                                                   fullyConnectedDescriptor.m_TransposeWeightMatrix,
-                                                   fullyConnectedDescriptor.m_ConstantWeights);
+                                                   fullyConnectedDescriptor.m_TransposeWeightMatrix);
+
+    // Create FlatBuffer weights data
+    auto flatBufferWeights = CreateConstTensorInfo(weights);
+
+    // Create FlatBuffer bias data
+    flatbuffers::Offset<serializer::ConstTensor> flatBufferBiases;
+    if (fullyConnectedDescriptor.m_BiasEnabled)
+    {
+        flatBufferBiases = CreateConstTensorInfo(biases.value());
+    }
 
     // Create FlatBuffer FullyConnectedLayer
     auto flatBufferLayer = serializer::CreateFullyConnectedLayer(m_flatBufferBuilder,
                                                                  flatBufferBaseLayer,
-                                                                 flatBufferDescriptor);
+                                                                 flatBufferDescriptor,
+                                                                 flatBufferWeights,
+                                                                 flatBufferBiases);
 
     // Add created FullyConnectedLayer to the FlatBufferLayers
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_FullyConnectedLayer);
 }
 
 // Build FlatBuffer for SpaceToBatchNd Layer
-void SerializerStrategy::SerializeSpaceToBatchNdLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitSpaceToBatchNdLayer(const armnn::IConnectableLayer* layer,
                                                  const armnn::SpaceToBatchNdDescriptor& spaceToBatchNdDescriptor,
                                                  const char* name)
 {
@@ -1219,7 +1123,7 @@ void SerializerStrategy::SerializeSpaceToBatchNdLayer(const armnn::IConnectableL
 }
 
 // Build FlatBuffer for SpaceToDepthLayer
-void SerializerStrategy::SerializeSpaceToDepthLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitSpaceToDepthLayer(const armnn::IConnectableLayer* layer,
                                                const armnn::SpaceToDepthDescriptor& spaceToDepthDescriptor,
                                                const char* name)
 {
@@ -1239,7 +1143,7 @@ void SerializerStrategy::SerializeSpaceToDepthLayer(const armnn::IConnectableLay
 }
 
 // Build FlatBuffer for Splitter Layer
-void SerializerStrategy::SerializeSplitterLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitSplitterLayer(const armnn::IConnectableLayer* layer,
                                            const armnn::ViewsDescriptor& viewsDescriptor,
                                            const char* name)
 {
@@ -1305,7 +1209,7 @@ void SerializerStrategy::SerializeSplitterLayer(const armnn::IConnectableLayer* 
     CreateAnyLayer(flatBufferSplitterLayer.o, serializer::Layer::Layer_SplitterLayer);
 }
 
-void SerializerStrategy::SerializeNormalizationLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitNormalizationLayer(const armnn::IConnectableLayer* layer,
                                                 const armnn::NormalizationDescriptor& descriptor,
                                                 const char* name)
 {
@@ -1330,18 +1234,7 @@ void SerializerStrategy::SerializeNormalizationLayer(const armnn::IConnectableLa
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_NormalizationLayer);
 }
 
-void SerializerStrategy::SerializeShapeLayer(const armnn::IConnectableLayer* layer,
-                                             const char* name)
-{
-    IgnoreUnused(name);
-
-    auto shapeBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_Shape);
-    auto shapeLayer = serializer::CreateShapeLayer(m_flatBufferBuilder, shapeBaseLayer);
-
-    CreateAnyLayer(shapeLayer.o, serializer::Layer::Layer_ShapeLayer);
-}
-
-void SerializerStrategy::SerializeStackLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitStackLayer(const armnn::IConnectableLayer* layer,
                                         const armnn::StackDescriptor& stackDescriptor,
                                         const char* name)
 {
@@ -1364,7 +1257,7 @@ void SerializerStrategy::SerializeStackLayer(const armnn::IConnectableLayer* lay
     CreateAnyLayer(stackLayer.o, serializer::Layer::Layer_StackLayer);
 }
 
-void SerializerStrategy::SerializeStandInLayer(const armnn::IConnectableLayer *layer,
+void SerializerVisitor::VisitStandInLayer(const armnn::IConnectableLayer *layer,
                                           const armnn::StandInDescriptor& standInDescriptor,
                                           const char *name)
 {
@@ -1380,7 +1273,7 @@ void SerializerStrategy::SerializeStandInLayer(const armnn::IConnectableLayer *l
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_StandInLayer);
 }
 
-void SerializerStrategy::SerializeStridedSliceLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitStridedSliceLayer(const armnn::IConnectableLayer* layer,
                                                const armnn::StridedSliceDescriptor& stridedSliceDescriptor,
                                                const char* name)
 {
@@ -1407,7 +1300,7 @@ void SerializerStrategy::SerializeStridedSliceLayer(const armnn::IConnectableLay
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_StridedSliceLayer);
 }
 
-void SerializerStrategy::SerializeSubtractionLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitSubtractionLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -1417,7 +1310,7 @@ void SerializerStrategy::SerializeSubtractionLayer(const armnn::IConnectableLaye
     CreateAnyLayer(fbSubtractionLayer.o, serializer::Layer::Layer_SubtractionLayer);
 }
 
-void SerializerStrategy::SerializeSwitchLayer(const armnn::IConnectableLayer* layer, const char* name)
+void SerializerVisitor::VisitSwitchLayer(const armnn::IConnectableLayer* layer, const char* name)
 {
     IgnoreUnused(name);
 
@@ -1427,15 +1320,14 @@ void SerializerStrategy::SerializeSwitchLayer(const armnn::IConnectableLayer* la
     CreateAnyLayer(fbSwitchLayer.o, serializer::Layer::Layer_SwitchLayer);
 }
 
-void SerializerStrategy::SerializeTransposeConvolution2dLayer(
+void SerializerVisitor::VisitTransposeConvolution2dLayer(
     const armnn::IConnectableLayer* layer,
     const armnn::TransposeConvolution2dDescriptor& descriptor,
-    const std::vector<armnn::ConstTensor>& constants,
+    const armnn::ConstTensor& weights,
+    const armnn::Optional<armnn::ConstTensor>& biases,
     const char* name)
 {
     IgnoreUnused(name);
-
-    const armnn::ConstTensor& weights = constants.at(0);
 
     auto fbBaseLayer  = CreateLayerBase(layer, serializer::LayerType::LayerType_Convolution2d);
     auto fbDescriptor = CreateTransposeConvolution2dDescriptor(m_flatBufferBuilder,
@@ -1451,10 +1343,9 @@ void SerializerStrategy::SerializeTransposeConvolution2dLayer(
     // weights & biases
     auto fbWeightsConstTensorInfo = CreateConstTensorInfo(weights);
     flatbuffers::Offset<serializer::ConstTensor> fbBiasesConstTensorInfo;
-    if (constants.size() > 1)
+    if (biases.has_value())
     {
-        const armnn::ConstTensor& biases = constants.at(1);
-        fbBiasesConstTensorInfo = CreateConstTensorInfo(biases);
+        fbBiasesConstTensorInfo = CreateConstTensorInfo(biases.value());
     }
 
     auto fbLayer = CreateTransposeConvolution2dLayer(m_flatBufferBuilder,
@@ -1466,7 +1357,7 @@ void SerializerStrategy::SerializeTransposeConvolution2dLayer(
     CreateAnyLayer(fbLayer.o, serializer::Layer::Layer_TransposeConvolution2dLayer);
 }
 
-void SerializerStrategy::SerializeTransposeLayer(const armnn::IConnectableLayer* layer,
+void SerializerVisitor::VisitTransposeLayer(const armnn::IConnectableLayer* layer,
                                             const armnn::TransposeDescriptor& descriptor,
                                             const char* name)
 {
@@ -1493,10 +1384,10 @@ void SerializerStrategy::SerializeTransposeLayer(const armnn::IConnectableLayer*
     CreateAnyLayer(flatBufferLayer.o, serializer::Layer::Layer_TransposeLayer);
 }
 
-void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* layer,
-                                             const armnn::QLstmDescriptor& descriptor,
-                                             const std::vector<armnn::ConstTensor>& constants,
-                                             const char* name)
+void SerializerVisitor::VisitQLstmLayer(const armnn::IConnectableLayer* layer,
+                                        const armnn::QLstmDescriptor& descriptor,
+                                        const armnn::LstmInputParams& params,
+                                        const char* name)
 {
     IgnoreUnused(name);
 
@@ -1518,19 +1409,16 @@ void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* lay
             descriptor.m_HiddenStateScale
             );
 
-    // Index for constants vector
-    std::size_t i = 0;
-
     // Mandatory params
-    auto inputToForgetWeights     = CreateConstTensorInfo(constants[i++]); //InputToForgetWeights
-    auto inputToCellWeights       = CreateConstTensorInfo(constants[i++]); //InputToCellWeights
-    auto inputToOutputWeights     = CreateConstTensorInfo(constants[i++]); //InputToOutputWeights
-    auto recurrentToForgetWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToForgetWeights
-    auto recurrentToCellWeights   = CreateConstTensorInfo(constants[i++]); //RecurrentToCellWeights
-    auto recurrentToOutputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToOutputWeights
-    auto forgetGateBias           = CreateConstTensorInfo(constants[i++]); //ForgetGateBias
-    auto cellBias                 = CreateConstTensorInfo(constants[i++]); //CellBias
-    auto outputGateBias           = CreateConstTensorInfo(constants[i++]); //OutputGateBias
+    auto inputToForgetWeights = CreateConstTensorInfo(*params.m_InputToForgetWeights);
+    auto inputToCellWeights = CreateConstTensorInfo(*params.m_InputToCellWeights);
+    auto inputToOutputWeights = CreateConstTensorInfo(*params.m_InputToOutputWeights);
+    auto recurrentToForgetWeights = CreateConstTensorInfo(*params.m_RecurrentToForgetWeights);
+    auto recurrentToCellWeights = CreateConstTensorInfo(*params.m_RecurrentToCellWeights);
+    auto recurrentToOutputWeights = CreateConstTensorInfo(*params.m_RecurrentToOutputWeights);
+    auto forgetGateBias = CreateConstTensorInfo(*params.m_ForgetGateBias);
+    auto cellBias = CreateConstTensorInfo(*params.m_CellBias);
+    auto outputGateBias = CreateConstTensorInfo(*params.m_OutputGateBias);
 
     // CIFG
     flatbuffers::Offset<serializer::ConstTensor> inputToInputWeights;
@@ -1539,9 +1427,19 @@ void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* lay
 
     if (!descriptor.m_CifgEnabled)
     {
-        inputToInputWeights = CreateConstTensorInfo(constants[i++]); //InputToInputWeights
-        recurrentToInputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToInputWeights
-        inputGateBias = CreateConstTensorInfo(constants[i++]); //InputGateBias
+        inputToInputWeights = CreateConstTensorInfo(*params.m_InputToInputWeights);
+        recurrentToInputWeights = CreateConstTensorInfo(*params.m_RecurrentToInputWeights);
+        inputGateBias = CreateConstTensorInfo(*params.m_InputGateBias);
+    }
+
+    // Projectiom
+    flatbuffers::Offset<serializer::ConstTensor> projectionWeights;
+    flatbuffers::Offset<serializer::ConstTensor> projectionBias;
+
+    if (descriptor.m_ProjectionEnabled)
+    {
+        projectionWeights = CreateConstTensorInfo(*params.m_ProjectionWeights);
+        projectionBias = CreateConstTensorInfo(*params.m_ProjectionBias);
     }
 
     // Peephole
@@ -1553,20 +1451,11 @@ void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* lay
     {
         if (!descriptor.m_CifgEnabled)
         {
-            cellToInputWeights = CreateConstTensorInfo(constants[i++]); //CellToInputWeights
+            cellToInputWeights  = CreateConstTensorInfo(*params.m_CellToInputWeights);
         }
-        cellToForgetWeights = CreateConstTensorInfo(constants[i++]); //CellToForgetWeights
-        cellToOutputWeights = CreateConstTensorInfo(constants[i++]); //CellToOutputWeights
-    }
 
-    // Projection
-    flatbuffers::Offset<serializer::ConstTensor> projectionWeights;
-    flatbuffers::Offset<serializer::ConstTensor> projectionBias;
-
-    if (descriptor.m_ProjectionEnabled)
-    {
-        projectionWeights = CreateConstTensorInfo(constants[i++]); //ProjectionWeights
-        projectionBias = CreateConstTensorInfo(constants[i++]); //ProjectionBias
+        cellToForgetWeights = CreateConstTensorInfo(*params.m_CellToForgetWeights);
+        cellToOutputWeights = CreateConstTensorInfo(*params.m_CellToOutputWeights);
     }
 
     // Layer norm
@@ -1579,11 +1468,12 @@ void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* lay
     {
         if (!descriptor.m_CifgEnabled)
         {
-            inputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //InputLayerNormWeights
+            inputLayerNormWeights = CreateConstTensorInfo((*params.m_InputLayerNormWeights));
         }
-        forgetLayerNormWeights = CreateConstTensorInfo(constants[i++]); //ForgetLayerNormWeights
-        cellLayerNormWeights   = CreateConstTensorInfo(constants[i++]); //CellLayerNormWeights
-        outputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //OutputLayerNormWeights
+
+        forgetLayerNormWeights = CreateConstTensorInfo(*params.m_ForgetLayerNormWeights);
+        cellLayerNormWeights   = CreateConstTensorInfo(*params.m_CellLayerNormWeights);
+        outputLayerNormWeights = CreateConstTensorInfo(*params.m_OutputLayerNormWeights);
     }
 
     auto fbQLstmParams = serializer::CreateQLstmInputParams(
@@ -1619,32 +1509,29 @@ void SerializerStrategy::SerializeQLstmLayer(const armnn::IConnectableLayer* lay
     CreateAnyLayer(fbQLstmLayer.o, serializer::Layer::Layer_QLstmLayer);
 }
 
-void SerializerStrategy::SerializeQuantizedLstmLayer(const armnn::IConnectableLayer* layer,
-                                                     const std::vector<armnn::ConstTensor>& constants,
-                                                     const char* name)
+void SerializerVisitor::VisitQuantizedLstmLayer(const armnn::IConnectableLayer* layer,
+                                                const armnn::QuantizedLstmInputParams& params,
+                                                const char* name)
 {
     IgnoreUnused(name);
 
     auto fbQuantizedLstmBaseLayer = CreateLayerBase(layer, serializer::LayerType::LayerType_QuantizedLstm);
 
-    // index for constants vector
-    size_t i = 0;
-
     // Get input parameters
-    auto inputToInputWeights  = CreateConstTensorInfo(constants[i++]);
-    auto inputToForgetWeights = CreateConstTensorInfo(constants[i++]);
-    auto inputToCellWeights   = CreateConstTensorInfo(constants[i++]);
-    auto inputToOutputWeights = CreateConstTensorInfo(constants[i++]);
+    auto inputToInputWeights = CreateConstTensorInfo(params.GetInputToInputWeights());
+    auto inputToForgetWeights = CreateConstTensorInfo(params.GetInputToForgetWeights());
+    auto inputToCellWeights = CreateConstTensorInfo(params.GetInputToCellWeights());
+    auto inputToOutputWeights = CreateConstTensorInfo(params.GetInputToOutputWeights());
 
-    auto recurrentToInputWeights  = CreateConstTensorInfo(constants[i++]);
-    auto recurrentToForgetWeights = CreateConstTensorInfo(constants[i++]);
-    auto recurrentToCellWeights   = CreateConstTensorInfo(constants[i++]);
-    auto recurrentToOutputWeights = CreateConstTensorInfo(constants[i++]);
+    auto recurrentToInputWeights = CreateConstTensorInfo(params.GetRecurrentToInputWeights());
+    auto recurrentToForgetWeights = CreateConstTensorInfo(params.GetRecurrentToForgetWeights());
+    auto recurrentToCellWeights = CreateConstTensorInfo(params.GetRecurrentToCellWeights());
+    auto recurrentToOutputWeights = CreateConstTensorInfo(params.GetRecurrentToOutputWeights());
 
-    auto inputGateBias  = CreateConstTensorInfo(constants[i++]);
-    auto forgetGateBias = CreateConstTensorInfo(constants[i++]);
-    auto cellBias       = CreateConstTensorInfo(constants[i++]);
-    auto outputGateBias = CreateConstTensorInfo(constants[i++]);
+    auto inputGateBias = CreateConstTensorInfo(params.GetInputGateBias());
+    auto forgetGateBias = CreateConstTensorInfo(params.GetForgetGateBias());
+    auto cellBias = CreateConstTensorInfo(params.GetCellBias());
+    auto outputGateBias = CreateConstTensorInfo(params.GetOutputGateBias());
 
     auto fbQuantizedLstmParams = serializer::CreateQuantizedLstmInputParams(
         m_flatBufferBuilder,
@@ -1669,124 +1556,7 @@ void SerializerStrategy::SerializeQuantizedLstmLayer(const armnn::IConnectableLa
     CreateAnyLayer(fbQuantizedLstmLayer.o, serializer::Layer::Layer_QuantizedLstmLayer);
 }
 
-void SerializerStrategy::SerializeUnidirectionalSequenceLstmLayer(
-    const armnn::IConnectableLayer* layer,
-    const armnn::UnidirectionalSequenceLstmDescriptor& descriptor,
-    const std::vector<armnn::ConstTensor>& constants,
-    const char* name)
-{
-    IgnoreUnused(name);
-
-    auto fbUnidirectionalSequenceLstmBaseLayer =
-        CreateLayerBase(layer, serializer::LayerType::LayerType_UnidirectionalSequenceLstm);
-
-    auto fbUnidirectionalSequenceLstmDescriptor = serializer::CreateUnidirectionalSequenceLstmDescriptor(
-        m_flatBufferBuilder,
-        descriptor.m_ActivationFunc,
-        descriptor.m_ClippingThresCell,
-        descriptor.m_ClippingThresProj,
-        descriptor.m_CifgEnabled,
-        descriptor.m_PeepholeEnabled,
-        descriptor.m_ProjectionEnabled,
-        descriptor.m_LayerNormEnabled,
-        descriptor.m_TimeMajor);
-
-    // Index for constants vector
-    std::size_t i = 0;
-
-    // Get mandatory/basic input parameters
-    auto inputToForgetWeights     = CreateConstTensorInfo(constants[i++]); //InputToForgetWeights
-    auto inputToCellWeights       = CreateConstTensorInfo(constants[i++]); //InputToCellWeights
-    auto inputToOutputWeights     = CreateConstTensorInfo(constants[i++]); //InputToOutputWeights
-    auto recurrentToForgetWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToForgetWeights
-    auto recurrentToCellWeights   = CreateConstTensorInfo(constants[i++]); //RecurrentToCellWeights
-    auto recurrentToOutputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToOutputWeights
-    auto forgetGateBias           = CreateConstTensorInfo(constants[i++]); //ForgetGateBias
-    auto cellBias                 = CreateConstTensorInfo(constants[i++]); //CellBias
-    auto outputGateBias           = CreateConstTensorInfo(constants[i++]); //OutputGateBias
-
-    //Define optional parameters, these will be set depending on configuration in Lstm descriptor
-    flatbuffers::Offset<serializer::ConstTensor> inputToInputWeights;
-    flatbuffers::Offset<serializer::ConstTensor> recurrentToInputWeights;
-    flatbuffers::Offset<serializer::ConstTensor> cellToInputWeights;
-    flatbuffers::Offset<serializer::ConstTensor> inputGateBias;
-    flatbuffers::Offset<serializer::ConstTensor> projectionWeights;
-    flatbuffers::Offset<serializer::ConstTensor> projectionBias;
-    flatbuffers::Offset<serializer::ConstTensor> cellToForgetWeights;
-    flatbuffers::Offset<serializer::ConstTensor> cellToOutputWeights;
-    flatbuffers::Offset<serializer::ConstTensor> inputLayerNormWeights;
-    flatbuffers::Offset<serializer::ConstTensor> forgetLayerNormWeights;
-    flatbuffers::Offset<serializer::ConstTensor> cellLayerNormWeights;
-    flatbuffers::Offset<serializer::ConstTensor> outputLayerNormWeights;
-
-    if (!descriptor.m_CifgEnabled)
-    {
-        inputToInputWeights = CreateConstTensorInfo(constants[i++]); //InputToInputWeights
-        recurrentToInputWeights = CreateConstTensorInfo(constants[i++]); //RecurrentToInputWeights
-        inputGateBias = CreateConstTensorInfo(constants[i++]); //InputGateBias
-    }
-
-    if (descriptor.m_PeepholeEnabled)
-    {
-        if (!descriptor.m_CifgEnabled)
-        {
-            cellToInputWeights = CreateConstTensorInfo(constants[i++]); //CellToInputWeights
-        }
-        cellToForgetWeights = CreateConstTensorInfo(constants[i++]); //CellToForgetWeights
-        cellToOutputWeights = CreateConstTensorInfo(constants[i++]); //CellToOutputWeights
-    }
-
-    if (descriptor.m_ProjectionEnabled)
-    {
-        projectionWeights = CreateConstTensorInfo(constants[i++]); //ProjectionWeights
-        projectionBias = CreateConstTensorInfo(constants[i++]); //ProjectionBias
-    }
-
-    if (descriptor.m_LayerNormEnabled)
-    {
-        if (!descriptor.m_CifgEnabled)
-        {
-            inputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //InputLayerNormWeights
-        }
-        forgetLayerNormWeights = CreateConstTensorInfo(constants[i++]); //ForgetLayerNormWeights
-        cellLayerNormWeights   = CreateConstTensorInfo(constants[i++]); //CellLayerNormWeights
-        outputLayerNormWeights = CreateConstTensorInfo(constants[i++]); //OutputLayerNormWeights
-    }
-
-    auto fbUnidirectionalSequenceLstmParams = serializer::CreateLstmInputParams(
-        m_flatBufferBuilder,
-        inputToForgetWeights,
-        inputToCellWeights,
-        inputToOutputWeights,
-        recurrentToForgetWeights,
-        recurrentToCellWeights,
-        recurrentToOutputWeights,
-        forgetGateBias,
-        cellBias,
-        outputGateBias,
-        inputToInputWeights,
-        recurrentToInputWeights,
-        cellToInputWeights,
-        inputGateBias,
-        projectionWeights,
-        projectionBias,
-        cellToForgetWeights,
-        cellToOutputWeights,
-        inputLayerNormWeights,
-        forgetLayerNormWeights,
-        cellLayerNormWeights,
-        outputLayerNormWeights);
-
-    auto fbUnidirectionalSequenceLstmLayer = serializer::CreateUnidirectionalSequenceLstmLayer(
-        m_flatBufferBuilder,
-        fbUnidirectionalSequenceLstmBaseLayer,
-        fbUnidirectionalSequenceLstmDescriptor,
-        fbUnidirectionalSequenceLstmParams);
-
-    CreateAnyLayer(fbUnidirectionalSequenceLstmLayer.o, serializer::Layer::Layer_UnidirectionalSequenceLstmLayer);
-}
-
-fb::Offset<serializer::LayerBase> SerializerStrategy::CreateLayerBase(const IConnectableLayer* layer,
+fb::Offset<serializer::LayerBase> SerializerVisitor::CreateLayerBase(const IConnectableLayer* layer,
                                                                      const serializer::LayerType layerType)
 {
 
@@ -1803,7 +1573,7 @@ fb::Offset<serializer::LayerBase> SerializerStrategy::CreateLayerBase(const ICon
                                        m_flatBufferBuilder.CreateVector(outputSlots));
 }
 
-void SerializerStrategy::CreateAnyLayer(const flatbuffers::Offset<void>& layer, const serializer::Layer serializerLayer)
+void SerializerVisitor::CreateAnyLayer(const flatbuffers::Offset<void>& layer, const serializer::Layer serializerLayer)
 {
 
     auto anyLayer = armnnSerializer::CreateAnyLayer(m_flatBufferBuilder, serializerLayer, layer);
@@ -1811,7 +1581,7 @@ void SerializerStrategy::CreateAnyLayer(const flatbuffers::Offset<void>& layer, 
 }
 
 template <typename T>
-flatbuffers::Offset<flatbuffers::Vector<T>> SerializerStrategy::CreateDataVector(const void* memory, unsigned int size)
+flatbuffers::Offset<flatbuffers::Vector<T>> SerializerVisitor::CreateDataVector(const void* memory, unsigned int size)
 {
     const T* buffer = reinterpret_cast<const T*>(memory);
     std::vector<T> vector(buffer, buffer + (size / sizeof(T)));
@@ -1819,25 +1589,13 @@ flatbuffers::Offset<flatbuffers::Vector<T>> SerializerStrategy::CreateDataVector
     return fbVector;
 }
 
-flatbuffers::Offset<TensorInfo>  SerializerStrategy::CreateTensorInfo(const armnn::TensorInfo& tensorInfo)
+flatbuffers::Offset<TensorInfo>  SerializerVisitor::CreateTensorInfo(const armnn::TensorInfo& tensorInfo)
 {
     // Get the dimensions
     std::vector<unsigned int> shape;
-    std::vector<bool> specificity;
-    // This assumes that the TensorShape constructors have ensured that the size of m_DimensionsSpecificity
-    // matches the size of dimensions.
     for(unsigned int dim = 0; dim < tensorInfo.GetShape().GetNumDimensions(); ++dim)
     {
-        specificity.push_back(tensorInfo.GetShape().GetDimensionSpecificity(dim));
-
-        if (tensorInfo.GetShape().GetDimensionSpecificity(dim))
-        {
-            shape.push_back(tensorInfo.GetShape()[dim]);
-        }
-        else
-        {
-            shape.push_back(0);
-        }
+        shape.push_back(tensorInfo.GetShape()[dim]);
     }
 
     if (tensorInfo.HasPerAxisQuantization())
@@ -1852,8 +1610,7 @@ flatbuffers::Offset<TensorInfo>  SerializerStrategy::CreateTensorInfo(const armn
                                          m_flatBufferBuilder.CreateVector(tensorInfo.GetQuantizationScales()),
                                          tensorInfo.GetQuantizationDim().value(),
                                          static_cast<unsigned int>
-                                         (tensorInfo.GetShape().GetDimensionality()),
-                                         m_flatBufferBuilder.CreateVector(specificity));
+                                         (tensorInfo.GetShape().GetDimensionality()));
         return flatBufferTensorInfo;
     }
 
@@ -1866,13 +1623,12 @@ flatbuffers::Offset<TensorInfo>  SerializerStrategy::CreateTensorInfo(const armn
                                                              0,
                                                              0,
                                                              static_cast<unsigned int>
-                                                             (tensorInfo.GetShape().GetDimensionality()),
-                                                             m_flatBufferBuilder.CreateVector(specificity));
+                                                             (tensorInfo.GetShape().GetDimensionality()));
     return flatBufferTensorInfo;
 }
 
 flatbuffers::Offset<serializer::ConstTensor>
-    SerializerStrategy::CreateConstTensorInfo(const armnn::ConstTensor& constTensor)
+    SerializerVisitor::CreateConstTensorInfo(const armnn::ConstTensor& constTensor)
 {
     armnn::TensorInfo tensorInfo = constTensor.GetInfo();
 
@@ -1880,15 +1636,6 @@ flatbuffers::Offset<serializer::ConstTensor>
 
     switch (tensorInfo.GetDataType())
     {
-        case armnn::DataType::Signed64:
-        {
-            auto fbVector = CreateDataVector<int64_t>(constTensor.GetMemoryArea(), constTensor.GetNumBytes());
-            flatbuffers::Offset<serializer::LongData> flatBuffersData = serializer::CreateLongData(
-                    m_flatBufferBuilder,
-                    fbVector);
-            fbPayload = flatBuffersData.o;
-            break;
-        }
         case armnn::DataType::Float32:
         case armnn::DataType::Signed32:
         {
@@ -1931,20 +1678,18 @@ flatbuffers::Offset<serializer::ConstTensor>
     return flatBufferConstTensor;
 }
 
-flatbuffers::Offset<armnnSerializer::FeatureCompatibilityVersions> SerializerStrategy::GetVersionTable()
+flatbuffers::Offset<armnnSerializer::FeatureCompatibilityVersions> SerializerVisitor::GetVersionTable()
 {
     flatbuffers::Offset<armnnSerializer::FeatureCompatibilityVersions> versionsTable =
         serializer::CreateFeatureCompatibilityVersions(
                 m_flatBufferBuilder,
-                1, // Binding ids scheme version
-                1, // Weights layout scheme version
-                1  // Constant tensors as inputs version
+                1 // Binding ids scheme version
             );
     return versionsTable;
 }
 
 std::vector<fb::Offset<serializer::InputSlot>>
-    SerializerStrategy::CreateInputSlots(const armnn::IConnectableLayer* layer)
+    SerializerVisitor::CreateInputSlots(const armnn::IConnectableLayer* layer)
 {
     std::vector<fb::Offset<serializer::InputSlot>> inputSlots;
 
@@ -1966,7 +1711,7 @@ std::vector<fb::Offset<serializer::InputSlot>>
 }
 
 std::vector<fb::Offset<serializer::OutputSlot>>
-    SerializerStrategy::CreateOutputSlots(const armnn::IConnectableLayer* layer)
+    SerializerVisitor::CreateOutputSlots(const armnn::IConnectableLayer* layer)
 {
     std::vector<fb::Offset<serializer::OutputSlot>> outputSlots;
 
@@ -1984,478 +1729,43 @@ std::vector<fb::Offset<serializer::OutputSlot>>
     return outputSlots;
 }
 
-void SerializerStrategy::ExecuteStrategy(const armnn::IConnectableLayer* layer,
-                                         const BaseDescriptor& descriptor,
-                                         const std::vector<armnn::ConstTensor>& constants,
-                                         const char* name,
-                                         const armnn::LayerBindingId id)
-{
-    IgnoreUnused(constants);
 
-    switch (layer->GetType())
-    {
-        case armnn::LayerType::Activation :
-        {
-            const armnn::ActivationDescriptor& layerDescriptor =
-                    static_cast<const armnn::ActivationDescriptor&>(descriptor);
-            SerializeActivationLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Addition :
-        {
-            SerializeAdditionLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::ArgMinMax :
-        {
-            const armnn::ArgMinMaxDescriptor& layerDescriptor =
-                    static_cast<const armnn::ArgMinMaxDescriptor&>(descriptor);
-            SerializeArgMinMaxLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::BatchMatMul:
-        {
-            const armnn::BatchMatMulDescriptor& layerDescriptor =
-                    static_cast<const armnn::BatchMatMulDescriptor&>(descriptor);
-            SerializeBatchMatMulLayer(layer,
-                                      layerDescriptor,
-                                      name);
-            break;
-        }
-        case armnn::LayerType::BatchNormalization :
-        {
-            const armnn::BatchNormalizationDescriptor& layerDescriptor =
-                    static_cast<const armnn::BatchNormalizationDescriptor&>(descriptor);
-            SerializeBatchNormalizationLayer(layer,
-                                             layerDescriptor,
-                                             constants,
-                                             name);
-            break;
-        }
-        case armnn::LayerType::BatchToSpaceNd :
-        {
-            const armnn::BatchToSpaceNdDescriptor& layerDescriptor =
-                    static_cast<const armnn::BatchToSpaceNdDescriptor&>(descriptor);
-            SerializeBatchToSpaceNdLayer(layer,
-                                         layerDescriptor,
-                                         name);
-            break;
-        }
-        case armnn::LayerType::Cast :
-        {
-            SerializeCastLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::ChannelShuffle :
-        {
-            const armnn::ChannelShuffleDescriptor& layerDescriptor =
-                                                     static_cast<const armnn::ChannelShuffleDescriptor&>(descriptor);
-            SerializeChannelShuffleLayer(layer,
-                                         layerDescriptor,
-                                         name);
-            break;
-        }
-        case armnn::LayerType::Comparison :
-        {
-            const armnn::ComparisonDescriptor& layerDescriptor =
-                    static_cast<const armnn::ComparisonDescriptor&>(descriptor);
-            SerializeComparisonLayer(layer,
-                                     layerDescriptor,
-                                     name);
-            break;
-        }
-        case armnn::LayerType::Concat :
-        {
-            const armnn::ConcatDescriptor& layerDescriptor =
-                    static_cast<const armnn::ConcatDescriptor&>(descriptor);
-            SerializeConcatLayer(layer,
-                                 layerDescriptor,
-                                 name);
-            break;
-        }
-        case armnn::LayerType::Constant :
-        {
-            SerializeConstantLayer(layer,
-                                   constants,
-                                   name);
-            break;
-        }
-        case armnn::LayerType::Convolution2d :
-        {
-            const armnn::Convolution2dDescriptor& layerDescriptor =
-                    static_cast<const armnn::Convolution2dDescriptor&>(descriptor);
-            SerializeConvolution2dLayer(layer,
-                                        layerDescriptor,
-                                        name);
-            break;
-        }
-        case armnn::LayerType::Convolution3d :
-        {
-            const armnn::Convolution3dDescriptor& layerDescriptor =
-                    static_cast<const armnn::Convolution3dDescriptor&>(descriptor);
-            SerializeConvolution3dLayer(layer,
-                                        layerDescriptor,
-                                        name);
-            break;
-        }
-        case armnn::LayerType::DepthToSpace :
-        {
-            const armnn::DepthToSpaceDescriptor& layerDescriptor =
-                    static_cast<const armnn::DepthToSpaceDescriptor&>(descriptor);
-            SerializeDepthToSpaceLayer(layer,
-                                       layerDescriptor,
-                                       name);
-            break;
-        }
-        case armnn::LayerType::DepthwiseConvolution2d :
-        {
-            const armnn::DepthwiseConvolution2dDescriptor& layerDescriptor =
-                    static_cast<const armnn::DepthwiseConvolution2dDescriptor&>(descriptor);
-            SerializeDepthwiseConvolution2dLayer(layer,
-                                                 layerDescriptor,
-                                                 name);
-            break;
-        }
-        case armnn::LayerType::Dequantize :
-        {
-            SerializeDequantizeLayer(layer,
-                                     name);
-            break;
-        }
-        case armnn::LayerType::DetectionPostProcess :
-        {
-            const armnn::DetectionPostProcessDescriptor& layerDescriptor =
-                    static_cast<const armnn::DetectionPostProcessDescriptor&>(descriptor);
-            SerializeDetectionPostProcessLayer(layer, layerDescriptor, constants, name);
-            break;
-        }
-        case armnn::LayerType::Division :
-        {
-            SerializeDivisionLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::ElementwiseBinary :
-        {
-            const armnn::ElementwiseBinaryDescriptor& layerDescriptor =
-                    static_cast<const armnn::ElementwiseBinaryDescriptor&>(descriptor);
-            SerializeElementwiseBinaryLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::ElementwiseUnary :
-        {
-            const armnn::ElementwiseUnaryDescriptor& layerDescriptor =
-                    static_cast<const armnn::ElementwiseUnaryDescriptor&>(descriptor);
-            SerializeElementwiseUnaryLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Fill :
-        {
-            const armnn::FillDescriptor& layerDescriptor =
-                    static_cast<const armnn::FillDescriptor&>(descriptor);
-            SerializeFillLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Floor :
-        {
-            SerializeFloorLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::FullyConnected :
-        {
-            const armnn::FullyConnectedDescriptor& layerDescriptor =
-                    static_cast<const armnn::FullyConnectedDescriptor&>(descriptor);
-            SerializeFullyConnectedLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Gather :
-        {
-            const armnn::GatherDescriptor& layerDescriptor =
-                    static_cast<const armnn::GatherDescriptor&>(descriptor);
-            SerializeGatherLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::GatherNd :
-        {
-            SerializeGatherNdLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Input:
-        {
-            SerializeInputLayer(layer, id, name);
-            break;
-        }
-        case armnn::LayerType::InstanceNormalization :
-        {
-            const armnn::InstanceNormalizationDescriptor& layerDescriptor =
-                    static_cast<const armnn::InstanceNormalizationDescriptor&>(descriptor);
-            SerializeInstanceNormalizationLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::L2Normalization :
-        {
-            const armnn::L2NormalizationDescriptor& layerDescriptor =
-                    static_cast<const armnn::L2NormalizationDescriptor&>(descriptor);
-            SerializeL2NormalizationLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::LogicalBinary :
-        {
-            const armnn::LogicalBinaryDescriptor& layerDescriptor =
-                    static_cast<const armnn::LogicalBinaryDescriptor&>(descriptor);
-            SerializeLogicalBinaryLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::LogSoftmax :
-        {
-            const armnn::LogSoftmaxDescriptor& layerDescriptor =
-                    static_cast<const armnn::LogSoftmaxDescriptor&>(descriptor);
-            SerializeLogSoftmaxLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Lstm :
-        {
-            const armnn::LstmDescriptor& layerDescriptor =
-                    static_cast<const armnn::LstmDescriptor&>(descriptor);
-            SerializeLstmLayer(layer, layerDescriptor, constants, name);
-            break;
-        }
-        case armnn::LayerType::QLstm :
-        {
-            const armnn::QLstmDescriptor& layerDescriptor =
-                    static_cast<const armnn::QLstmDescriptor&>(descriptor);
-            SerializeQLstmLayer(layer, layerDescriptor, constants, name);
-            break;
-        }
-        case armnn::LayerType::Maximum :
-        {
-            SerializeMaximumLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Mean :
-        {
-            const armnn::MeanDescriptor& layerDescriptor =
-                    static_cast<const armnn::MeanDescriptor&>(descriptor);
-            SerializeMeanLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Merge :
-        {
-            SerializeMergeLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Minimum :
-        {
-            SerializeMinimumLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Multiplication :
-        {
-            SerializeMultiplicationLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Normalization :
-        {
-            const armnn::NormalizationDescriptor& layerDescriptor =
-                    static_cast<const armnn::NormalizationDescriptor&>(descriptor);
-            SerializeNormalizationLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Output:
-        {
-            SerializeOutputLayer(layer, id, name);
-            break;
-        }
-        case armnn::LayerType::Pad :
-        {
-            const armnn::PadDescriptor& layerDescriptor =
-                    static_cast<const armnn::PadDescriptor&>(descriptor);
-            SerializePadLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Permute :
-        {
-            const armnn::PermuteDescriptor& layerDescriptor =
-                    static_cast<const armnn::PermuteDescriptor&>(descriptor);
-            SerializePermuteLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Pooling2d :
-        {
-            const armnn::Pooling2dDescriptor& layerDescriptor =
-                    static_cast<const armnn::Pooling2dDescriptor&>(descriptor);
-            SerializePooling2dLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Pooling3d :
-        {
-            const armnn::Pooling3dDescriptor& layerDescriptor =
-                    static_cast<const armnn::Pooling3dDescriptor&>(descriptor);
-            SerializePooling3dLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Prelu :
-        {
-            SerializePreluLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Quantize :
-        {
-            SerializeQuantizeLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::QuantizedLstm:
-            SerializeQuantizedLstmLayer(layer, constants, name);
-            break;
-        case armnn::LayerType::Reshape:
-        {
-            const armnn::ReshapeDescriptor &layerDescriptor =
-                    static_cast<const armnn::ReshapeDescriptor &>(descriptor);
-            SerializeReshapeLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Rank:
-        {
-            SerializeRankLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Reduce:
-        {
-            const armnn::ReduceDescriptor& layerDescriptor =
-                    static_cast<const armnn::ReduceDescriptor&>(descriptor);
-            SerializeReduceLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Resize:
-        {
-            const armnn::ResizeDescriptor& layerDescriptor =
-                    static_cast<const armnn::ResizeDescriptor&>(descriptor);
-            SerializeResizeLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Shape:
-        {
-            SerializeShapeLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Slice:
-        {
-            const armnn::SliceDescriptor& layerDescriptor =
-                    static_cast<const armnn::SliceDescriptor&>(descriptor);
-            SerializeSliceLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Softmax:
-        {
-            const armnn::SoftmaxDescriptor& layerDescriptor =
-                    static_cast<const armnn::SoftmaxDescriptor&>(descriptor);
-            SerializeSoftmaxLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::SpaceToBatchNd:
-        {
-            const armnn::SpaceToBatchNdDescriptor& layerDescriptor =
-                    static_cast<const armnn::SpaceToBatchNdDescriptor&>(descriptor);
-            SerializeSpaceToBatchNdLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::SpaceToDepth:
-        {
-            const armnn::SpaceToDepthDescriptor& layerDescriptor =
-                    static_cast<const armnn::SpaceToDepthDescriptor&>(descriptor);
-            SerializeSpaceToDepthLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Splitter:
-        {
-            const armnn::SplitterDescriptor& layerDescriptor =
-                    static_cast<const armnn::SplitterDescriptor&>(descriptor);
-            SerializeSplitterLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Stack:
-        {
-            const armnn::StackDescriptor& layerDescriptor =
-                    static_cast<const armnn::StackDescriptor&>(descriptor);
-            SerializeStackLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::StandIn:
-        {
-            const armnn::StandInDescriptor& layerDescriptor =
-                    static_cast<const armnn::StandInDescriptor&>(descriptor);
-            SerializeStandInLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::StridedSlice:
-        {
-            const armnn::StridedSliceDescriptor& layerDescriptor =
-                    static_cast<const armnn::StridedSliceDescriptor&>(descriptor);
-            SerializeStridedSliceLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::Subtraction:
-        {
-            SerializeSubtractionLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Switch:
-        {
-            SerializeSwitchLayer(layer, name);
-            break;
-        }
-        case armnn::LayerType::Transpose:
-        {
-            const armnn::TransposeDescriptor& layerDescriptor =
-                    static_cast<const armnn::TransposeDescriptor&>(descriptor);
-            SerializeTransposeLayer(layer, layerDescriptor, name);
-            break;
-        }
-        case armnn::LayerType::TransposeConvolution2d:
-        {
-            const armnn::TransposeConvolution2dDescriptor& layerDescriptor =
-                    static_cast<const armnn::TransposeConvolution2dDescriptor&>(descriptor);
-            SerializeTransposeConvolution2dLayer(layer, layerDescriptor, constants, name);
-            break;
-        }
-        case armnn::LayerType::UnidirectionalSequenceLstm :
-        {
-            const armnn::UnidirectionalSequenceLstmDescriptor& layerDescriptor =
-                    static_cast<const armnn::UnidirectionalSequenceLstmDescriptor&>(descriptor);
-            SerializeUnidirectionalSequenceLstmLayer(layer, layerDescriptor, constants, name);
-            break;
-        }
-        default:
-        {
-            throw InvalidArgumentException(
-                    fmt::format("A layer of unknown type was given to the serializer. Layer name: {}; Layer Id: {}",
-                                layer->GetName(),
-                                id));
-        }
-    }
+ISerializer* ISerializer::CreateRaw()
+{
+    return new Serializer();
 }
 
-void ISerializer::SerializerImpl::Serialize(const INetwork& inNetwork)
+ISerializerPtr ISerializer::Create()
+{
+    return ISerializerPtr(CreateRaw(), &ISerializer::Destroy);
+}
+
+void ISerializer::Destroy(ISerializer* serializer)
+{
+    delete serializer;
+}
+
+void Serializer::Serialize(const INetwork& inNetwork)
 {
     // Iterate through to network
-    inNetwork.ExecuteStrategy(m_SerializerStrategy);
-    flatbuffers::FlatBufferBuilder& fbBuilder = m_SerializerStrategy.GetFlatBufferBuilder();
+    inNetwork.Accept(m_SerializerVisitor);
+    flatbuffers::FlatBufferBuilder& fbBuilder = m_SerializerVisitor.GetFlatBufferBuilder();
 
     // Create FlatBuffer SerializedGraph
     auto serializedGraph = serializer::CreateSerializedGraph(
-            fbBuilder,
-            fbBuilder.CreateVector(m_SerializerStrategy.GetSerializedLayers()),
-            fbBuilder.CreateVector(m_SerializerStrategy.GetInputIds()),
-            fbBuilder.CreateVector(m_SerializerStrategy.GetOutputIds()),
-            m_SerializerStrategy.GetVersionTable());
+        fbBuilder,
+        fbBuilder.CreateVector(m_SerializerVisitor.GetSerializedLayers()),
+        fbBuilder.CreateVector(m_SerializerVisitor.GetInputIds()),
+        fbBuilder.CreateVector(m_SerializerVisitor.GetOutputIds()),
+        m_SerializerVisitor.GetVersionTable());
 
     // Serialize the graph
     fbBuilder.Finish(serializedGraph);
 }
 
-
-bool ISerializer::SerializerImpl::SaveSerializedToStream(std::ostream& stream)
+bool Serializer::SaveSerializedToStream(std::ostream& stream)
 {
-    flatbuffers::FlatBufferBuilder& fbBuilder = m_SerializerStrategy.GetFlatBufferBuilder();
+    flatbuffers::FlatBufferBuilder& fbBuilder = m_SerializerVisitor.GetFlatBufferBuilder();
 
     auto bytesToWrite = armnn::numeric_cast<std::streamsize>(fbBuilder.GetSize());
     stream.write(reinterpret_cast<const char*>(fbBuilder.GetBufferPointer()), bytesToWrite);

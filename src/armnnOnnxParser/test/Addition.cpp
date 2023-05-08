@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "armnnOnnxParser/IOnnxParser.hpp"
 #include  "ParserPrototxtFixture.hpp"
 
-TEST_SUITE("OnnxParser_Addition")
-{
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
 struct AddMainFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
 {
     AddMainFixture(const std::string& dataType)
@@ -382,37 +383,37 @@ struct AddInvalidScalarFixture : AddScalarFixture
     AddInvalidScalarFixture() : AddScalarFixture("6") { }
 };
 
-TEST_CASE_FIXTURE(AddValidFixture, "ValidAddTest")
+BOOST_FIXTURE_TEST_CASE(ValidAddTest, AddValidFixture)
 {
     RunTest<4>({{"Input0", {1.0f, 2.0f, -3.0f, -4.0f}},
                 {"Input1", {1.0f, 2.0f, 3.0, 4.0f}}}, {{"Output", {2.0, 4.0, 0, 0.0}}});
 }
 
-TEST_CASE_FIXTURE(AddInvalidFixture, "IncorrectDataTypeAdd")
+BOOST_FIXTURE_TEST_CASE(IncorrectDataTypeAdd, AddInvalidFixture)
 {
-   CHECK_THROWS_AS(Setup(), armnn::ParseException);
+   BOOST_CHECK_THROW(Setup(), armnn::ParseException);
 }
 
-TEST_CASE_FIXTURE(AddInvalidBroadcastFixture, "InvalidBroadcastAdd")
+BOOST_FIXTURE_TEST_CASE(InvalidBroadcastAdd, AddInvalidBroadcastFixture)
 {
-   CHECK_THROWS_AS(Setup(), armnn::ParseException);
+   BOOST_CHECK_THROW(Setup(), armnn::ParseException);
 }
 
-TEST_CASE_FIXTURE(AddValidBroadcastFixture, "ValidBroadcastAdd")
+BOOST_FIXTURE_TEST_CASE(ValidBroadcastAdd, AddValidBroadcastFixture)
 {
     RunTest<4>({{"Input0", {1.0f, 2.0f, -3.0f, -4.0f}},
                 {"Input1", {1.0f, 2.0f, 3.0, 4.0f}}}, {{"Output", {2.0, 4.0, 0, 0.0}}});
 }
 
-TEST_CASE_FIXTURE(AddValidScalarFixture, "ValidAddScalarTest")
+BOOST_FIXTURE_TEST_CASE(ValidAddScalarTest, AddValidScalarFixture)
 {
     RunTest<4>({{"Input0", {1.0f, 2.0f, -3.0f, -4.0f}},
                 {"Input1", {-8.0f}}}, {{"Output", {-7.0, -6.0, -11.0, -12.0}}});
 }
 
-TEST_CASE_FIXTURE(AddInvalidScalarFixture, "IncorrectDataTypeAddScalar")
+BOOST_FIXTURE_TEST_CASE(IncorrectDataTypeAddScalar, AddInvalidScalarFixture)
 {
-    CHECK_THROWS_AS(Setup(), armnn::ParseException);
+    BOOST_CHECK_THROW(Setup(), armnn::ParseException);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

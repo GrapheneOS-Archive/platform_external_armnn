@@ -3,25 +3,21 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include "PrintPacketHeaderHandler.hpp"
-#include "ProfilingOptionsConverter.hpp"
+#include <Filesystem.hpp>
+#include <LabelsAndEventClasses.hpp>
+#include <ProfilingService.hpp>
 #include "ProfilingTestUtils.hpp"
+#include "PrintPacketHeaderHandler.hpp"
 #include <Runtime.hpp>
 #include "TestTimelinePacketHandler.hpp"
 
-#include <armnnUtils/Filesystem.hpp>
-
-#include <client/src/ProfilingService.hpp>
-
-#include <doctest/doctest.h>
-
-#include <common/include/LabelsAndEventClasses.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <cstdio>
 #include <sstream>
 #include <sys/stat.h>
 
-using namespace arm::pipe;
+using namespace armnn::profiling;
 using namespace armnn;
 
 using namespace std::chrono_literals;
@@ -34,12 +30,12 @@ class FileOnlyHelperService : public ProfilingService
     {
         return ProfilingService::WaitForPacketSent(m_ProfilingService, timeout);
     }
-    ProfilingService m_ProfilingService;
+    armnn::profiling::ProfilingService m_ProfilingService;
 };
 
-TEST_SUITE("FileOnlyProfilingDecoratorTests")
-{
-TEST_CASE("TestFileOnlyProfiling")
+BOOST_AUTO_TEST_SUITE(FileOnlyProfilingDecoratorTests)
+
+BOOST_AUTO_TEST_CASE(TestFileOnlyProfiling)
 {
     // Get all registered backends
     std::vector<BackendId> suitableBackends = GetSuitableBackendRegistered();
@@ -49,7 +45,7 @@ TEST_CASE("TestFileOnlyProfiling")
     {
         // Enable m_FileOnly but also provide ILocalPacketHandler which should consume the packets.
         // This won't dump anything to file.
-        armnn::IRuntime::CreationOptions creationOptions;
+        armnn::Runtime::CreationOptions creationOptions;
         creationOptions.m_ProfilingOptions.m_EnableProfiling     = true;
         creationOptions.m_ProfilingOptions.m_FileOnly            = true;
         creationOptions.m_ProfilingOptions.m_CapturePeriod       = 100;
@@ -57,7 +53,7 @@ TEST_CASE("TestFileOnlyProfiling")
         ILocalPacketHandlerSharedPtr localPacketHandlerPtr = std::make_shared<TestTimelinePacketHandler>();
         creationOptions.m_ProfilingOptions.m_LocalPacketHandlers.push_back(localPacketHandlerPtr);
 
-        armnn::RuntimeImpl runtime(creationOptions);
+        armnn::Runtime runtime(creationOptions);
         // ensure the GUID generator is reset to zero
         GetProfilingService(&runtime).ResetGuidGenerator();
 
@@ -83,7 +79,7 @@ TEST_CASE("TestFileOnlyProfiling")
 
         // Load it into the runtime. It should succeed.
         armnn::NetworkId netId;
-        CHECK(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
+        BOOST_TEST(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
 
         // Creates structures for input & output.
         std::vector<float> inputData(16);
@@ -93,11 +89,9 @@ TEST_CASE("TestFileOnlyProfiling")
             outputData[i] = 3.0;
         }
 
-        TensorInfo inputTensorInfo = runtime.GetInputTensorInfo(netId, 0);
-        inputTensorInfo.SetConstant(true);
         InputTensors inputTensors
         {
-            {0, ConstTensor(inputTensorInfo, inputData.data())}
+            {0, ConstTensor(runtime.GetInputTensorInfo(netId, 0), inputData.data())}
         };
         OutputTensors outputTensors
         {
@@ -115,7 +109,7 @@ TEST_CASE("TestFileOnlyProfiling")
         for (auto &error : model.GetErrors()) {
             std::cout << error.what() << std::endl;
         }
-        CHECK(model.GetErrors().empty());
+        BOOST_TEST(model.GetErrors().empty());
         std::vector<std::string> desc = GetModelDescription(model);
         std::vector<std::string> expectedOutput;
         expectedOutput.push_back("Entity [0] name = input type = layer");
@@ -153,11 +147,11 @@ TEST_CASE("TestFileOnlyProfiling")
         expectedOutput.push_back("Entity [55] type = workload_execution");
         expectedOutput.push_back("   event: [59] class [start_of_life]");
         expectedOutput.push_back("   event: [61] class [end_of_life]");
-        CHECK(CompareOutput(desc, expectedOutput));
+        BOOST_TEST(CompareOutput(desc, expectedOutput));
     }
 }
 
-TEST_CASE("DumpOutgoingValidFileEndToEnd")
+BOOST_AUTO_TEST_CASE(DumpOutgoingValidFileEndToEnd)
 {
     // Get all registered backends
     std::vector<BackendId> suitableBackends = GetSuitableBackendRegistered();
@@ -168,9 +162,9 @@ TEST_CASE("DumpOutgoingValidFileEndToEnd")
         // Create a temporary file name.
         fs::path tempPath = armnnUtils::Filesystem::NamedTempFile("DumpOutgoingValidFileEndToEnd_CaptureFile.txt");
         // Make sure the file does not exist at this point
-        CHECK(!fs::exists(tempPath));
+        BOOST_CHECK(!fs::exists(tempPath));
 
-        armnn::IRuntime::CreationOptions options;
+        armnn::Runtime::CreationOptions options;
         options.m_ProfilingOptions.m_EnableProfiling     = true;
         options.m_ProfilingOptions.m_FileOnly            = true;
         options.m_ProfilingOptions.m_IncomingCaptureFile = "";
@@ -181,7 +175,7 @@ TEST_CASE("DumpOutgoingValidFileEndToEnd")
         ILocalPacketHandlerSharedPtr localPacketHandlerPtr = std::make_shared<TestTimelinePacketHandler>();
         options.m_ProfilingOptions.m_LocalPacketHandlers.push_back(localPacketHandlerPtr);
 
-        armnn::RuntimeImpl runtime(options);
+        armnn::Runtime runtime(options);
         // ensure the GUID generator is reset to zero
         GetProfilingService(&runtime).ResetGuidGenerator();
 
@@ -208,7 +202,7 @@ TEST_CASE("DumpOutgoingValidFileEndToEnd")
 
         // Load it into the runtime. It should succeed.
         armnn::NetworkId netId;
-        CHECK(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
+        BOOST_TEST(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
 
         // Creates structures for input & output.
         std::vector<float> inputData(16);
@@ -218,11 +212,9 @@ TEST_CASE("DumpOutgoingValidFileEndToEnd")
             outputData[i] = 3.0;
         }
 
-        TensorInfo inputTensorInfo = runtime.GetInputTensorInfo(netId, 0);
-        inputTensorInfo.SetConstant(true);
         InputTensors inputTensors
         {
-            {0, ConstTensor(inputTensorInfo, inputData.data())}
+            {0, ConstTensor(runtime.GetInputTensorInfo(netId, 0), inputData.data())}
         };
         OutputTensors outputTensors
         {
@@ -236,17 +228,16 @@ TEST_CASE("DumpOutgoingValidFileEndToEnd")
 
         // In order to flush the files we need to gracefully close the profiling service.
         options.m_ProfilingOptions.m_EnableProfiling = false;
-        GetProfilingService(&runtime).ResetExternalProfilingOptions(
-            ConvertExternalProfilingOptions(options.m_ProfilingOptions), true);
+        GetProfilingService(&runtime).ResetExternalProfilingOptions(options.m_ProfilingOptions, true);
 
         // The output file size should be greater than 0.
-        CHECK(fs::file_size(tempPath) > 0);
+        BOOST_CHECK(fs::file_size(tempPath) > 0);
 
         // NOTE: would be an interesting exercise to take this file and decode it
 
         // Delete the tmp file.
-        CHECK(fs::remove(tempPath));
+        BOOST_CHECK(fs::remove(tempPath));
     }
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

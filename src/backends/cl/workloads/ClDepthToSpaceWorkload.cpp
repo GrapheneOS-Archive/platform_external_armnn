@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -21,12 +21,12 @@ using namespace armcomputetensorutils;
 
 arm_compute::Status ClDepthToSpaceWorkloadValidate(const TensorInfo& input,
                                                    const TensorInfo& output,
-                                                   const DepthToSpaceDescriptor& descriptor)
+                                                   const DepthToSpaceDescriptor& desc)
 {
-    DataLayout dataLayout = descriptor.m_DataLayout;
+    DataLayout dataLayout = desc.m_DataLayout;
     const arm_compute::TensorInfo aclInputInfo = BuildArmComputeTensorInfo(input, dataLayout);
 
-    int32_t blockSize = armnn::numeric_cast<int32_t>(descriptor.m_BlockSize);
+    int32_t blockSize = armnn::numeric_cast<int32_t>(desc.m_BlockSize);
 
     const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output, dataLayout);
 
@@ -36,17 +36,10 @@ arm_compute::Status ClDepthToSpaceWorkloadValidate(const TensorInfo& input,
     return aclStatus;
 }
 
-ClDepthToSpaceWorkload::ClDepthToSpaceWorkload(const DepthToSpaceQueueDescriptor& descriptor,
-                                               const WorkloadInfo& info,
-                                               const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<DepthToSpaceQueueDescriptor>(descriptor, info)
+ClDepthToSpaceWorkload::ClDepthToSpaceWorkload(const DepthToSpaceQueueDescriptor& desc,
+                                               const WorkloadInfo& info)
+    : BaseWorkload<DepthToSpaceQueueDescriptor>(desc, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClDepthToSpaceWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("ClDepthToSpaceWorkload", 1, 1);
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
@@ -55,21 +48,18 @@ ClDepthToSpaceWorkload::ClDepthToSpaceWorkload(const DepthToSpaceQueueDescriptor
         PolymorphicPointerDowncast<IClTensorHandle>(m_Data.m_Inputs[0])->GetTensor();
     input.info()->set_data_layout(aclDataLayout);
 
-    int32_t blockSize = armnn::numeric_cast<int32_t>(descriptor.m_Parameters.m_BlockSize);
+    int32_t blockSize = armnn::numeric_cast<int32_t>(desc.m_Parameters.m_BlockSize);
 
     arm_compute::ICLTensor& output =
         PolymorphicPointerDowncast<IClTensorHandle>(m_Data.m_Outputs[0])->GetTensor();
     output.info()->set_data_layout(aclDataLayout);
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClDepthToSpaceWorkload_configure");
-        m_Layer.configure(clCompileContext, &input, &output, blockSize);
-    }
+    m_Layer.configure(&input, &output, blockSize);
 }
 
 void ClDepthToSpaceWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClDepthToSpaceWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClDepthToSpaceWorkload_Execute");
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

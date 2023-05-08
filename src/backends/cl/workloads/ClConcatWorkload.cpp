@@ -1,16 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ClConcatWorkload.hpp"
 #include "ClWorkloadUtils.hpp"
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
 
 #include <arm_compute/core/Types.h>
+#include <arm_compute/runtime/CL/functions/CLConcatenateLayer.h>
 
 namespace armnn
 {
@@ -18,9 +19,9 @@ using namespace armcomputetensorutils;
 
 namespace
 {
-size_t CalcAxis(const OriginsDescriptor& descriptor)
+size_t CalcAxis(const OriginsDescriptor& desc)
 {
-    return (descriptor.GetNumDimensions() - descriptor.GetConcatAxis()) - 1;
+    return (desc.GetNumDimensions() - desc.GetConcatAxis()) - 1;
 }
 } //namespace
 
@@ -45,17 +46,9 @@ arm_compute::Status ClConcatWorkloadValidate(const std::vector<const TensorInfo*
     return arm_compute::CLConcatenateLayer::validate(aclInputPtrs, &aclOutputInfo, aclAxis);
 }
 
-ClConcatWorkload::ClConcatWorkload(const ConcatQueueDescriptor& descriptor,
-                                   const WorkloadInfo& info,
-                                   const arm_compute::CLCompileContext& clCompileContext)
-: ClBaseWorkload<ConcatQueueDescriptor>(descriptor, info)
+ClConcatWorkload::ClConcatWorkload(const ConcatQueueDescriptor& descriptor, const WorkloadInfo& info)
+: BaseWorkload<ConcatQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClConcatWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     bool allInputsAreSubtensors = true;
 
     // Check that all inputs are sub-tensors
@@ -88,12 +81,9 @@ ClConcatWorkload::ClConcatWorkload(const ConcatQueueDescriptor& descriptor,
     // Create the layer function
     auto layer = std::make_unique<arm_compute::CLConcatenateLayer>();
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClConcatWorkload_configure");
-        // Configure input and output tensors
-        size_t aclAxis = CalcAxis(descriptor.m_Parameters);
-        layer->configure(clCompileContext, aclInputs, &output, aclAxis);
-    }
+    // Configure input and output tensors
+    size_t aclAxis = CalcAxis(descriptor.m_Parameters);
+    layer->configure(aclInputs, &output, aclAxis);
 
     // Prepare
     layer->prepare();
@@ -104,7 +94,7 @@ void ClConcatWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClConcatWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_CL("ClConcatWorkload_Execute");
         m_Layer->run();
     }
 }
