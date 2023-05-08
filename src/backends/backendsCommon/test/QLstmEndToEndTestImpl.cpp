@@ -5,13 +5,13 @@
 
 #include "QLstmEndToEndTestImpl.hpp"
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 #include "EndToEndTestImpl.hpp"
 
 #include <armnn/INetwork.hpp>
 #include <armnn/LstmParams.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 namespace
 {
@@ -80,26 +80,22 @@ void QLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
     const armnn::TensorInfo inputWeightsInfo({outputSize, inputSize},
                                              armnn::DataType::QSymmS8,
                                              weightsScale,
-                                             weightsOffset,
-                                             true);
+                                             weightsOffset);
 
     const armnn::TensorInfo recurrentWeightsInfo({outputSize, outputSize},
                                                  armnn::DataType::QSymmS8,
                                                  weightsScale,
-                                                 weightsOffset,
-                                                 true);
+                                                 weightsOffset);
 
     const armnn::TensorInfo biasInfo({outputSize},
                                      armnn::DataType::Signed32,
                                      biasScale,
-                                     biasOffset,
-                                     true);
+                                     biasOffset);
 
     const armnn::TensorInfo layerNormWeightsInfo({numUnits},
                                                  armnn::DataType::QSymmS16,
                                                  layerNormScale,
-                                                 layerNormOffset,
-                                                 true);
+                                                 layerNormOffset);
 
     // Mandatory params
     const std::vector<int8_t> inputToForgetWeightsVector =
@@ -183,20 +179,17 @@ void QLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
     const armnn::TensorInfo inputInfo({numBatches , inputSize},
                                       armnn::DataType::QAsymmS8,
                                       inputScale,
-                                      inputOffset,
-                                      true);
+                                      inputOffset);
 
     const armnn::TensorInfo cellStateInfo({numBatches , numUnits},
                                           armnn::DataType::QSymmS16,
                                           cellStateScale,
-                                          cellStateOffset,
-                                          true);
+                                          cellStateOffset);
 
     const armnn::TensorInfo outputStateInfo({numBatches , outputSize},
                                             armnn::DataType::QAsymmS8,
                                             outputScale,
-                                            outputOffset,
-                                            true);
+                                            outputOffset);
 
     // Input tensor data
     const std::vector<int8_t> inputVector         = {90, 102, 13, 26, 38, 102, 13, 26, 51, 64};
@@ -267,11 +260,11 @@ void QLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
     constexpr int8_t toleranceInt8 = 1;
     for (unsigned int i = 0u; i < outputStateOutResult.size(); ++i)
     {
-        CHECK(IsCloseEnough(outputStateOutVector[i], outputStateOutResult[i], toleranceInt8));
+        BOOST_TEST(IsCloseEnough(outputStateOutVector[i], outputStateOutResult[i], toleranceInt8));
     }
 
     for (unsigned int i = 0u; i < outputResult.size(); ++i)
     {
-        CHECK(IsCloseEnough(outputVector[i], outputResult[i], toleranceInt8));
+        BOOST_TEST(IsCloseEnough(outputVector[i], outputResult[i], toleranceInt8));
     }
 }

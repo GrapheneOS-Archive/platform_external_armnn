@@ -11,13 +11,11 @@
 namespace armnn
 {
 
-void Concatenate(const ConcatQueueDescriptor &data,
-                 std::vector<ITensorHandle*> inputs,
-                 std::vector<ITensorHandle*> outputs)
+void Concatenate(const ConcatQueueDescriptor &data)
 {
-    const TensorInfo& outputInfo0 = GetTensorInfo(outputs[0]);
+    const TensorInfo& outputInfo0 = GetTensorInfo(data.m_Outputs[0]);
 
-    std::unique_ptr<Encoder<float>> encoderPtr = MakeEncoder<float>(outputInfo0, outputs[0]->Map());
+    std::unique_ptr<Encoder<float>> encoderPtr = MakeEncoder<float>(outputInfo0, data.m_Outputs[0]->Map());
     Encoder<float>& encoder = *encoderPtr;
 
     for (unsigned int index = 0 ; index < outputInfo0.GetNumElements(); ++index)
@@ -39,7 +37,7 @@ void Concatenate(const ConcatQueueDescriptor &data,
             ConcatQueueDescriptor::ViewOrigin const& view = data.m_ViewOrigins[viewIdx];
 
             //Split view extents are defined by the size of (the corresponding) input tensor.
-            const TensorInfo& inputInfo = GetTensorInfo(inputs[viewIdx]);
+            const TensorInfo& inputInfo = GetTensorInfo(data.m_Inputs[viewIdx]);
             ARMNN_ASSERT(inputInfo.GetNumDimensions() == outputInfo0.GetNumDimensions());
 
             // Check all dimensions to see if this element is inside the given input view.
@@ -59,7 +57,7 @@ void Concatenate(const ConcatQueueDescriptor &data,
             if (insideView)
             {
                 std::unique_ptr<Decoder<float>> decoderPtr =
-                    MakeDecoder<float>(inputInfo,inputs[viewIdx]->Map());
+                    MakeDecoder<float>(inputInfo, data.m_Inputs[viewIdx]->Map());
                 Decoder<float>& decoder = *decoderPtr;
                 unsigned int inIndex = 0;
                 unsigned int dimensionStride = 1;

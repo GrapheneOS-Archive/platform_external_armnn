@@ -1,5 +1,5 @@
 //
-// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -18,19 +18,16 @@ public:
     ClLayerSupport();
     ~ClLayerSupport() {}
 
-    bool IsLayerSupported(const LayerType& type,
-                          const std::vector<TensorInfo>& infos,
-                          const BaseDescriptor& descriptor,
-                          const Optional<LstmInputParamsInfo>& lstmParamsInfo,
-                          const Optional<QuantizedLstmInputParamsInfo>& quantizedLstmParamsInfo,
-                          Optional<std::string&> reasonIfUnsupported) const override;
+    ARMNN_DEPRECATED_MSG("Use IsElementwiseUnarySupported instead")
+    bool IsAbsSupported(const TensorInfo& input,
+                        const TensorInfo& output,
+                        Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsActivationSupported(const TensorInfo& input,
                                const TensorInfo& output,
                                const ActivationDescriptor& descriptor,
                                Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
     bool IsAdditionSupported(const TensorInfo& input0,
                              const TensorInfo& input1,
                              const TensorInfo& output,
@@ -40,12 +37,6 @@ public:
                               const TensorInfo& output,
                               const ArgMinMaxDescriptor& descriptor,
                               Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
-    bool IsBatchMatMulSupported(const TensorInfo& inputX,
-                                const TensorInfo& inputY,
-                                const TensorInfo& output,
-                                const BatchMatMulDescriptor& descriptor,
-                                Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const;
 
     bool IsBatchNormalizationSupported(const TensorInfo& input,
                                        const TensorInfo& output,
@@ -61,15 +52,6 @@ public:
                                    const BatchToSpaceNdDescriptor& descriptor,
                                    Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    bool IsCastSupported(const TensorInfo& input,
-                         const TensorInfo& output,
-                         Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
-    bool IsChannelShuffleSupported(const TensorInfo& input,
-                                   const TensorInfo& output,
-                                   const ChannelShuffleDescriptor& descriptor,
-                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
     bool IsComparisonSupported(const TensorInfo& input0,
                                const TensorInfo& input1,
                                const TensorInfo& ouput,
@@ -78,7 +60,7 @@ public:
 
     bool IsConcatSupported(const std::vector<const TensorInfo*> inputs,
                            const TensorInfo& output,
-                           const OriginsDescriptor& descriptor,
+                           const ConcatDescriptor& descriptor,
                            Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsConstantSupported(const TensorInfo& output,
@@ -95,13 +77,6 @@ public:
     bool IsConvolution2dSupported(const TensorInfo& input,
                                   const TensorInfo& output,
                                   const Convolution2dDescriptor& descriptor,
-                                  const TensorInfo& weights,
-                                  const Optional<TensorInfo>& biases,
-                                  Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
-    bool IsConvolution3dSupported(const TensorInfo& input,
-                                  const TensorInfo& output,
-                                  const Convolution3dDescriptor& descriptor,
                                   const TensorInfo& weights,
                                   const Optional<TensorInfo>& biases,
                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
@@ -129,14 +104,13 @@ public:
                                                 const Optional<TensorInfo>& biases,
                                                 Optional<std::string&> reason = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
     bool IsDivisionSupported(const TensorInfo& input0,
                              const TensorInfo& input1,
                              const TensorInfo& output,
                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsElementwiseUnarySupported(const TensorInfo& input,
-                                     const TensorInfo& output,
+                                     const TensorInfo& ouput,
                                      const ElementwiseUnaryDescriptor& descriptor,
                                      Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
@@ -156,16 +130,17 @@ public:
                                    const FullyConnectedDescriptor& descriptor,
                                    Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    bool IsGatherNdSupported(const TensorInfo& input0,
-                             const TensorInfo& input1,
-                             const TensorInfo& output,
-                             Optional<std::string&> reasonIfUnsupported) const;
-
     bool IsGatherSupported(const TensorInfo& input0,
                            const TensorInfo& input1,
                            const TensorInfo& output,
                            const GatherDescriptor& descriptor,
                            Optional<std::string&> reasonIfUnsupported) const override;
+
+    ARMNN_DEPRECATED_MSG("Use IsComparisonSupported instead")
+    bool IsGreaterSupported(const TensorInfo& input0,
+                            const TensorInfo& input1,
+                            const TensorInfo& ouput,
+                            Optional<std::string&> reasonIfUnsupported) const override;
 
     bool IsInputSupported(const TensorInfo& input,
                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
@@ -202,7 +177,6 @@ public:
                          const LstmInputParamsInfo& paramsInfo,
                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
     bool IsMaximumSupported(const TensorInfo& input0,
                             const TensorInfo& input1,
                             const TensorInfo& output,
@@ -213,13 +187,17 @@ public:
                          const MeanDescriptor& descriptor,
                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
+    ARMNN_DEPRECATED_MSG("Use IsConcatSupported instead")
+    bool IsMergerSupported(const std::vector<const TensorInfo*> inputs,
+                           const TensorInfo& output,
+                           const MergerDescriptor& descriptor,
+                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsMinimumSupported(const TensorInfo& input0,
                             const TensorInfo& input1,
                             const TensorInfo& output,
                             Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
     bool IsMultiplicationSupported(const TensorInfo& input0,
                                    const TensorInfo& input1,
                                    const TensorInfo& output,
@@ -246,11 +224,6 @@ public:
     bool IsPooling2dSupported(const TensorInfo& input,
                               const TensorInfo& output,
                               const Pooling2dDescriptor& descriptor,
-                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
-    bool IsPooling3dSupported(const TensorInfo& input,
-                              const TensorInfo& output,
-                              const Pooling3dDescriptor& descriptor,
                               Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsPreluSupported(const TensorInfo& input,
@@ -280,11 +253,6 @@ public:
                              const TensorInfo& output,
                              Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    bool IsReduceSupported(const TensorInfo& input,
-                           const TensorInfo& output,
-                           const ReduceDescriptor& descriptor,
-                           Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
     bool IsReshapeSupported(const TensorInfo& input,
                             const TensorInfo& output,
                             const ReshapeDescriptor& descriptor,
@@ -294,6 +262,16 @@ public:
                            const TensorInfo& output,
                            const ResizeDescriptor& descriptor,
                            Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    ARMNN_DEPRECATED_MSG("Use IsResizeSupported instead")
+    bool IsResizeBilinearSupported(const TensorInfo& input,
+                                   const TensorInfo& output,
+                                   Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
+    ARMNN_DEPRECATED_MSG("Use IsElementwiseUnarySupported instead")
+    bool IsRsqrtSupported(const TensorInfo& input,
+                          const TensorInfo& output,
+                          Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
     bool IsSliceSupported(const TensorInfo& input,
                           const TensorInfo& output,
@@ -315,6 +293,11 @@ public:
                                  const SpaceToDepthDescriptor& descriptor,
                                  Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
+    ARMNN_DEPRECATED_MSG("Use IsSplitterSupported with outputs instead")
+    bool IsSplitterSupported(const TensorInfo& input,
+                             const ViewsDescriptor& descriptor,
+                             Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
+
     bool IsSplitterSupported(const TensorInfo& input,
                              const std::vector<std::reference_wrapper<TensorInfo>>& outputs,
                              const ViewsDescriptor& descriptor,
@@ -330,7 +313,6 @@ public:
                                  const StridedSliceDescriptor& descriptor,
                                  Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
 
-    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("Use IsLayerSupported instead", "24.02")
     bool IsSubtractionSupported(const TensorInfo& input0,
                                 const TensorInfo& input1,
                                 const TensorInfo& output,
@@ -347,16 +329,6 @@ public:
                               const TensorInfo& output,
                               const TransposeDescriptor& descriptor,
                               Optional<std::string&> reasonIfUnsupported = EmptyOptional()) const override;
-
-    bool IsUnidirectionalSequenceLstmSupported(const TensorInfo& input,
-                                               const TensorInfo& outputStateIn,
-                                               const TensorInfo& cellStateIn,
-                                               const TensorInfo& outputStateOut,
-                                               const TensorInfo& cellStateOut,
-                                               const TensorInfo& output,
-                                               const UnidirectionalSequenceLstmDescriptor& descriptor,
-                                               const LstmInputParamsInfo& paramsInfo,
-                                               Optional<std::string&> reasonIfUnsupported) const override;
 
 private:
     const IBackendInternal::IBackendSpecificModelContextPtr m_ModelContextPtr;

@@ -5,14 +5,12 @@
 
 #pragma once
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 
 #include <armnn/INetwork.hpp>
 #include <armnn/TypesUtils.hpp>
 
 #include <ResolveType.hpp>
-
-#include <doctest/doctest.h>
 
 namespace
 {
@@ -52,12 +50,12 @@ void FillEndToEnd(const std::vector<armnn::BackendId>& backends)
     };
     std::vector<T> expectedOutputData = armnnUtils::QuantizedVector<T>(floatExpectedOutputData);
 
-    TensorInfo inputInfo ({ 4 }, DataType::Signed32, 0.0f, 0, true);
+    TensorInfo inputInfo ({ 4 }, DataType::Signed32);
     TensorInfo outputInfo({ 1, 1, 5, 3 }, ArmnnType);
 
     armnn::INetworkPtr network = CreateFillNetwork(inputInfo, outputInfo, descriptor);
 
-    CHECK(network);
+    BOOST_TEST_CHECKPOINT("create a network");
 
     std::map<int, std::vector<int32_t>> inputTensorData    = {{ 0, inputData }};
     std::map<int, std::vector<T>> expectedOutputTensorData = {{ 0, expectedOutputData }};

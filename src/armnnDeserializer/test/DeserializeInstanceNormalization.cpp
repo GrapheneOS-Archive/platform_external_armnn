@@ -4,12 +4,14 @@
 //
 
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
 
-TEST_SUITE("Deserializer_InstanceNormalization")
-{
+#include <boost/test/unit_test.hpp>
+
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct InstanceNormalizationFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit InstanceNormalizationFixture(const std::string &inputShape,
@@ -118,7 +120,7 @@ struct InstanceNormalizationFloat32Fixture : InstanceNormalizationFixture
                                                                        "NHWC") {}
 };
 
-TEST_CASE_FIXTURE(InstanceNormalizationFloat32Fixture, "InstanceNormalizationFloat32")
+BOOST_FIXTURE_TEST_CASE(InstanceNormalizationFloat32, InstanceNormalizationFloat32Fixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -150,4 +152,4 @@ TEST_CASE_FIXTURE(InstanceNormalizationFloat32Fixture, "InstanceNormalizationFlo
         });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

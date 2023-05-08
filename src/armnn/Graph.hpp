@@ -6,7 +6,6 @@
 
 #include "LayersFwd.hpp"
 #include "IGraphObservable.hpp"
-#include "Profiling.hpp"
 
 #include <armnn/Types.hpp>
 #include <armnn/TensorFwd.hpp>
@@ -48,9 +47,7 @@ public:
     }
 
     using LayerList = std::list<Layer*>;
-
-    // Const so pointers in the list can't be modified externally.
-    using Iterator = LayerList::const_iterator;
+    using Iterator = LayerList::const_iterator; // Const so pointers in the list can't be modified externally.
     using IteratorDifference = Iterator::difference_type;
 
     using ConstIterator        = TransformIterator<decltype(&PtrCast<const Layer>),       Iterator>;
@@ -95,12 +92,10 @@ public:
         const Graph& m_Graph;
     };
 
-    Graph(bool shapeInferenceMethod = false, bool allowExpandedDims = false)
+    Graph(bool shapeInferenceMethod = false)
         : m_LayersInOrder(true)
-        , m_AllowExpandedDims(allowExpandedDims)
         , m_ShapeInferenceMethod(shapeInferenceMethod ? ShapeInferenceMethod::InferAndValidate :
                                                         ShapeInferenceMethod::ValidateOnly)
-        , m_Profiler(std::make_shared<IProfiler>())
         {}
 
     Graph(const Graph& other);
@@ -118,9 +113,7 @@ public:
         m_OutputIds     = std::move(other.m_OutputIds);
         m_LayersInOrder = std::move(other.m_LayersInOrder);
         m_Views         = std::move(other.m_Views);
-        m_Profiler      = std::move(other.m_Profiler);
-        m_AllowExpandedDims    = other.m_AllowExpandedDims;
-        m_ShapeInferenceMethod = other.m_ShapeInferenceMethod;
+
         other.ForEachLayer([this](Layer* otherLayer)
         {
             otherLayer->Reparent(*this, m_Layers.end());
@@ -210,10 +203,6 @@ public:
     void SubstituteSubgraph(SubgraphView& subgraph, IConnectableLayer* substituteLayer);
     void SubstituteSubgraph(SubgraphView& subgraph, const SubgraphView& substituteSubgraph);
 
-    /// For each ConstantLayer in Graph, ensures TensorInfo is set on all output slots.
-    /// LayerValidationException thrown if no TensorInfo is set.
-    void VerifyConstantLayerSetTensorInfo() const;
-
     void InferTensorInfos();
 
     void AttachObservable(IGraphObservable* const observable, GraphEvent notifyOnEvent) {
@@ -227,10 +216,6 @@ public:
     /// Gets the position of a layer in the graph.
     Iterator GetPosInGraph(Layer& layer);
 
-    const std::shared_ptr<IProfiler>& GetProfiler() const;
-
-    void SetLayersOutOfOrder();
-
 private:
     template <typename LayerT>
     class LayerInGraphBase;
@@ -241,15 +226,6 @@ private:
     Iterator ForwardToEndOfInputs(Iterator it) const
     {
         while ((it != m_Layers.end()) && ((*it)->GetType() == LayerType::Input))
-        {
-            ++it;
-        }
-        return it;
-    }
-    Iterator ForwardToEndOfInputsAndConstants(Iterator it) const
-    {
-        while ((it != m_Layers.end()) &&
-               ((*it)->GetType() == LayerType::Input || (*it)->GetType() == LayerType::Constant))
         {
             ++it;
         }
@@ -278,6 +254,7 @@ private:
     std::unordered_set<LayerBindingId> m_OutputIds;
     std::unordered_map<const Layer*, Iterator> m_PosInGraphMap;
 
+    void ReplaceSubgraphConnections(const SubgraphView& subgraph, IConnectableLayer* substituteLayer);
     void ReplaceSubgraphConnections(const SubgraphView& subgraph, const SubgraphView& substituteSubgraph);
     void EraseSubgraphLayers(SubgraphView &subgraph);
 
@@ -285,19 +262,8 @@ private:
     mutable LayerList m_Layers;
     mutable bool m_LayersInOrder;
 
-    bool m_AllowExpandedDims;
-
     std::map<const GraphEvent, std::list<IGraphObservable*>> m_Views;
     ShapeInferenceMethod m_ShapeInferenceMethod;
-
-    std::shared_ptr<IProfiler> m_Profiler;
-
-    // Throws exception due to a layer input not being connected to an output slot.
-    /// Also verifies weights and bias are set for FullyConnected layers.
-    void ConstructErrorMessageForUnconnectedInputs(Layer* const layer,
-                                                   unsigned int slotIndex);
-
-    friend class SubgraphView;
 };
 
 /// Common base class for layers in the graph.
@@ -344,7 +310,7 @@ protected:
     Graph* m_Graph;
 };
 
-/// Input/Output/Constant layers specialize this template.
+/// Input/Output layers specialize this template.
 template <typename LayerT>
 class Graph::LayerInGraph final : public LayerInGraphBase<LayerT>
 {
@@ -361,30 +327,10 @@ public:
     LayerInGraph(Graph& graph, Iterator insertBefore, Args&&... args)
         : LayerInGraphBase<LayerT>(graph,
                                    // Make sure it's inserted after all inputs and before all outputs.
-                                   graph.ForwardToEndOfInputsAndConstants(graph.RewindToBeginOfOutputs(insertBefore)),
+                                   graph.ForwardToEndOfInputs(graph.RewindToBeginOfOutputs(insertBefore)),
                                    std::forward<Args>(args)...)
     {
     }
-};
-
-template <>
-class Graph::LayerInGraph<ConstantLayer> final : public LayerInGraphBase<ConstantLayer>
-{
-public:
-    template <typename... Args>
-    LayerInGraph(Graph& graph, Args&&... args)
-            : LayerInGraphBase<ConstantLayer>(graph,
-                                              // Always add to the back of the inputs.
-                                              std::next(graph.begin(), IteratorDifference(graph.GetNumInputs())),
-                                              std::forward<Args>(args)...)
-    {}
-    template <typename... Args>
-    LayerInGraph(Graph& graph, Iterator, Args&&... args)
-        // Ignore Iterator argument. Always add to the back of the inputs.
-        : LayerInGraph(graph, std::forward<Args>(args)...)
-    {}
-    ~LayerInGraph() override
-    {}
 };
 
 /// Inputs add/remove their binding id to m_InputIds in the graph.
@@ -460,7 +406,6 @@ inline LayerT* Graph::AddLayer(Args&&... args)
     LayerT* const layer = new LayerInGraph<LayerT>(*this, std::forward<Args>(args)...);
 
     layer->SetShapeInferenceMethod(m_ShapeInferenceMethod);
-    layer->SetAllowExpandedDims(m_AllowExpandedDims);
 
     NotifyObservables(GraphEvent::LayerAdded, layer);
 

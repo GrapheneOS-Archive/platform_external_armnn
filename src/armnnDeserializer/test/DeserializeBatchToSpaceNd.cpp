@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
 
-TEST_SUITE("Deserializer_BatchToSpaceND")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct BatchToSpaceNdFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit BatchToSpaceNdFixture(const std::string &inputShape,
@@ -115,7 +116,7 @@ struct SimpleBatchToSpaceNdFixture : BatchToSpaceNdFixture
                                                           "Float32") {}
 };
 
-TEST_CASE_FIXTURE(SimpleBatchToSpaceNdFixture, "SimpleBatchToSpaceNdFloat32")
+BOOST_FIXTURE_TEST_CASE(SimpleBatchToSpaceNdFloat32, SimpleBatchToSpaceNdFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0,
                                          {
@@ -132,4 +133,4 @@ TEST_CASE_FIXTURE(SimpleBatchToSpaceNdFixture, "SimpleBatchToSpaceNdFloat32")
                                          });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

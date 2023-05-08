@@ -1,5 +1,5 @@
 //
-// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,16 +22,14 @@
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <neon/workloads/NeonAdditionWorkload.hpp>
-#include <neon/workloads/NeonBatchNormalizationWorkload.hpp>
-#include <neon/workloads/NeonConvolution2dWorkload.hpp>
-#include <neon/workloads/NeonDepthwiseConvolutionWorkload.hpp>
-#include <neon/workloads/NeonDivisionWorkload.hpp>
-#include <neon/workloads/NeonFullyConnectedWorkload.hpp>
-#include <neon/workloads/NeonMultiplicationWorkload.hpp>
-#include <neon/workloads/NeonReduceWorkload.hpp>
-#include <neon/workloads/NeonSubtractionWorkload.hpp>
-#include <backendsCommon/DefaultAllocator.hpp>
+#include "workloads/NeonAdditionWorkload.hpp"
+#include "workloads/NeonBatchNormalizationWorkload.hpp"
+#include "workloads/NeonConvolution2dWorkload.hpp"
+#include "workloads/NeonDepthwiseConvolutionWorkload.hpp"
+#include "workloads/NeonDivisionWorkload.hpp"
+#include "workloads/NeonFullyConnectedWorkload.hpp"
+#include "workloads/NeonMultiplicationWorkload.hpp"
+#include "workloads/NeonSubtractionWorkload.hpp"
 
 #include <Optimizer.hpp>
 
@@ -74,13 +72,7 @@ IBackendInternal::IWorkloadFactoryPtr NeonBackend::CreateWorkloadFactory(
                                                              BaseMemoryManager::MemoryAffinity::Offset);
 
     tensorHandleFactoryRegistry.RegisterMemoryManager(memoryManager);
-
-    auto factory = std::make_unique<NeonTensorHandleFactory>(memoryManager);
-    // Register copy and import factory pair
-    tensorHandleFactoryRegistry.RegisterCopyAndImportFactoryPair(factory->GetId(), factory->GetId());
-    // Register the factory
-    tensorHandleFactoryRegistry.RegisterFactory(std::move(factory));
-
+    tensorHandleFactoryRegistry.RegisterFactory(std::make_unique<NeonTensorHandleFactory>(memoryManager));
 
     return std::make_unique<NeonWorkloadFactory>(
         PolymorphicPointerDowncast<NeonMemoryManager>(memoryManager));
@@ -93,12 +85,7 @@ IBackendInternal::IWorkloadFactoryPtr NeonBackend::CreateWorkloadFactory(
                                                              BaseMemoryManager::MemoryAffinity::Offset);
 
     tensorHandleFactoryRegistry.RegisterMemoryManager(memoryManager);
-
-    auto factory = std::make_unique<NeonTensorHandleFactory>(memoryManager);
-    // Register copy and import factory pair
-    tensorHandleFactoryRegistry.RegisterCopyAndImportFactoryPair(factory->GetId(), factory->GetId());
-    // Register the factory
-    tensorHandleFactoryRegistry.RegisterFactory(std::move(factory));
+    tensorHandleFactoryRegistry.RegisterFactory(std::make_unique<NeonTensorHandleFactory>(memoryManager));
 
     return std::make_unique<NeonWorkloadFactory>(
         PolymorphicPointerDowncast<NeonMemoryManager>(memoryManager), CreateBackendSpecificModelContext(modelOptions));
@@ -113,6 +100,11 @@ IBackendInternal::IBackendProfilingContextPtr NeonBackend::CreateBackendProfilin
     const IRuntime::CreationOptions&, IBackendProfilingPtr&)
 {
     return IBackendProfilingContextPtr{};
+}
+
+IBackendInternal::Optimizations NeonBackend::GetOptimizations() const
+{
+    return Optimizations{};
 }
 
 IBackendInternal::IBackendSpecificModelContextPtr NeonBackend::CreateBackendSpecificModelContext(
@@ -139,28 +131,26 @@ IBackendInternal::ILayerSupportSharedPtr NeonBackend::GetLayerSupport(const Mode
     return layerSupport;
 }
 
-OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph,
-                                                    const ModelOptions& modelOptions) const
+OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph) const
 {
-    OptimizationViews optimizationViews(modelOptions);
+    OptimizationViews optimizationViews;
 
-    auto it = subgraph.endIConnectable();
+    auto it = subgraph.end();
     std::map<LayerGuid, Layer*> untouched;
 
-    while (it != subgraph.beginIConnectable())
+    while (it != subgraph.begin())
     {
         --it;
-        Layer& base = *(PolymorphicDowncast<Layer*>(*it));
+        Layer& base = **it;
         untouched.insert({base.GetGuid(), &base});
     }
 
-    it = subgraph.endIConnectable();
-    while (it != subgraph.beginIConnectable())
+    it = subgraph.end();
+    while (it != subgraph.begin())
     {
         --it;
-        Layer& base = *(PolymorphicDowncast<Layer*>(*it));
+        Layer& base = **it;
 
-        // Fuse activation into previous layer if supported by backend
         if ((base.GetType() == LayerType::DepthwiseConvolution2d || base.GetType() == LayerType::Convolution2d
              || base.GetType() == LayerType::BatchNormalization || base.GetType() == LayerType::FullyConnected
              || base.GetType() == LayerType::Addition || base.GetType() == LayerType::Multiplication
@@ -173,8 +163,7 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                 {
                     for (auto&& childInput : output->GetConnections())
                     {
-                        if ((childInput->GetOwningLayer().GetType() == LayerType::Activation) &&
-                            (checkDataTypeInputandOutput(childInput->GetOwningLayer())))
+                        if (childInput->GetOwningLayer().GetType() == LayerType::Activation)
                         {
                             Layer& child = childInput->GetOwningLayer();
 
@@ -194,25 +183,25 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (baseLayer->GetParameters().m_BiasEnabled)
                                 {
-                                    biases = baseLayer->GetInputSlot(2).GetConnectedOutputSlot()->GetTensorInfo();
+                                    biases = baseLayer->m_Bias->GetTensorInfo();
                                 }
 
                                 arm_compute::Status status = NeonConvolution2dWorkloadValidate(
                                         baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
                                         activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
                                         baseLayer->GetParameters(),
-                                        baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
+                                        baseLayer->m_Weight->GetTensorInfo(),
                                         biases,
                                         false,
                                         &activationDesc);
 
                                 if (status)
                                 {
-                                    FuseConvolution2dLayer<Convolution2dLayer>(optimizationViews,
-                                                                               baseLayer,
-                                                                               activationLayer,
-                                                                               activationDesc,
-                                                                               name);
+                                    FuseLayerWithWeightsAndBiases<Convolution2dLayer>(optimizationViews,
+                                                                                      baseLayer,
+                                                                                      activationLayer,
+                                                                                      activationDesc,
+                                                                                      name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -226,24 +215,24 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (baseLayer->GetParameters().m_BiasEnabled)
                                 {
-                                    biases = baseLayer->GetInputSlot(2).GetConnectedOutputSlot()->GetTensorInfo();
+                                    biases = baseLayer->m_Bias->GetTensorInfo();
                                 }
 
                                 arm_compute::Status status = NeonDepthwiseConvolutionWorkloadValidate(
                                         baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
                                         activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
                                         baseLayer->GetParameters(),
-                                        baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
+                                        baseLayer->m_Weight->GetTensorInfo(),
                                         biases,
                                         &activationDesc);
 
                                 if (status)
                                 {
-                                    FuseDepthwiseConvolution2dLayer<DepthwiseConvolution2dLayer>(optimizationViews,
-                                                                                                 baseLayer,
-                                                                                                 activationLayer,
-                                                                                                 activationDesc,
-                                                                                                 name);
+                                    FuseLayerWithWeightsAndBiases<DepthwiseConvolution2dLayer>(optimizationViews,
+                                                                                               baseLayer,
+                                                                                               activationLayer,
+                                                                                               activationDesc,
+                                                                                               name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -251,30 +240,22 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                             else if (base.GetType() == LayerType::FullyConnected)
                             {
                                 FullyConnectedLayer* baseLayer = PolymorphicDowncast<FullyConnectedLayer*>(&base);
-                                FullyConnectedDescriptor descriptor = baseLayer->GetParameters();
-
-                                // As bias is optional only try to get TensorInfo from input if bias is enabled.
-                                Optional<TensorInfo> biases;
-                                if (descriptor.m_BiasEnabled)
-                                {
-                                    biases = baseLayer->GetInputSlot(2).GetConnectedOutputSlot()->GetTensorInfo();
-                                }
 
                                 arm_compute::Status status = NeonFullyConnectedWorkloadValidate(
                                         baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
                                         activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                        baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
-                                        biases,
+                                        baseLayer->m_Weight->GetTensorInfo(),
+                                        baseLayer->m_Bias->GetTensorInfo(),
                                         baseLayer->GetParameters(),
                                         &activationDesc);
 
                                 if (status)
                                 {
-                                    FuseFullyConnectedLayer<FullyConnectedLayer>(optimizationViews,
-                                                                                 baseLayer,
-                                                                                 activationLayer,
-                                                                                 activationDesc,
-                                                                                 name);
+                                    FuseLayerWithWeightsAndBiases<FullyConnectedLayer>(optimizationViews,
+                                                                                       baseLayer,
+                                                                                       activationLayer,
+                                                                                       activationDesc,
+                                                                                       name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -297,11 +278,12 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
                                 if (status)
                                 {
                                     BatchNormalizationLayer* replacementLayer =
-                                        FuseBatchNormalizationLayer<BatchNormalizationLayer>(optimizationViews,
-                                                                                             baseLayer,
-                                                                                             activationLayer,
-                                                                                             activationDesc,
-                                                                                             name);
+                                            FuseLayerWithParameters<BatchNormalizationLayer>(
+                                                    optimizationViews,
+                                                    baseLayer,
+                                                    activationLayer,
+                                                    activationDesc,
+                                                    name);
 
                                     replacementLayer->m_Beta     = std::move(baseLayer->m_Beta);
                                     replacementLayer->m_Gamma    = std::move(baseLayer->m_Gamma);
@@ -323,11 +305,11 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (status)
                                 {
-                                    FuseAdditionLayer<AdditionLayer>(optimizationViews,
-                                                                     baseLayer,
-                                                                     activationLayer,
-                                                                     activationDesc,
-                                                                     name);
+                                    FuseLayerWithoutParameters<AdditionLayer>(optimizationViews,
+                                                                              baseLayer,
+                                                                              activationLayer,
+                                                                              activationDesc,
+                                                                              name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -344,11 +326,11 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (status)
                                 {
-                                    FuseDivisionLayer<DivisionLayer>(optimizationViews,
-                                                                     baseLayer,
-                                                                     activationLayer,
-                                                                     activationDesc,
-                                                                     name);
+                                    FuseLayerWithoutParameters<DivisionLayer>(optimizationViews,
+                                                                              baseLayer,
+                                                                              activationLayer,
+                                                                              activationDesc,
+                                                                              name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -365,11 +347,11 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (status)
                                 {
-                                    FuseMultiplicationLayer<MultiplicationLayer>(optimizationViews,
-                                                                                 baseLayer,
-                                                                                 activationLayer,
-                                                                                 activationDesc,
-                                                                                 name);
+                                    FuseLayerWithoutParameters<MultiplicationLayer>(optimizationViews,
+                                                                                    baseLayer,
+                                                                                    activationLayer,
+                                                                                    activationDesc,
+                                                                                    name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
@@ -386,123 +368,18 @@ OptimizationViews NeonBackend::OptimizeSubgraphView(const SubgraphView& subgraph
 
                                 if (status)
                                 {
-                                    FuseSubtractionLayer<SubtractionLayer>(optimizationViews,
-                                                                           baseLayer,
-                                                                           activationLayer,
-                                                                           activationDesc,
-                                                                           name);
+                                    FuseLayerWithoutParameters<SubtractionLayer>(optimizationViews,
+                                                                                 baseLayer,
+                                                                                 activationLayer,
+                                                                                 activationDesc,
+                                                                                 name);
                                     untouched.erase(baseLayer->GetGuid());
                                     untouched.erase(activationLayer->GetGuid());
                                 }
                             }
-                            else if (base.GetType() == LayerType::ElementwiseBinary)
-                            {
-                                ElementwiseBinaryLayer* baseLayer = PolymorphicDowncast<ElementwiseBinaryLayer*>(&base);
-
-                                if (baseLayer->GetParameters().m_Operation == BinaryOperation::Add)
-                                {
-                                    arm_compute::Status status = NeonAdditionWorkloadValidate(
-                                            baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            &activationDesc);
-
-                                    if (status)
-                                    {
-                                        FuseElementwiseBinaryLayer<ElementwiseBinaryLayer>(optimizationViews,
-                                                                                           baseLayer,
-                                                                                           activationLayer,
-                                                                                           activationDesc,
-                                                                                           BinaryOperation::Add,
-                                                                                           name);
-                                        untouched.erase(baseLayer->GetGuid());
-                                        untouched.erase(activationLayer->GetGuid());
-                                    }
-                                }
-                                else if (baseLayer->GetParameters().m_Operation == BinaryOperation::Div)
-                                {
-                                    arm_compute::Status status = NeonDivisionWorkloadValidate(
-                                            baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            &activationDesc);
-
-                                    if (status)
-                                    {
-                                        FuseElementwiseBinaryLayer<ElementwiseBinaryLayer>(optimizationViews,
-                                                                                           baseLayer,
-                                                                                           activationLayer,
-                                                                                           activationDesc,
-                                                                                           BinaryOperation::Div,
-                                                                                           name);
-                                        untouched.erase(baseLayer->GetGuid());
-                                        untouched.erase(activationLayer->GetGuid());
-                                    }
-                                }
-                                else if (baseLayer->GetParameters().m_Operation == BinaryOperation::Mul)
-                                {
-                                    arm_compute::Status status = NeonMultiplicationWorkloadValidate(
-                                            baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            &activationDesc);
-
-                                    if (status)
-                                    {
-                                        FuseElementwiseBinaryLayer<ElementwiseBinaryLayer>(optimizationViews,
-                                                                                           baseLayer,
-                                                                                           activationLayer,
-                                                                                           activationDesc,
-                                                                                           BinaryOperation::Mul,
-                                                                                           name);
-                                        untouched.erase(baseLayer->GetGuid());
-                                        untouched.erase(activationLayer->GetGuid());
-                                    }
-                                }
-                                else if (baseLayer->GetParameters().m_Operation == BinaryOperation::Sub)
-                                {
-                                    arm_compute::Status status = NeonSubtractionWorkloadValidate(
-                                            baseLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            baseLayer->GetInputSlot(1).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            activationLayer->GetInputSlot(0).GetConnectedOutputSlot()->GetTensorInfo(),
-                                            &activationDesc);
-
-                                    if (status)
-                                    {
-                                        FuseElementwiseBinaryLayer<ElementwiseBinaryLayer>(optimizationViews,
-                                                                                           baseLayer,
-                                                                                           activationLayer,
-                                                                                           activationDesc,
-                                                                                           BinaryOperation::Sub,
-                                                                                           name);
-                                        untouched.erase(baseLayer->GetGuid());
-                                        untouched.erase(activationLayer->GetGuid());
-                                    }
-                                }
-                                // No fusion available for other BinaryOperations
-                            }
                         }
                     }
                 }
-            }
-        }
-
-        // Separate reduce layer with multiple axes into multiple reduce layers with 1 axis.
-        if (base.GetType() == LayerType::Reduce)
-        {
-            ReduceLayer* baseLayer            = PolymorphicDowncast<ReduceLayer*>(&base);
-            ReduceDescriptor reduceDescriptor = baseLayer->GetParameters();
-
-            if (!reduceDescriptor.m_vAxis.empty() && reduceDescriptor.m_vAxis.size() > 1)
-            {
-                // Add new layers to the graph and connect them.
-                std::vector<IConnectableLayer*> layers = ChainReduceLayers<ReduceLayer>(optimizationViews,
-                                                                                        baseLayer,
-                                                                                        reduceDescriptor);
-
-                // Replace existing baselayer with new subgraph.
-                ReplaceLayers<ReduceLayer>(optimizationViews, baseLayer, layers);
-                untouched.erase(baseLayer->GetGuid());
             }
         }
     }
@@ -530,18 +407,7 @@ void NeonBackend::RegisterTensorHandleFactories(class TensorHandleFactoryRegistr
                                                              BaseMemoryManager::MemoryAffinity::Offset);
 
     registry.RegisterMemoryManager(memoryManager);
-
-    auto factory = std::make_unique<NeonTensorHandleFactory>(memoryManager);
-    // Register copy and import factory pair
-    registry.RegisterCopyAndImportFactoryPair(factory->GetId(), factory->GetId());
-    // Register the factory
-    registry.RegisterFactory(std::move(factory));
+    registry.RegisterFactory(std::make_unique<NeonTensorHandleFactory>(memoryManager));
 }
-
-std::unique_ptr<ICustomAllocator> NeonBackend::GetDefaultAllocator() const
-{
-    return std::make_unique<DefaultAllocator>();
-}
-
 
 } // namespace armnn

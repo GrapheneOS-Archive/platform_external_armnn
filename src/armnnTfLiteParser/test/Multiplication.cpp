@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Multiplication")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct MultiplicationFixture : public ParserFlatbuffersFixture
 {
     explicit MultiplicationFixture(const std::string & inputShape1,
@@ -88,7 +92,7 @@ struct SimpleMultiplicationFixture : public MultiplicationFixture
     SimpleMultiplicationFixture() : MultiplicationFixture("[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(SimpleMultiplicationFixture, "ParseMultiplication")
+BOOST_FIXTURE_TEST_CASE(ParseMultiplication, SimpleMultiplicationFixture)
 {
     using armnn::DataType;
     RunTest<4, DataType::Float32>(0, {{ "inputTensor1", { 0.0f,  1.0f,  2.0f,
@@ -110,7 +114,7 @@ struct MultiplicationBroadcastFixture4D1D : public MultiplicationFixture
     MultiplicationBroadcastFixture4D1D() : MultiplicationFixture("[ 1, 2, 2, 3 ]", "[ 1 ]", "[ 1, 2, 2, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(MultiplicationBroadcastFixture4D1D, "ParseMultiplicationBroadcast4D1D")
+BOOST_FIXTURE_TEST_CASE(ParseMultiplicationBroadcast4D1D, MultiplicationBroadcastFixture4D1D)
 {
     using armnn::DataType;
     RunTest<4, DataType::Float32>(0, {{ "inputTensor1", { 0.0f,  1.0f,  2.0f,
@@ -129,7 +133,7 @@ struct MultiplicationBroadcastFixture1D4D : public MultiplicationFixture
     MultiplicationBroadcastFixture1D4D() : MultiplicationFixture("[ 1 ]", "[ 1, 2, 2, 3 ]", "[ 1, 2, 2, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(MultiplicationBroadcastFixture1D4D, "ParseMultiplicationBroadcast1D4D")
+BOOST_FIXTURE_TEST_CASE(ParseMultiplicationBroadcast1D4D, MultiplicationBroadcastFixture1D4D)
 {
     using armnn::DataType;
     RunTest<4, DataType::Float32>(0, {{ "inputTensor1", { 3.0f } },
@@ -143,4 +147,4 @@ TEST_CASE_FIXTURE(MultiplicationBroadcastFixture1D4D, "ParseMultiplicationBroadc
                                                          27.0f, 30.0f, 33.0f } } });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

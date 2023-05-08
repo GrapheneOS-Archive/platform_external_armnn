@@ -1,13 +1,17 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SplitVFixture : public ParserFlatbuffersFixture
 {
     explicit SplitVFixture(const std::string& inputShape,
@@ -122,7 +126,7 @@ struct SimpleSplitVAxisOneFixture : SplitVFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitVAxisOneFixture, "ParseAxisOneSplitVTwo")
+BOOST_FIXTURE_TEST_CASE(ParseAxisOneSplitVTwo, SimpleSplitVAxisOneFixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -144,7 +148,7 @@ struct SimpleSplitVAxisTwoFixture : SplitVFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitVAxisTwoFixture, "ParseAxisTwoSplitVTwo")
+BOOST_FIXTURE_TEST_CASE(ParseAxisTwoSplitVTwo, SimpleSplitVAxisTwoFixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -166,7 +170,7 @@ struct SimpleSplitVAxisThreeFixture : SplitVFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitVAxisThreeFixture, "ParseAxisThreeSplitVTwo")
+BOOST_FIXTURE_TEST_CASE(ParseAxisThreeSplitVTwo, SimpleSplitVAxisThreeFixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -188,7 +192,7 @@ struct SimpleSplitVAxisFourFixture : SplitVFixture
     {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitVAxisFourFixture, "ParseAxisFourSplitVTwo")
+BOOST_FIXTURE_TEST_CASE(ParseAxisFourSplitVTwo, SimpleSplitVAxisFourFixture)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -202,4 +206,4 @@ TEST_CASE_FIXTURE(SimpleSplitVAxisFourFixture, "ParseAxisFourSplitVTwo")
           {"outputTensor2", { 4.0f, 8.0f, 12.0f, 16.0f, 20.0f, 24.0f, 28.0f, 32.0f } } } );
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

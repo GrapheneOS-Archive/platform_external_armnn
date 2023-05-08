@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLStackLayer.h>
 
@@ -15,12 +15,10 @@ arm_compute::Status ClStackWorkloadValidate(const std::vector<const TensorInfo*>
                                             const TensorInfo& output,
                                             const StackDescriptor& descriptor);
 
-class ClStackWorkload : public ClBaseWorkload<StackQueueDescriptor>
+class ClStackWorkload : public BaseWorkload<StackQueueDescriptor>
 {
 public:
-    ClStackWorkload(const StackQueueDescriptor& descriptor,
-                    const WorkloadInfo& info,
-                    const arm_compute::CLCompileContext& clCompileContext);
+    ClStackWorkload(const StackQueueDescriptor& descriptor, const WorkloadInfo& info);
 
     void Execute() const override;
 

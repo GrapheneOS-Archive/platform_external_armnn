@@ -1,20 +1,12 @@
 //
-// Copyright © 2019,2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
 #include <armnn/Utils.hpp>
-#include <ctype.h>
 #include <iostream>
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include <armnn/Exceptions.hpp>
 
 namespace armnn
 {
@@ -37,44 +29,6 @@ inline std::string LevelToString(LogSeverity level)
             return "Fatal";
         default:
             return "Log";
-    }
-}
-
-inline LogSeverity StringToLogLevel(std::string level)
-{
-    // Transfer to lower case
-    std::transform(level.begin(), level.end(), level.begin(),
-                   [](unsigned char c){ return std::tolower(c); }
-    );
-
-    if (level == "trace")
-    {
-        return LogSeverity::Trace;
-    }
-    else if (level == "debug")
-    {
-        return LogSeverity::Debug;
-    }
-    else if (level == "info")
-    {
-        return LogSeverity::Info;
-    }
-    else if (level == "warning")
-    {
-        return LogSeverity::Warning;
-    }
-    else if (level == "error")
-    {
-        return LogSeverity::Error;
-    }
-    else if (level == "fatal")
-    {
-        return LogSeverity::Fatal;
-    }
-    else
-    {
-        throw armnn::Exception("Unknown severity level for logging: '" + level +
-                               "'. Valid options: trace, debug, info, warning, error, fatal");
     }
 }
 
@@ -127,15 +81,7 @@ struct ScopedRecord
     ScopedRecord& operator=(const ScopedRecord&) = delete;
     ScopedRecord& operator=(ScopedRecord&&) = delete;
 
-    ScopedRecord(ScopedRecord&& other)
-        : m_LogSinks(other.m_LogSinks)
-        , m_Os(std::move(other.m_Os))
-        , m_Enabled(other.m_Enabled)
-    {
-        // Disable the moved-from ScopedRecord, to prevent it from sending its (now empty) message to
-        // its sinks.
-        other.m_Enabled = false;
-    }
+    ScopedRecord(ScopedRecord&& other) = default;
 
     template<typename Streamable>
     ScopedRecord& operator<<(const Streamable& s)
@@ -163,7 +109,11 @@ public:
     {
     }
 
-    static SimpleLogger& Get();
+    static SimpleLogger& Get()
+    {
+        static SimpleLogger<Level> logger;
+        return logger;
+    }
 
     void Enable(bool enable = true)
     {
@@ -172,7 +122,8 @@ public:
 
     ScopedRecord StartNewRecord()
     {
-        return ScopedRecord(m_Sinks, Level, m_Enable);
+        ScopedRecord record(m_Sinks, Level, m_Enable);
+        return record;
     }
 
     void RemoveAllSinks()

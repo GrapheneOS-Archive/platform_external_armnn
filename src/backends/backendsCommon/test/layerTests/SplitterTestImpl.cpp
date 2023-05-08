@@ -1,18 +1,18 @@
 //
-// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "SplitterTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -22,7 +22,7 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
-    float qScale = 1.0f,
+    float qScale = 0.0f,
     int32_t qOffset = 0)
 {
     IgnoreUnused(memoryManager);
@@ -46,6 +46,7 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
     unsigned int outputWidth2 = inputWidth;
     unsigned int outputHeight2 = inputHeight;
     unsigned int outputChannels2 = 2;
+
 
     // Define the tensor descriptors.
     armnn::TensorInfo inputTensorInfo({ inputChannels, inputHeight, inputWidth }, ArmnnType, qScale, qOffset);
@@ -74,8 +75,13 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
         outputTensorInfo4.SetQuantizationOffset(qOffset);
     }
 
-    auto input = armnnUtils::QuantizedVector<T>(
-        {
+    LayerTestResult<T,3> ret1(outputTensorInfo1);
+    LayerTestResult<T,3> ret2(outputTensorInfo2);
+    LayerTestResult<T,3> ret3(outputTensorInfo3);
+    LayerTestResult<T,3> ret4(outputTensorInfo4);
+
+    auto input = MakeTensor<T, 3>(inputTensorInfo, std::vector<T>(
+        armnnUtils::QuantizedVector<T>({
             1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
             6.0f, 7.0f, 8.0f, 9.0f, 10.0f,
             11.0f, 12.0f, 13.0f, 14.0f, 15.0f,
@@ -97,11 +103,12 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
             81.0f, 82.0f, 83.0f, 84.0f, 85.0f,
             86.0f, 87.0f, 88.0f, 89.0f, 90.0f,
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    ));
 
     // Channel 0 of the original input.
-    auto expectedData1 = armnnUtils::QuantizedVector<T>(
-        {
+    ret1.outputExpected = MakeTensor<T, 3>(outputTensorInfo1, std::vector<T>(
+        armnnUtils::QuantizedVector<T>({
             1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
             6.0f, 7.0f, 8.0f, 9.0f, 10.0f,
             11.0f, 12.0f, 13.0f, 14.0f, 15.0f,
@@ -109,11 +116,12 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
             21.0f, 22.0f, 23.0f, 24.0f, 25.0f,
             26.0f, 27.0f, 28.0f, 29.0f, 30.0f,
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    ));
 
     // Channel 1 & 2 of the original input.
-    auto expectedData2 = armnnUtils::QuantizedVector<T>(
-        {
+    ret2.outputExpected = MakeTensor<T, 3>(outputTensorInfo2, std::vector<T>(
+        armnnUtils::QuantizedVector<T>({
             31.0f, 32.0f, 33.0f, 34.0f, 35.0f,
             36.0f, 37.0f, 38.0f, 39.0f, 40.0f,
             41.0f, 42.0f, 43.0f, 44.0f, 45.0f,
@@ -128,11 +136,12 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
             81.0f, 82.0f, 83.0f, 84.0f, 85.0f,
             86.0f, 87.0f, 88.0f, 89.0f, 90.0f,
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    ));
 
     // Channel 0 of return 2 (i.e. channels 1 and 2 of the original input).
-    auto expectedData3 = armnnUtils::QuantizedVector<T>(
-        {
+    ret3.outputExpected = MakeTensor<T, 3>(outputTensorInfo3, std::vector<T>(
+        armnnUtils::QuantizedVector<T>({
             31.0f, 32.0f, 33.0f, 34.0f, 35.0f,
             36.0f, 37.0f, 38.0f, 39.0f, 40.0f,
             41.0f, 42.0f, 43.0f, 44.0f, 45.0f,
@@ -140,11 +149,12 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
             51.0f, 52.0f, 53.0f, 54.0f, 55.0f,
             56.0f, 57.0f, 58.0f, 59.0f, 60.0f,
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    ));
 
     // Channel 1 of return 2.
-    auto expectedData4 = armnnUtils::QuantizedVector<T>(
-        {
+    ret4.outputExpected = MakeTensor<T, 3>(outputTensorInfo4, std::vector<T>(
+        armnnUtils::QuantizedVector<T>({
             61.0f, 62.0f, 63.0f, 64.0f, 65.0f,
             66.0f, 67.0f, 68.0f, 69.0f, 70.0f,
             71.0f, 72.0f, 73.0f, 74.0f, 75.0f,
@@ -152,12 +162,8 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
             81.0f, 82.0f, 83.0f, 84.0f, 85.0f,
             86.0f, 87.0f, 88.0f, 89.0f, 90.0f,
         },
-        qScale, qOffset);
-
-    std::vector<T> actualData1(outputTensorInfo1.GetNumElements());
-    std::vector<T> actualData2(outputTensorInfo2.GetNumElements());
-    std::vector<T> actualData3(outputTensorInfo3.GetNumElements());
-    std::vector<T> actualData4(outputTensorInfo4.GetNumElements());
+        qScale, qOffset)
+    ));
 
     // NOTE: as a corollary of the splitting of x and y restriction the x and y values of the view origins
     //       have to be zero, the co-ordinates are as per the tensor info above channels, height/y, width/x
@@ -207,20 +213,18 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
     data.m_ViewOrigins.push_back(window1);
     data.m_ViewOrigins.push_back(window2);
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Splitter,
-                                                                                data,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSplitter(data, info);
 
     inputHandle->Allocate();
     outputHandle1->Allocate();
     outputHandle2->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0]);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualData1.data(), outputHandle1.get());
-    CopyDataFromITensorHandle(actualData2.data(), outputHandle2.get());
+    CopyDataFromITensorHandle(&ret1.output[0][0][0], outputHandle1.get());
+    CopyDataFromITensorHandle(&ret2.output[0][0][0], outputHandle2.get());
 
     // Do the second split.
     armnn::SplitterQueueDescriptor data2;
@@ -232,22 +236,15 @@ std::vector<LayerTestResult<T,3>> SplitterTestCommon(
     data2.m_ViewOrigins.push_back(window3);
     data2.m_ViewOrigins.push_back(window4);
 
-    std::unique_ptr<armnn::IWorkload> workload2 = workloadFactory.CreateWorkload(armnn::LayerType::Splitter,
-                                                                                 data2,
-                                                                                 info2);
+    std::unique_ptr<armnn::IWorkload> workload2 = workloadFactory.CreateSplitter(data2, info2);
 
     outputHandle3->Allocate();
     outputHandle4->Allocate();
 
     ExecuteWorkload(*workload2, memoryManager);
 
-    CopyDataFromITensorHandle(actualData3.data(), outputHandle3.get());
-    CopyDataFromITensorHandle(actualData4.data(), outputHandle4.get());
-
-    LayerTestResult<T,3> ret1(actualData1, expectedData1, outputHandle1->GetShape(), outputTensorInfo1.GetShape());
-    LayerTestResult<T,3> ret2(actualData2, expectedData2, outputHandle2->GetShape(), outputTensorInfo2.GetShape());
-    LayerTestResult<T,3> ret3(actualData3, expectedData3, outputHandle3->GetShape(), outputTensorInfo3.GetShape());
-    LayerTestResult<T,3> ret4(actualData4, expectedData4, outputHandle4->GetShape(), outputTensorInfo4.GetShape());
+    CopyDataFromITensorHandle(&ret3.output[0][0][0], outputHandle3.get());
+    CopyDataFromITensorHandle(&ret4.output[0][0][0], outputHandle4.get());
 
     std::vector<LayerTestResult<T,3>> ret = {ret1, ret2, ret3, ret4,};
 
@@ -262,10 +259,10 @@ LayerTestResult<T, 3> CopyViaSplitterTestImpl(
     float qScale, int32_t qOffset)
 {
     IgnoreUnused(memoryManager);
-
     const armnn::TensorInfo tensorInfo({ 3, 6, 5 }, ArmnnType, qScale, qOffset);
-    auto input = armnnUtils::QuantizedVector<T>(
-         {
+    auto input = MakeTensor<T, 3>(
+        tensorInfo,
+        armnnUtils::QuantizedVector<T>({
              1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
              6.0f, 7.0f, 8.0f, 9.0f, 10.0f,
             11.0f, 12.0f, 13.0f, 14.0f, 15.0f,
@@ -287,9 +284,7 @@ LayerTestResult<T, 3> CopyViaSplitterTestImpl(
             81.0f, 82.0f, 83.0f, 84.0f, 85.0f,
             86.0f, 87.0f, 88.0f, 89.0f, 90.0f,
         },
-        qScale, qOffset);
-
-    std::vector<T> actualOutput(tensorInfo.GetNumElements());
+        qScale, qOffset));
 
     std::vector<unsigned int> origin = { 0, 0, 0 };
     armnn::SplitterQueueDescriptor::ViewOrigin window(origin);
@@ -309,23 +304,20 @@ LayerTestResult<T, 3> CopyViaSplitterTestImpl(
 
     data.m_ViewOrigins.push_back(window);
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Splitter,
-                                                                                data,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSplitter(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0]);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    LayerTestResult<T, 3> ret(tensorInfo);
+    CopyDataFromITensorHandle(&ret.output[0][0][0], outputHandle.get());
+    ret.outputExpected = input;
 
-    return LayerTestResult<T, 3>(actualOutput,
-                                 input,
-                                 outputHandle->GetShape(),
-                                 tensorInfo.GetShape());
+    return ret;
 }
 
 } // anonymous namespace

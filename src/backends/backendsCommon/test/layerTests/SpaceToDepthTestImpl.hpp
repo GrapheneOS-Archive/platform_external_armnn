@@ -4,12 +4,12 @@
 //
 #pragma once
 
-#include <armnnTestUtils/LayerTestResult.hpp>
+#include "LayerTestResult.hpp"
 
 #include <Half.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 LayerTestResult<uint8_t, 4> SpaceToDepthNchwAsymmQ8Test(
     armnn::IWorkloadFactory& workloadFactory,

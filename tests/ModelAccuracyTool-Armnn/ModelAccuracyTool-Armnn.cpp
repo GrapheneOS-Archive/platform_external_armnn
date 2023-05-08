@@ -7,9 +7,7 @@
 #include "../InferenceTest.hpp"
 #include "ModelAccuracyChecker.hpp"
 #include "armnnDeserializer/IDeserializer.hpp"
-
-#include <armnnUtils/Filesystem.hpp>
-#include <armnnUtils/TContainer.hpp>
+#include <Filesystem.hpp>
 
 #include <cxxopts/cxxopts.hpp>
 #include <map>
@@ -28,17 +26,17 @@ using namespace armnn::test;
  * @param[in] imageDirectoryPath  Path to directory containing validation images
  * @param[in] begIndex            Begin index of images to be loaded. Inclusive
  * @param[in] endIndex            End index of images to be loaded. Inclusive
- * @param[in] excludelistPath     Path to excludelist file
+ * @param[in] blacklistPath       Path to blacklist file
  * @return A map mapping image file names to their corresponding ground-truth labels
  */
 map<std::string, std::string> LoadValidationImageFilenamesAndLabels(const string& validationLabelPath,
                                                                     const string& imageDirectoryPath,
                                                                     size_t begIndex             = 0,
                                                                     size_t endIndex             = 0,
-                                                                    const string& excludelistPath = "");
+                                                                    const string& blacklistPath = "");
 
 /** Load model output labels from file
- *
+ * 
  * @pre \p modelOutputLabelsPath exists and is a regular file
  *
  * @param[in] modelOutputLabelsPath path to model output labels file
@@ -63,7 +61,7 @@ int main(int argc, char* argv[])
         std::string inputLayout;
         std::vector<armnn::BackendId> computeDevice;
         std::string validationRange;
-        std::string excludelistPath;
+        std::string blacklistPath;
 
         const std::string backendsMessage = "Which device to run layers on by default. Possible choices: "
                                             + armnn::BackendRegistryInstance().GetBackendIdsAsString();
@@ -78,7 +76,7 @@ int main(int argc, char* argv[])
                     "Path to armnn format model file",
                     cxxopts::value<std::string>(modelPath))
                 ("f,model-format",
-                    "The model format. Supported values: tflite",
+                    "The model format. Supported values: caffe, tensorflow, tflite",
                     cxxopts::value<std::string>(modelFormat))
                 ("i,input-name",
                     "Identifier of the input tensors in the network separated by comma with no space.",
@@ -106,10 +104,10 @@ int main(int argc, char* argv[])
                     "The index starts at 1 and the range is inclusive."
                     "By default the evaluation will be performed on all images.",
                     cxxopts::value<std::string>(validationRange)->default_value("1:0"))
-                ("e,excludelist-path",
-                    "Path to a excludelist file where each line denotes the index of an image to be "
+                ("b,blacklist-path",
+                    "Path to a blacklist file where each line denotes the index of an image to be "
                     "excluded from evaluation.",
-                    cxxopts::value<std::string>(excludelistPath)->default_value(""));
+                    cxxopts::value<std::string>(blacklistPath)->default_value(""));
 
             auto result = options.parse(argc, argv);
 
@@ -138,6 +136,9 @@ int main(int argc, char* argv[])
         }
         catch (const std::exception& e)
         {
+            // Coverity points out that default_value(...) can throw a bad_lexical_cast,
+            // and that desc.add_options() can throw boost::io::too_few_args.
+            // They really won't in any of these cases.
             ARMNN_ASSERT_MSG(false, "Caught unexpected exception");
             std::cerr << "Fatal internal error: " << e.what() << std::endl;
             return EXIT_FAILURE;
@@ -243,18 +244,19 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        // Validate  excludelist file if it's specified
-        if (!excludelistPath.empty() &&
-            !(fs::exists(excludelistPath) && fs::is_regular_file(excludelistPath)))
+        // Validate  blacklist file if it's specified
+        if (!blacklistPath.empty() &&
+            !(fs::exists(blacklistPath) && fs::is_regular_file(blacklistPath)))
         {
-            ARMNN_LOG(fatal) << "Invalid path to excludelist file at " << excludelistPath;
+            ARMNN_LOG(fatal) << "Invalid path to blacklist file at " << blacklistPath;
             return EXIT_FAILURE;
         }
 
         fs::path pathToDataDir(dataDir);
         const map<std::string, std::string> imageNameToLabel = LoadValidationImageFilenamesAndLabels(
-            validationLabelPath, pathToDataDir.string(), imageBegIndex, imageEndIndex, excludelistPath);
+            validationLabelPath, pathToDataDir.string(), imageBegIndex, imageEndIndex, blacklistPath);
         armnnUtils::ModelAccuracyChecker checker(imageNameToLabel, modelOutputLabels);
+        using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<uint8_t>>;
 
         if (ValidateDirectory(dataDir))
         {
@@ -310,7 +312,15 @@ int main(int argc, char* argv[])
             const unsigned int batchSize = 1;
             // Get normalisation parameters
             SupportedFrontend modelFrontend;
-            if (modelFormat == "tflite")
+            if (modelFormat == "caffe")
+            {
+                modelFrontend = SupportedFrontend::Caffe;
+            }
+            else if (modelFormat == "tensorflow")
+            {
+                modelFrontend = SupportedFrontend::TensorFlow;
+            }
+            else if (modelFormat == "tflite")
             {
                 modelFrontend = SupportedFrontend::TFLite;
             }
@@ -325,8 +335,8 @@ int main(int argc, char* argv[])
                 const std::string imageName = imageEntry.first;
                 std::cout << "Processing image: " << imageName << "\n";
 
-                vector<armnnUtils::TContainer> inputDataContainers;
-                vector<armnnUtils::TContainer> outputDataContainers;
+                vector<TContainer> inputDataContainers;
+                vector<TContainer> outputDataContainers;
 
                 auto imagePath = pathToDataDir / fs::path(imageName);
                 switch (inputTensorDataType)
@@ -370,7 +380,7 @@ int main(int argc, char* argv[])
                     ARMNN_LOG(fatal) << "armnn::IRuntime: Failed to enqueue workload for image: " << imageName;
                 }
 
-                checker.AddImageResult<armnnUtils::TContainer>(imageName, outputDataContainers);
+                checker.AddImageResult<TContainer>(imageName, outputDataContainers);
             }
         }
         else
@@ -407,7 +417,7 @@ map<std::string, std::string> LoadValidationImageFilenamesAndLabels(const string
                                                                     const string& imageDirectoryPath,
                                                                     size_t begIndex,
                                                                     size_t endIndex,
-                                                                    const string& excludelistPath)
+                                                                    const string& blacklistPath)
 {
     // Populate imageFilenames with names of all .JPEG, .PNG images
     std::vector<std::string> imageFilenames;
@@ -445,15 +455,15 @@ map<std::string, std::string> LoadValidationImageFilenamesAndLabels(const string
         throw armnn::Exception("Invalid image index range");
     }
 
-    // Load excludelist if there is one
-    std::vector<unsigned int> excludelist;
-    if (!excludelistPath.empty())
+    // Load blacklist if there is one
+    std::vector<unsigned int> blacklist;
+    if (!blacklistPath.empty())
     {
-        std::ifstream excludelistFile(excludelistPath);
+        std::ifstream blacklistFile(blacklistPath);
         unsigned int index;
-        while (excludelistFile >> index)
+        while (blacklistFile >> index)
         {
-            excludelist.push_back(index);
+            blacklist.push_back(index);
         }
     }
 
@@ -462,25 +472,25 @@ map<std::string, std::string> LoadValidationImageFilenamesAndLabels(const string
     map<std::string, std::string> imageNameToLabel;
     ifstream infile(validationLabelPath);
     size_t imageIndex          = begIndex;
-    size_t excludelistIndexCount = 0;
+    size_t blacklistIndexCount = 0;
     while (std::getline(infile, classification))
     {
         if (imageIndex > endIndex)
         {
             break;
         }
-        // If current imageIndex is included in excludelist, skip the current image
-        if (excludelistIndexCount < excludelist.size() && imageIndex == excludelist[excludelistIndexCount])
+        // If current imageIndex is included in blacklist, skip the current image
+        if (blacklistIndexCount < blacklist.size() && imageIndex == blacklist[blacklistIndexCount])
         {
             ++imageIndex;
-            ++excludelistIndexCount;
+            ++blacklistIndexCount;
             continue;
         }
         imageNameToLabel.insert(std::pair<std::string, std::string>(imageFilenames[imageIndex - 1], classification));
         ++imageIndex;
     }
-    std::cout << excludelistIndexCount << " images in excludelist" << std::endl;
-    std::cout << imageIndex - begIndex - excludelistIndexCount << " images to be loaded" << std::endl;
+    std::cout << blacklistIndexCount << " images blacklisted" << std::endl;
+    std::cout << imageIndex - begIndex - blacklistIndexCount << " images to be loaded" << std::endl;
     return imageNameToLabel;
 }
 

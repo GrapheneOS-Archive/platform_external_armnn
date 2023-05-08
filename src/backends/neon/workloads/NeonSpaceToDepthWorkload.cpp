@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,16 +29,10 @@ arm_compute::Status NeonSpaceToDepthWorkloadValidate(const TensorInfo& input,
     return arm_compute::NESpaceToDepthLayer::validate(&aclInput, &aclOutput, blockSize);
 }
 
-NeonSpaceToDepthWorkload::NeonSpaceToDepthWorkload(const SpaceToDepthQueueDescriptor& descriptor,
+NeonSpaceToDepthWorkload::NeonSpaceToDepthWorkload(const SpaceToDepthQueueDescriptor& desc,
                                                    const WorkloadInfo& info)
-    : NeonBaseWorkload<SpaceToDepthQueueDescriptor>(descriptor, info)
+    : BaseWorkload<SpaceToDepthQueueDescriptor>(desc, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonSpaceToDepthWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonSpaceToDepthWorkload", 1, 1);
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
@@ -46,7 +40,7 @@ NeonSpaceToDepthWorkload::NeonSpaceToDepthWorkload(const SpaceToDepthQueueDescri
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     input.info()->set_data_layout(aclDataLayout);
 
-    int32_t blockSize = armnn::numeric_cast<int32_t>(descriptor.m_Parameters.m_BlockSize);
+    int32_t blockSize = armnn::numeric_cast<int32_t>(desc.m_Parameters.m_BlockSize);
 
     arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
     output.info()->set_data_layout(aclDataLayout);
@@ -60,7 +54,7 @@ void NeonSpaceToDepthWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonSpaceToDepthWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonSpaceToDepthWorkload_Execute");
         m_Layer->run();
     }
 }

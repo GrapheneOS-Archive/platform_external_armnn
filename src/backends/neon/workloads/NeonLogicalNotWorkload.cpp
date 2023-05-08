@@ -29,14 +29,8 @@ arm_compute::Status NeonLogicalNotWorkloadValidate(const TensorInfo& input,
 
 NeonLogicalNotWorkload::NeonLogicalNotWorkload(const ElementwiseUnaryQueueDescriptor& descriptor,
                                                const WorkloadInfo& info)
-    : NeonBaseWorkload<ElementwiseUnaryQueueDescriptor>(descriptor, info)
+    : BaseWorkload<ElementwiseUnaryQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonLogicalNotWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonLogicalNotWorkload", 1, 1);
 
     arm_compute::ITensor& input  = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -47,7 +41,7 @@ NeonLogicalNotWorkload::NeonLogicalNotWorkload(const ElementwiseUnaryQueueDescri
 
 void NeonLogicalNotWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonLogicalNotWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonLogicalNotWorkload_Execute");
     m_LogicalNotLayer.run();
 }
 

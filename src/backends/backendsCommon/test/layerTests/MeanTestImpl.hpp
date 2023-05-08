@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include <armnnTestUtils/LayerTestResult.hpp>
+#include "LayerTestResult.hpp"
 
 #include <ResolveType.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace
 {
@@ -40,10 +40,11 @@ LayerTestResult<T, OutputDim> MeanTestHelper(
     outputTensorInfo.SetQuantizationScale(scale);
     outputTensorInfo.SetQuantizationOffset(offset);
 
-    auto input = ConvertToDataType<ArmnnType>(inputData, inputTensorInfo);
+    auto input = MakeTensor<T, InputDim>(inputTensorInfo, ConvertToDataType<ArmnnType>(inputData, inputTensorInfo));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<T> expectedOutput = ConvertToDataType<ArmnnType>(outputData, outputTensorInfo);
+    LayerTestResult<T, OutputDim> result(outputTensorInfo);
+    result.outputExpected = MakeTensor<T, OutputDim>(
+            outputTensorInfo, ConvertToDataType<ArmnnType>(outputData, outputTensorInfo));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -55,22 +56,19 @@ LayerTestResult<T, OutputDim> MeanTestHelper(
     AddInputToWorkload(data,  info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Mean, data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateMean(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(result.output.origin(), outputHandle.get());
 
-    return LayerTestResult<T, OutputDim>(actualOutput,
-                                         expectedOutput,
-                                         outputHandle->GetShape(),
-                                         outputTensorInfo.GetShape());
+    return result;
 }
 
 } // anonymous namespace

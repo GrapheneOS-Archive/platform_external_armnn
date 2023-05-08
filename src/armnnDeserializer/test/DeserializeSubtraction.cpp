@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_Subtraction")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct SubtractionFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit SubtractionFixture(const std::string & inputShape1,
@@ -144,7 +146,7 @@ struct SimpleSubtractionFixtureBroadcast : SubtractionFixture
                                                              "Float32") {}
 };
 
-TEST_CASE_FIXTURE(SimpleSubtractionFixture, "SubtractionQuantisedAsymm8")
+BOOST_FIXTURE_TEST_CASE(SubtractionQuantisedAsymm8, SimpleSubtractionFixture)
 {
     RunTest<2, armnn::DataType::QAsymmU8>(
         0,
@@ -153,7 +155,7 @@ TEST_CASE_FIXTURE(SimpleSubtractionFixture, "SubtractionQuantisedAsymm8")
         {{"outputLayer", { 1, 3, 5, 7 }}});
 }
 
-TEST_CASE_FIXTURE(SimpleSubtractionFixture2, "SubtractionFloat32")
+BOOST_FIXTURE_TEST_CASE(SubtractionFloat32, SimpleSubtractionFixture2)
 {
     RunTest<2, armnn::DataType::Float32>(
         0,
@@ -162,7 +164,7 @@ TEST_CASE_FIXTURE(SimpleSubtractionFixture2, "SubtractionFloat32")
         {{"outputLayer", { 1, 3, 5, 7 }}});
 }
 
-TEST_CASE_FIXTURE(SimpleSubtractionFixtureBroadcast, "SubtractionBroadcast")
+BOOST_FIXTURE_TEST_CASE(SubtractionBroadcast, SimpleSubtractionFixtureBroadcast)
 {
     RunTest<2, armnn::DataType::Float32>(
         0,
@@ -171,4 +173,4 @@ TEST_CASE_FIXTURE(SimpleSubtractionFixtureBroadcast, "SubtractionBroadcast")
         {{"outputLayer", { 2, 3, 4, 5 }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -5,12 +5,10 @@
 
 #pragma once
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 
 #include <armnn/INetwork.hpp>
 #include <ResolveType.hpp>
-
-#include <doctest/doctest.h>
 
 namespace
 {
@@ -43,12 +41,11 @@ void DequantizeEndToEndLayerTestImpl(const std::vector<BackendId>& backends,
 
     inputInfo.SetQuantizationScale(scale);
     inputInfo.SetQuantizationOffset(offset);
-    inputInfo.SetConstant(true);
 
     // Builds up the structure of the network
     armnn::INetworkPtr net = CreateDequantizeNetwork<T>(inputInfo, outputInfo);
 
-    CHECK(net);
+    BOOST_TEST_CHECKPOINT("create a network");
 
     std::map<int, std::vector<T>> inputTensorData = { { 0, input } };
     std::map<int, std::vector<float>> expectedOutputData = { { 0, expectedOutput } };

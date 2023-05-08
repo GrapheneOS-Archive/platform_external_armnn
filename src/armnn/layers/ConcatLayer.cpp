@@ -7,8 +7,8 @@
 
 #include <armnn/TypesUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #include <queue>
 
@@ -33,7 +33,7 @@ std::unique_ptr<IWorkload> ConcatLayer::CreateWorkload(const IWorkloadFactory& f
     }
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Concat, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateConcat(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 template<typename FactoryType>
@@ -318,9 +318,9 @@ void ConcatLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ConcatLayer");
 }
 
-void ConcatLayer::ExecuteStrategy(IStrategy& strategy) const
+void ConcatLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitConcatLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn armnn

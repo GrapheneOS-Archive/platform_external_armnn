@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_Normalization")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct NormalizationFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit NormalizationFixture(const std::string &inputShape,
@@ -115,7 +117,7 @@ struct FloatNhwcLocalBrightnessAcrossNormalizationFixture : NormalizationFixture
 };
 
 
-TEST_CASE_FIXTURE(FloatNhwcLocalBrightnessAcrossNormalizationFixture, "Float32NormalizationNhwcDataLayout")
+BOOST_FIXTURE_TEST_CASE(Float32NormalizationNhwcDataLayout, FloatNhwcLocalBrightnessAcrossNormalizationFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0, { 1.0f, 2.0f, 3.0f, 4.0f,
                                               5.0f, 6.0f, 7.0f, 8.0f },
@@ -129,7 +131,7 @@ struct FloatNchwLocalBrightnessWithinNormalizationFixture : NormalizationFixture
         "Float32", "1", "0", "NCHW") {}
 };
 
-TEST_CASE_FIXTURE(FloatNchwLocalBrightnessWithinNormalizationFixture, "Float32NormalizationNchwDataLayout")
+BOOST_FIXTURE_TEST_CASE(Float32NormalizationNchwDataLayout, FloatNchwLocalBrightnessWithinNormalizationFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0, { 1.0f, 2.0f, 3.0f, 4.0f,
                                               5.0f, 6.0f, 7.0f, 8.0f },
@@ -137,4 +139,5 @@ TEST_CASE_FIXTURE(FloatNchwLocalBrightnessWithinNormalizationFixture, "Float32No
                                               0.0285714f, 0.0342857f, 0.04f, 0.0457143f });
 }
 
-}
+
+BOOST_AUTO_TEST_SUITE_END()

@@ -1,12 +1,14 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
-TEST_SUITE("TensorflowLiteParser_Slice")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SliceFixture : public ParserFlatbuffersFixture
 {
     explicit SliceFixture(const std::string & inputShape,
@@ -122,14 +124,14 @@ struct SliceFixtureSingleDim : SliceFixture
                                            "[ 1, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SliceFixtureSingleDim, "SliceSingleDim")
+BOOST_FIXTURE_TEST_CASE(SliceSingleDim, SliceFixtureSingleDim)
 {
     RunTest<3, armnn::DataType::Float32>(
       0,
       {{"inputTensor", { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 }}},
       {{"outputTensor", { 3, 3, 3 }}});
 
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({1,1,3})));
 }
 
@@ -141,14 +143,14 @@ struct SliceFixtureD123 : SliceFixture
                                       "[ 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SliceFixtureD123, "SliceD123")
+BOOST_FIXTURE_TEST_CASE(SliceD123, SliceFixtureD123)
 {
     RunTest<3, armnn::DataType::Float32>(
         0,
         {{"inputTensor", { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 }}},
         {{"outputTensor", { 3, 3, 3, 4, 4, 4 }}});
 
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({1,2,3})));
 }
 
@@ -160,26 +162,26 @@ struct SliceFixtureD213 : SliceFixture
                                       "[ 2, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0 ]") {}
 };
 
-TEST_CASE_FIXTURE(SliceFixtureD213, "SliceD213")
+BOOST_FIXTURE_TEST_CASE(SliceD213, SliceFixtureD213)
 {
     RunTest<3, armnn::DataType::Float32>(
         0,
         {{"inputTensor", { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6 }}},
         {{"outputTensor", { 3, 3, 3, 5, 5, 5 }}});
 
-    CHECK((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
+    BOOST_TEST((m_Parser->GetNetworkOutputBindingInfo(0, "outputTensor").second.GetShape()
                 == armnn::TensorShape({2,1,3})));
 }
 
 struct DynamicSliceFixtureD213 : SliceFixture
 {
     DynamicSliceFixtureD213() : SliceFixture("[ 3, 2, 3 ]",
-                                             "[ ]",
-                                             "[ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]",
-                                             "[ 255, 255, 255, 255, 1, 0, 0, 0, 255, 255, 255, 255 ]") {}
+                                            "[ ]",
+                                              "[ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]",
+                                                "[ 2, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0 ]") {}
 };
 
-TEST_CASE_FIXTURE(DynamicSliceFixtureD213, "DynamicSliceD213")
+BOOST_FIXTURE_TEST_CASE(DynamicSliceD213, DynamicSliceFixtureD213)
 {
     RunTest<3, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -187,4 +189,5 @@ TEST_CASE_FIXTURE(DynamicSliceFixtureD213, "DynamicSliceD213")
         {{"outputTensor", { 3, 3, 3, 5, 5, 5 }}},
         true);
 }
-}
+
+BOOST_AUTO_TEST_SUITE_END()

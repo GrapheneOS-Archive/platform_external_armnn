@@ -1,11 +1,9 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
-
-#include "NeonBaseWorkload.hpp"
 
 #include <neon/workloads/NeonWorkloadUtils.hpp>
 
@@ -19,7 +17,7 @@ arm_compute::Status NeonComparisonWorkloadValidate(const TensorInfo& input0,
                                                    const TensorInfo& output,
                                                    const ComparisonDescriptor& descriptor);
 
-class NeonComparisonWorkload : public NeonBaseWorkload<ComparisonQueueDescriptor>
+class NeonComparisonWorkload : public BaseWorkload<ComparisonQueueDescriptor>
 {
 public:
     NeonComparisonWorkload(const ComparisonQueueDescriptor& descriptor, const WorkloadInfo& info);

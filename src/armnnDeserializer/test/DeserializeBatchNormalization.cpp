@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_BatchNormalization")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct BatchNormalizationFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit BatchNormalizationFixture(const std::string &inputShape,
@@ -158,7 +160,7 @@ struct BatchNormFixture : BatchNormalizationFixture
                                                  "NHWC"){}
 };
 
-TEST_CASE_FIXTURE(BatchNormFixture, "BatchNormalizationFloat32")
+BOOST_FIXTURE_TEST_CASE(BatchNormalizationFloat32, BatchNormFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0,
                                          {{"InputLayer", { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f }}},
@@ -167,4 +169,4 @@ TEST_CASE_FIXTURE(BatchNormFixture, "BatchNormalizationFloat32")
                                            1.4138602f,  2.12079024f,  2.8277204f }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

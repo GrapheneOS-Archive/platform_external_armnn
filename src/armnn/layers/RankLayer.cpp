@@ -1,5 +1,5 @@
 //
-// Copyright © 2020-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,8 +7,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -22,18 +22,13 @@ std::unique_ptr<IWorkload> RankLayer::CreateWorkload(const IWorkloadFactory& fac
     RankQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Rank, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateRank(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 Layer* RankLayer::Clone(Graph& graph) const
 {
     RankLayer* clone = CloneBase<RankLayer>(graph, GetName());
     return clone;
-}
-
-std::vector<TensorShape> RankLayer::InferOutputShapes(const std::vector<TensorShape>&) const
-{
-    return std::vector<TensorShape>({ TensorShape(Dimensionality::Scalar) });
 }
 
 void RankLayer::ValidateTensorShapesFromInputs()
@@ -46,10 +41,9 @@ void RankLayer::ValidateTensorShapesFromInputs()
     VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
     ValidateAndCopyShape(outputShape, inferredShape, m_ShapeInferenceMethod, "RankLayer");
 }
-
-void RankLayer::ExecuteStrategy(IStrategy& strategy) const
+void RankLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, BaseDescriptor(), {}, GetName());
+    visitor.VisitRankLayer(this, GetName());
 }
 
 } //namespace armnn

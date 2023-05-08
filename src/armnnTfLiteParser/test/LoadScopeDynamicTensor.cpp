@@ -6,9 +6,12 @@
 #include "armnnTfLiteParser/ITfLiteParser.hpp"
 #include "ParserFlatbuffersFixture.hpp"
 
+#include <string>
 
-TEST_SUITE("TensorflowLiteParser_LoadScopeDynamicTensor")
-{
+#include <boost/test/unit_test.hpp>
+
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct LoadScopeDynamicTensorFixture : public ParserFlatbuffersFixture
 {
     explicit LoadScopeDynamicTensorFixture(const std::string& shape0,
@@ -141,7 +144,7 @@ struct LoadScopeDynamicTensor2Fixture : LoadScopeDynamicTensorFixture
     LoadScopeDynamicTensor2Fixture() : LoadScopeDynamicTensorFixture("[ 1, 3, 3, 2 ]", "[ ]", "[ 1, 1, 1, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensor0Fixture, "LoadScopeDynamicTensor0")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensor0, LoadScopeDynamicTensor0Fixture)
 {
     RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -150,7 +153,7 @@ TEST_CASE_FIXTURE(LoadScopeDynamicTensor0Fixture, "LoadScopeDynamicTensor0")
         true);
 }
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensor1Fixture, "LoadScopeDynamicTensor1")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensor1, LoadScopeDynamicTensor1Fixture)
 {
     RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -159,7 +162,7 @@ TEST_CASE_FIXTURE(LoadScopeDynamicTensor1Fixture, "LoadScopeDynamicTensor1")
         true);
 }
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensor2Fixture, "LoadScopeDynamicTensor2")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensor2, LoadScopeDynamicTensor2Fixture)
 {
   RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -337,7 +340,7 @@ struct LoadScopeDynamicTensorBroadcasting1DFixture : LoadScopeDynamicTensorBroad
                                                                                               "[ 1, 2, 3, 2 ]") {}
 };
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting3DFixture, "LoadScopeDynamicTensorBroadcasting3D")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensorBroadcasting3D, LoadScopeDynamicTensorBroadcasting3DFixture)
 {
     RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -349,7 +352,7 @@ TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting3DFixture, "LoadScopeDynamic
         true);
 }
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting2DFixture, "LoadScopeDynamicTensorBroadcasting2D")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensorBroadcasting2D, LoadScopeDynamicTensorBroadcasting2DFixture)
 {
     RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -361,7 +364,7 @@ TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting2DFixture, "LoadScopeDynamic
         true);
 }
 
-TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting1DFixture, "LoadScopeDynamicTensorBroadcasting1D")
+BOOST_FIXTURE_TEST_CASE(LoadScopeDynamicTensorBroadcasting1D, LoadScopeDynamicTensorBroadcasting1DFixture)
 {
     RunTest<4, armnn::DataType::Float32, armnn::DataType::Float32>(
         0,
@@ -373,4 +376,4 @@ TEST_CASE_FIXTURE(LoadScopeDynamicTensorBroadcasting1DFixture, "LoadScopeDynamic
         true);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()
