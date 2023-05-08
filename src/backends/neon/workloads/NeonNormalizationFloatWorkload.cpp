@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,6 +19,7 @@ namespace armnn
 
 namespace
 {
+using ACLMemManagerOnDemand = std::shared_ptr<arm_compute::MemoryManagerOnDemand>;
 
 bool IsNeonNormalizationDescriptorSupported(const NormalizationDescriptor& parameters,
                                             Optional<std::string&> reasonIfUnsupported)
@@ -58,10 +59,16 @@ arm_compute::Status NeonNormalizationWorkloadValidate(const TensorInfo& input,
 }
 
 NeonNormalizationFloatWorkload::NeonNormalizationFloatWorkload(const NormalizationQueueDescriptor& descriptor,
-                                                   const WorkloadInfo& info,
-                                                   std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager)
+                                                               const WorkloadInfo& info,
+                                                               ACLMemManagerOnDemand& memoryManager)
     : FloatWorkload<NormalizationQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonNormalizationWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("NeonNormalizationFloatWorkload", 1, 1);
     std::string reasonIfUnsupported;
     if (!IsNeonNormalizationDescriptorSupported(m_Data.m_Parameters, Optional<std::string&>(reasonIfUnsupported)))
@@ -99,8 +106,46 @@ NeonNormalizationFloatWorkload::NeonNormalizationFloatWorkload(const Normalizati
 
 void NeonNormalizationFloatWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonNormalizationFloatWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonNormalizationFloatWorkload_Execute", this->GetGuid());
     m_NormalizationLayer->run();
+}
+
+void NeonNormalizationFloatWorkload::ReplaceInputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+// Replace output tensor handle with the given TensorHandle
+void NeonNormalizationFloatWorkload::ReplaceOutputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+void NeonNormalizationFloatWorkload::Reconfigure()
+{
+    throw armnn::UnimplementedException("Reconfigure not implemented for this workload");
 }
 
 } //namespace armnn

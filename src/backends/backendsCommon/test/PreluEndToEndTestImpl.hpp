@@ -8,7 +8,9 @@
 
 #include <armnn/INetwork.hpp>
 
-#include <backendsCommon/test/CommonTestUtils.hpp>
+#include <CommonTestUtils.hpp>
+
+#include <doctest/doctest.h>
 
 namespace
 {
@@ -49,14 +51,16 @@ void PreluEndToEnd(const std::vector<BackendId>& backends,
 
     inputInfo.SetQuantizationOffset(qOffset);
     inputInfo.SetQuantizationScale(qScale);
+    inputInfo.SetConstant(true);
     alphaInfo.SetQuantizationOffset(qOffset);
     alphaInfo.SetQuantizationScale(qScale);
+    alphaInfo.SetConstant(true);
     outputInfo.SetQuantizationOffset(qOffset);
     outputInfo.SetQuantizationScale(qScale);
 
     INetworkPtr net = CreatePreluNetwork<ArmnnType>(inputInfo, alphaInfo, outputInfo);
 
-    BOOST_TEST_CHECKPOINT("Create a network");
+    CHECK(net);
 
     std::map<int, std::vector<T>> inputTensorData          = { { 0, inputData }, { 1, alphaData} };
     std::map<int, std::vector<T>> expectedOutputTensorData = { { 0, expectedOutputData } };

@@ -64,13 +64,36 @@ private:
     std::string m_Message;
 };
 
-class TimeoutException : public ProfilingException
+class BackendProfilingException : public ProfilingException
+{
+public:
+    using ProfilingException::ProfilingException;
+};
+
+class BadOptionalAccessException : public ProfilingException
+{
+    using ProfilingException::ProfilingException;
+};
+
+class BufferExhaustion : public ProfilingException
 {
 public:
     using ProfilingException::ProfilingException;
 };
 
 class InvalidArgumentException : public ProfilingException
+{
+public:
+    using ProfilingException::ProfilingException;
+};
+
+class TimeoutException : public ProfilingException
+{
+public:
+    using ProfilingException::ProfilingException;
+};
+
+class UnimplementedException : public ProfilingException
 {
 public:
     using ProfilingException::ProfilingException;

@@ -5,7 +5,7 @@
 
 #include "QuantizedLstmEndToEndTestImpl.hpp"
 
-#include "CommonTestUtils.hpp"
+#include <CommonTestUtils.hpp>
 #include "EndToEndTestImpl.hpp"
 
 #include <ResolveType.hpp>
@@ -15,23 +15,21 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <type_traits>
 
 namespace
 {
 
-using MultiArray = const boost::multi_array<uint8_t, 2>&;
-
-armnn::INetworkPtr CreateQuantizedLstmNetwork(MultiArray input,
-                                              MultiArray expectedOutput)
+armnn::INetworkPtr CreateQuantizedLstmNetwork(armnn::TensorShape& inputShape,
+                                              armnn::TensorShape& outputExpectedShape)
 {
-    auto batchSize = armnn::numeric_cast<unsigned int>(input.shape()[0]);
-    auto inputSize = armnn::numeric_cast<unsigned int>(input.shape()[1]);
-    auto outputSize = armnn::numeric_cast<unsigned int>(expectedOutput.shape()[1]);
+    auto batchSize = armnn::numeric_cast<unsigned int>(inputShape[0]);
+    auto inputSize = armnn::numeric_cast<unsigned int>(inputShape[1]);
+    auto outputSize = armnn::numeric_cast<unsigned int>(outputExpectedShape[1]);
 
     float inputOutputScale = 0.0078125f;
     int32_t inputOutputOffset = 128;
@@ -48,14 +46,16 @@ armnn::INetworkPtr CreateQuantizedLstmNetwork(MultiArray input,
     armnn::TensorInfo inputWeightsInfo({outputSize, inputSize},
                                        armnn::DataType::QAsymmU8,
                                        weightsScale,
-                                       weightsOffset);
+                                       weightsOffset,
+                                       true);
 
     armnn::TensorInfo recurrentWeightsInfo({outputSize, outputSize},
                                            armnn::DataType::QAsymmU8,
                                            weightsScale,
-                                           weightsOffset);
+                                           weightsOffset,
+                                           true);
 
-    armnn::TensorInfo biasInfo({outputSize}, armnn::DataType::Signed32, biasScale, biasOffset);
+    armnn::TensorInfo biasInfo({outputSize}, armnn::DataType::Signed32, biasScale, biasOffset, true);
 
     armnn::QuantizedLstmInputParams data;
 
@@ -182,28 +182,21 @@ void QuantizedLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
 {
     std::vector<uint8_t> inputVector = {166, 179, 50, 150};
     armnn::TensorInfo inputDesc({2, 2}, armnn::DataType::QAsymmU8);
-    boost::multi_array<uint8_t, 2> input = MakeTensor<uint8_t, 2>(inputDesc, inputVector);
 
     std::vector<int16_t> cellStateInVector = {876, 1034, 955, -909, 761, 1029, 796, -1036};
     armnn::TensorInfo cellStateInDesc({2, 4}, armnn::DataType::QSymmS16);
-    boost::multi_array<int16_t, 2> cellStateIn = MakeTensor<int16_t, 2>(cellStateInDesc, cellStateInVector);
 
     std::vector<uint8_t> outputStateInVector = {136, 150, 140, 115, 135, 152, 138, 112};
     armnn::TensorInfo outputStateInDesc({2, 4}, armnn::DataType::QAsymmU8);
-    boost::multi_array<uint8_t, 2> outputStateIn = MakeTensor<uint8_t, 2>(outputStateInDesc, outputStateInVector);
 
     std::vector<int16_t> cellStateOutVector = {1485, 1177, 1373, -1023, 1019, 1355, 1097, -1235};
     armnn::TensorInfo cellStateOutVectorDesc({2, 4}, armnn::DataType::QSymmS16);
-    boost::multi_array<int16_t, 2> cellStateOut = MakeTensor<int16_t, 2>(cellStateOutVectorDesc, cellStateOutVector);
 
     std::vector<uint8_t> outputStateOutVector = {140, 151, 146, 112, 136, 156, 142, 112};
     armnn::TensorInfo outputDesc({2, 4}, armnn::DataType::QAsymmU8);
-    boost::multi_array<uint8_t, 2> outputStateOut = MakeTensor<uint8_t, 2>(outputDesc, outputStateOutVector);
 
     // Builds up the structure of the network
-    armnn::INetworkPtr net = CreateQuantizedLstmNetwork(input, outputStateOut);
-
-    BOOST_TEST_CHECKPOINT("create a network");
+    armnn::INetworkPtr net = CreateQuantizedLstmNetwork(inputDesc.GetShape(), outputDesc.GetShape());
 
     IRuntime::CreationOptions options;
     IRuntimePtr runtime(IRuntime::Create(options));
@@ -219,16 +212,23 @@ void QuantizedLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
     inputTensors.reserve(3);
 
     // input
-    inputTensors.push_back({0, ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputVector.data())});
-    inputTensors.push_back({1, ConstTensor(runtime->GetInputTensorInfo(netId, 1), cellStateInVector.data())});
-    inputTensors.push_back({2, ConstTensor(runtime->GetInputTensorInfo(netId, 2), outputStateInVector.data())});
+    TensorInfo inputTensorInfo0 = runtime->GetInputTensorInfo(netId, 0);
+    TensorInfo inputTensorInfo1 = runtime->GetInputTensorInfo(netId, 1);
+    TensorInfo inputTensorInfo2 = runtime->GetInputTensorInfo(netId, 2);
+    inputTensorInfo0.SetConstant(true);
+    inputTensorInfo1.SetConstant(true);
+    inputTensorInfo2.SetConstant(true);
+
+    inputTensors.push_back({0, ConstTensor(inputTensorInfo0, inputVector.data())});
+    inputTensors.push_back({1, ConstTensor(inputTensorInfo1, cellStateInVector.data())});
+    inputTensors.push_back({2, ConstTensor(inputTensorInfo2, outputStateInVector.data())});
 
     OutputTensors outputTensors;
     outputTensors.reserve(2);
 
     //output
-    std::vector<int16_t > cellStateOutResult(cellStateOutVector.size());
-    std::vector<uint8_t > outputStateOutResult(outputStateOutVector.size());
+    std::vector<int16_t> cellStateOutResult(cellStateOutVector.size());
+    std::vector<uint8_t> outputStateOutResult(outputStateOutVector.size());
     outputTensors.push_back({0, Tensor(runtime->GetOutputTensorInfo(netId, 0), cellStateOutResult.data())});
     outputTensors.push_back({1, Tensor(runtime->GetOutputTensorInfo(netId, 1), outputStateOutResult.data())});
 
@@ -239,12 +239,12 @@ void QuantizedLstmEndToEnd(const std::vector<armnn::BackendId>& backends)
     constexpr int16_t toleranceInt16 = 2;
     for (unsigned int i = 0u; i < cellStateOutResult.size(); ++i)
     {
-        BOOST_CHECK(IsCloseEnough(cellStateOutVector[i], cellStateOutResult[i], toleranceInt16));
+        CHECK(IsCloseEnough(cellStateOutVector[i], cellStateOutResult[i], toleranceInt16));
     }
 
     constexpr uint8_t toleranceUint8 = 1;
     for (unsigned int i = 0u; i < outputStateOutResult.size(); ++i)
     {
-        BOOST_TEST(IsCloseEnough(outputStateOutVector[i], outputStateOutResult[i], toleranceUint8));
+        CHECK(IsCloseEnough(outputStateOutVector[i], outputStateOutResult[i], toleranceUint8));
     }
 }

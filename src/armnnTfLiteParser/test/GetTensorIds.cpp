@@ -1,16 +1,15 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-#include <boost/test/unit_test.hpp>
+
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 
-using armnnTfLiteParser::TfLiteParser;
-using ModelPtr = TfLiteParser::ModelPtr;
+using armnnTfLiteParser::TfLiteParserImpl;
+using ModelPtr = TfLiteParserImpl::ModelPtr;
 
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_GetTensorIds")
+{
 struct GetTensorIdsFixture : public ParserFlatbuffersFixture
 {
     explicit GetTensorIdsFixture(const std::string& inputs, const std::string& outputs)
@@ -89,74 +88,82 @@ struct GetInputOutputTensorIdsFixture : GetTensorIdsFixture
     GetInputOutputTensorIdsFixture() : GetTensorIdsFixture("[ 0, 1, 2 ]", "[ 3 ]") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(GetEmptyInputTensorIds, GetEmptyTensorIdsFixture)
+TEST_CASE_FIXTURE(GetEmptyTensorIdsFixture, "GetEmptyInputTensorIds")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
     std::vector<int32_t> expectedIds = { };
-    std::vector<int32_t> inputTensorIds = TfLiteParser::GetInputTensorIds(model, 0, 0);
-    BOOST_CHECK_EQUAL_COLLECTIONS(expectedIds.begin(), expectedIds.end(),
-                                  inputTensorIds.begin(), inputTensorIds.end());
+    std::vector<int32_t> inputTensorIds = TfLiteParserImpl::GetInputTensorIds(model, 0, 0);
+    CHECK(std::equal(expectedIds.begin(), expectedIds.end(),
+                                  inputTensorIds.begin(), inputTensorIds.end()));
 }
 
-BOOST_FIXTURE_TEST_CASE(GetEmptyOutputTensorIds, GetEmptyTensorIdsFixture)
+TEST_CASE_FIXTURE(GetEmptyTensorIdsFixture, "GetEmptyOutputTensorIds")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
     std::vector<int32_t> expectedIds = { };
-    std::vector<int32_t> outputTensorIds = TfLiteParser::GetOutputTensorIds(model, 0, 0);
-    BOOST_CHECK_EQUAL_COLLECTIONS(expectedIds.begin(), expectedIds.end(),
-                                  outputTensorIds.begin(), outputTensorIds.end());
+    std::vector<int32_t> outputTensorIds = TfLiteParserImpl::GetOutputTensorIds(model, 0, 0);
+    CHECK(std::equal(expectedIds.begin(), expectedIds.end(),
+                                  outputTensorIds.begin(), outputTensorIds.end()));
 }
 
-BOOST_FIXTURE_TEST_CASE(GetInputTensorIds, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetInputTensorIds")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
     std::vector<int32_t> expectedInputIds = { 0, 1, 2 };
-    std::vector<int32_t> inputTensorIds = TfLiteParser::GetInputTensorIds(model, 0, 0);
-    BOOST_CHECK_EQUAL_COLLECTIONS(expectedInputIds.begin(), expectedInputIds.end(),
-                                  inputTensorIds.begin(), inputTensorIds.end());
+    std::vector<int32_t> inputTensorIds = TfLiteParserImpl::GetInputTensorIds(model, 0, 0);
+    CHECK(std::equal(expectedInputIds.begin(), expectedInputIds.end(),
+                                  inputTensorIds.begin(), inputTensorIds.end()));
 }
 
-BOOST_FIXTURE_TEST_CASE(GetOutputTensorIds, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetOutputTensorIds")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
     std::vector<int32_t> expectedOutputIds = { 3 };
-    std::vector<int32_t> outputTensorIds = TfLiteParser::GetOutputTensorIds(model, 0, 0);
-    BOOST_CHECK_EQUAL_COLLECTIONS(expectedOutputIds.begin(), expectedOutputIds.end(),
-                                  outputTensorIds.begin(), outputTensorIds.end());
+    std::vector<int32_t> outputTensorIds = TfLiteParserImpl::GetOutputTensorIds(model, 0, 0);
+    CHECK(std::equal(expectedOutputIds.begin(), expectedOutputIds.end(),
+                                  outputTensorIds.begin(), outputTensorIds.end()));
 }
 
-BOOST_FIXTURE_TEST_CASE(GetInputTensorIdsNullModel, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetInputTensorIdsNullModel")
 {
-    BOOST_CHECK_THROW(TfLiteParser::GetInputTensorIds(nullptr, 0, 0), armnn::ParseException);
+    CHECK_THROWS_AS(TfLiteParserImpl::GetInputTensorIds(nullptr, 0, 0), armnn::ParseException);
 }
 
-BOOST_FIXTURE_TEST_CASE(GetOutputTensorIdsNullModel, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetOutputTensorIdsNullModel")
 {
-    BOOST_CHECK_THROW(TfLiteParser::GetOutputTensorIds(nullptr, 0, 0), armnn::ParseException);
+    CHECK_THROWS_AS(TfLiteParserImpl::GetOutputTensorIds(nullptr, 0, 0), armnn::ParseException);
 }
 
-BOOST_FIXTURE_TEST_CASE(GetInputTensorIdsInvalidSubgraph, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetInputTensorIdsInvalidSubgraph")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
-    BOOST_CHECK_THROW(TfLiteParser::GetInputTensorIds(model, 1, 0), armnn::ParseException);
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
+    CHECK_THROWS_AS(TfLiteParserImpl::GetInputTensorIds(model, 1, 0), armnn::ParseException);
 }
 
-BOOST_FIXTURE_TEST_CASE(GetOutputTensorIdsInvalidSubgraph, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE( GetInputOutputTensorIdsFixture, "GetOutputTensorIdsInvalidSubgraph")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
-    BOOST_CHECK_THROW(TfLiteParser::GetOutputTensorIds(model, 1, 0), armnn::ParseException);
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
+    CHECK_THROWS_AS(TfLiteParserImpl::GetOutputTensorIds(model, 1, 0), armnn::ParseException);
 }
 
-BOOST_FIXTURE_TEST_CASE(GetInputTensorIdsInvalidOperator, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetInputTensorIdsInvalidOperator")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
-    BOOST_CHECK_THROW(TfLiteParser::GetInputTensorIds(model, 0, 1), armnn::ParseException);
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
+    CHECK_THROWS_AS(TfLiteParserImpl::GetInputTensorIds(model, 0, 1), armnn::ParseException);
 }
 
-BOOST_FIXTURE_TEST_CASE(GetOutputTensorIdsInvalidOperator, GetInputOutputTensorIdsFixture)
+TEST_CASE_FIXTURE(GetInputOutputTensorIdsFixture, "GetOutputTensorIdsInvalidOperator")
 {
-    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
-    BOOST_CHECK_THROW(TfLiteParser::GetOutputTensorIds(model, 0, 1), armnn::ParseException);
+    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
+                                                                             m_GraphBinary.size());
+    CHECK_THROWS_AS(TfLiteParserImpl::GetOutputTensorIds(model, 0, 1), armnn::ParseException);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

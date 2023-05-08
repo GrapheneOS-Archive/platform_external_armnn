@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,14 +10,14 @@
 namespace armnn
 {
 
-class ScopedCpuTensorHandle;
+class ScopedTensorHandle;
 
 /// This layer represents a detection postprocess operator.
 class DetectionPostProcessLayer : public LayerWithParameters<DetectionPostProcessDescriptor>
 {
 public:
     /// A unique pointer to store Anchor values.
-    std::unique_ptr<ScopedCpuTensorHandle> m_Anchors;
+    std::shared_ptr<ConstTensorHandle> m_Anchors;
 
     /// Makes a workload for the DetectionPostProcess type.
     /// @param [in] graph The graph where this layer can be found.
@@ -34,7 +34,13 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    /// The model does not specify the output shapes. The output shapes are calculated from the max_detection and
+    /// max_classes_per_detection parameters in the DetectionPostProcessDescriptor.
+    /// @param [in] inputShapes The input shapes layer has. These are ignored for DetectionPostProcessLayer.
+    /// @return A vector to the inferred output shape.
+    std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
+
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a DetectionPostProcessLayer.
@@ -47,7 +53,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    ConstantTensors GetConstantTensorsByRef() override;
+    ImmutableConstantTensors GetConstantTensorsByRef() const override;
 };
 
 } // namespace armnn

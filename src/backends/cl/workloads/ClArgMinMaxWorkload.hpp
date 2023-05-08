@@ -1,11 +1,11 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/CL/functions/CLArgMinMaxLayer.h>
@@ -17,10 +17,12 @@ arm_compute::Status ClArgMinMaxWorkloadValidate(const TensorInfo& input,
                                                 const TensorInfo& output,
                                                 const ArgMinMaxDescriptor& descriptor);
 
-class ClArgMinMaxWorkload : public BaseWorkload<ArgMinMaxQueueDescriptor>
+class ClArgMinMaxWorkload : public ClBaseWorkload<ArgMinMaxQueueDescriptor>
 {
 public:
-    ClArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& descriptor,
+                        const WorkloadInfo& info,
+                        const arm_compute::CLCompileContext& clCompileContext);
     virtual void Execute() const override;
 
 private:

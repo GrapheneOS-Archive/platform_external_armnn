@@ -1,25 +1,25 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include "WorkloadTestUtils.hpp"
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
 #include <armnn/Exceptions.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/Workload.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/Workload.hpp>
 
 #include <reference/workloads/RefWorkloads.hpp>
 #include <reference/RefWorkloadFactory.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 using namespace armnn;
 
-BOOST_AUTO_TEST_SUITE(WorkloadInfoValidation)
-
-BOOST_AUTO_TEST_CASE(BatchNormalizationQueueDescriptor_Validate_DifferentQuantizationData)
+TEST_SUITE("WorkloadInfoValidation")
+{
+TEST_CASE("BatchNormalizationQueueDescriptor_Validate_DifferentQuantizationData")
 {
     TensorShape inputShape { 1, 3, 2, 2 };
     TensorShape outputShape { 1, 3, 2, 2 };
@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(BatchNormalizationQueueDescriptor_Validate_DifferentQuantiz
 
     unsigned int sameShape[] = { 10 };
     TensorInfo sameInfo = armnn::TensorInfo(1, sameShape, armnn::DataType::QAsymmU8);
-    ScopedCpuTensorHandle sameTensor(sameInfo);
+    ScopedTensorHandle sameTensor(sameInfo);
 
     AddInputToWorkload(invalidData, invalidInfo, inputTensorInfo, nullptr);
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
@@ -42,18 +42,19 @@ BOOST_AUTO_TEST_CASE(BatchNormalizationQueueDescriptor_Validate_DifferentQuantiz
     invalidData.m_Beta= &sameTensor;
     invalidData.m_Gamma = &sameTensor;
 
-    BOOST_CHECK_NO_THROW(RefBatchNormalizationWorkload(invalidData, invalidInfo));
+    CHECK_NOTHROW(RefBatchNormalizationWorkload(invalidData, invalidInfo));
 }
 
-BOOST_AUTO_TEST_CASE(QueueDescriptor_Validate_WrongNumOfInputsOutputs)
+TEST_CASE("QueueDescriptor_Validate_WrongNumOfInputsOutputs")
 {
     InputQueueDescriptor invalidData;
     WorkloadInfo invalidInfo;
     //Invalid argument exception is expected, because no inputs and no outputs were defined.
-    BOOST_CHECK_THROW(RefWorkloadFactory().CreateInput(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefWorkloadFactory().CreateWorkload(LayerType::Input, invalidData, invalidInfo),
+                    armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(RefPooling2dFloat32Workload_Validate_WrongDimTensor)
+TEST_CASE("RefPooling2dFloat32Workload_Validate_WrongDimTensor")
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -71,10 +72,31 @@ BOOST_AUTO_TEST_CASE(RefPooling2dFloat32Workload_Validate_WrongDimTensor)
     AddInputToWorkload(invalidData, invalidInfo, inputTensorInfo, nullptr);
 
     // Invalid argument exception is expected, input tensor has to be 4D.
-    BOOST_CHECK_THROW(RefPooling2dWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefPooling2dWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(SoftmaxQueueDescriptor_Validate_WrongInputHeight)
+TEST_CASE("RefPooling3dFloat32Workload_Validate_WrongDimTensor")
+{
+    armnn::TensorInfo inputTensorInfo;
+    armnn::TensorInfo outputTensorInfo;
+
+    unsigned int inputShape[]  = {2, 3, 4, 5}; // <- Invalid - input tensor has to be 5D.
+    unsigned int outputShape[] = {2, 3, 4, 5, 6};
+
+    outputTensorInfo = armnn::TensorInfo(5, outputShape, armnn::DataType::Float32);
+    inputTensorInfo  = armnn::TensorInfo(4, inputShape, armnn::DataType::Float32);
+
+    Pooling3dQueueDescriptor invalidData;
+    WorkloadInfo           invalidInfo;
+
+    AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
+    AddInputToWorkload(invalidData, invalidInfo, inputTensorInfo, nullptr);
+
+    // Invalid argument exception is expected, input tensor has to be 5D.
+    CHECK_THROWS_AS(RefPooling3dWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+}
+
+TEST_CASE("SoftmaxQueueDescriptor_Validate_WrongInputHeight")
 {
     unsigned int inputHeight = 1;
     unsigned int inputWidth = 1;
@@ -102,10 +124,10 @@ BOOST_AUTO_TEST_CASE(SoftmaxQueueDescriptor_Validate_WrongInputHeight)
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
     //Invalid argument exception is expected, because height != 1.
-    BOOST_CHECK_THROW(RefSoftmaxWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefSoftmaxWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(FullyConnectedQueueDescriptor_Validate_RequiredDataMissing)
+TEST_CASE("FullyConnectedQueueDescriptor_Validate_RequiredDataMissing")
 {
     unsigned int inputWidth = 1;
     unsigned int inputHeight = 1;
@@ -136,24 +158,19 @@ BOOST_AUTO_TEST_CASE(FullyConnectedQueueDescriptor_Validate_RequiredDataMissing)
     FullyConnectedQueueDescriptor invalidData;
     WorkloadInfo                  invalidInfo;
 
-    ScopedCpuTensorHandle weightTensor(weightsDesc);
-    ScopedCpuTensorHandle biasTensor(biasesDesc);
-
     AddInputToWorkload(invalidData, invalidInfo, inputTensorInfo, nullptr);
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
-    invalidData.m_Weight = &weightTensor;
-    invalidData.m_Bias = &biasTensor;
     invalidData.m_Parameters.m_BiasEnabled = true;
     invalidData.m_Parameters.m_TransposeWeightMatrix = false;
 
 
     //Invalid argument exception is expected, because not all required fields have been provided.
     //In particular inputsData[0], outputsData[0] and weightsData can not be null.
-    BOOST_CHECK_THROW(RefFullyConnectedWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefFullyConnectedWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
 
-BOOST_AUTO_TEST_CASE(NormalizationQueueDescriptor_Validate_WrongInputHeight)
+TEST_CASE("NormalizationQueueDescriptor_Validate_WrongInputHeight")
 {
     constexpr unsigned int inputNum = 5;
     constexpr unsigned int inputHeight   = 32;
@@ -197,10 +214,10 @@ BOOST_AUTO_TEST_CASE(NormalizationQueueDescriptor_Validate_WrongInputHeight)
     invalidData.m_Parameters.m_K               = kappa;
 
     //Invalid argument exception is expected, because input height != output height.
-    BOOST_CHECK_THROW(RefNormalizationWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefNormalizationWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(SplitterQueueDescriptor_Validate_WrongWindow)
+TEST_CASE("SplitterQueueDescriptor_Validate_WrongWindow")
 {
     constexpr unsigned int inputNum = 1;
     constexpr unsigned int inputHeight   = 32;
@@ -233,16 +250,15 @@ BOOST_AUTO_TEST_CASE(SplitterQueueDescriptor_Validate_WrongWindow)
     armnn::SplitterQueueDescriptor::ViewOrigin window(wOrigin);
     invalidData.m_ViewOrigins.push_back(window);
 
-    BOOST_TEST_INFO("Invalid argument exception is expected, because split window dimensionality does not "
-        "match input.");
-    BOOST_CHECK_THROW(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid argument exception is expected, because split window dimensionality does not match input.");
+    CHECK_THROWS_AS(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
     // Invalid, since window extends past the boundary of input tensor.
     std::vector<unsigned int> wOrigin3 = {0, 0, 15, 0};
     armnn::SplitterQueueDescriptor::ViewOrigin window3(wOrigin3);
     invalidData.m_ViewOrigins[0] = window3;
-    BOOST_TEST_INFO("Invalid argument exception is expected (wOrigin3[2]+ outputHeight > inputHeight");
-    BOOST_CHECK_THROW(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid argument exception is expected (wOrigin3[2]+ outputHeight > inputHeight");
+    CHECK_THROWS_AS(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
 
     std::vector<unsigned int> wOrigin4 = {0, 0, 0, 0};
@@ -253,12 +269,12 @@ BOOST_AUTO_TEST_CASE(SplitterQueueDescriptor_Validate_WrongWindow)
     armnn::SplitterQueueDescriptor::ViewOrigin window5(wOrigin4);
     invalidData.m_ViewOrigins.push_back(window5);
 
-    BOOST_TEST_INFO("Invalid exception due to number of split windows not matching number of outputs.");
-    BOOST_CHECK_THROW(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid exception due to number of split windows not matching number of outputs.");
+    CHECK_THROWS_AS(RefSplitterWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
 
-BOOST_AUTO_TEST_CASE(ConcatQueueDescriptor_Validate_WrongWindow)
+TEST_CASE("ConcatQueueDescriptor_Validate_WrongWindow")
 {
     constexpr unsigned int inputNum = 1;
     constexpr unsigned int inputChannels = 3;
@@ -291,16 +307,15 @@ BOOST_AUTO_TEST_CASE(ConcatQueueDescriptor_Validate_WrongWindow)
     armnn::ConcatQueueDescriptor::ViewOrigin window(wOrigin);
     invalidData.m_ViewOrigins.push_back(window);
 
-    BOOST_TEST_INFO("Invalid argument exception is expected, because merge window dimensionality does not "
-        "match input.");
-    BOOST_CHECK_THROW(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid argument exception is expected, because merge window dimensionality does not match input.");
+    CHECK_THROWS_AS(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
     // Invalid, since window extends past the boundary of output tensor.
     std::vector<unsigned int> wOrigin3 = {0, 0, 15, 0};
     armnn::ConcatQueueDescriptor::ViewOrigin window3(wOrigin3);
     invalidData.m_ViewOrigins[0] = window3;
-    BOOST_TEST_INFO("Invalid argument exception is expected (wOrigin3[2]+ inputHeight > outputHeight");
-    BOOST_CHECK_THROW(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid argument exception is expected (wOrigin3[2]+ inputHeight > outputHeight");
+    CHECK_THROWS_AS(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
 
     std::vector<unsigned int> wOrigin4 = {0, 0, 0, 0};
@@ -311,11 +326,11 @@ BOOST_AUTO_TEST_CASE(ConcatQueueDescriptor_Validate_WrongWindow)
     armnn::ConcatQueueDescriptor::ViewOrigin window5(wOrigin4);
     invalidData.m_ViewOrigins.push_back(window5);
 
-    BOOST_TEST_INFO("Invalid exception due to number of merge windows not matching number of inputs.");
-    BOOST_CHECK_THROW(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    INFO("Invalid exception due to number of merge windows not matching number of inputs.");
+    CHECK_THROWS_AS(RefConcatWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputNumbers)
+TEST_CASE("AdditionQueueDescriptor_Validate_InputNumbers")
 {
     armnn::TensorInfo input1TensorInfo;
     armnn::TensorInfo input2TensorInfo;
@@ -336,20 +351,20 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputNumbers)
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
     // Too few inputs.
-    BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
 
     AddInputToWorkload(invalidData, invalidInfo, input2TensorInfo, nullptr);
 
     // Correct.
-    BOOST_CHECK_NO_THROW(RefAdditionWorkload<>(invalidData, invalidInfo));
+    CHECK_NOTHROW(RefAdditionWorkload<>(invalidData, invalidInfo));
 
     AddInputToWorkload(invalidData, invalidInfo, input3TensorInfo, nullptr);
 
     // Too many inputs.
-    BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
+TEST_CASE("AdditionQueueDescriptor_Validate_InputShapes")
 {
     armnn::TensorInfo input1TensorInfo;
     armnn::TensorInfo input2TensorInfo;
@@ -371,7 +386,7 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
         AddInputToWorkload(invalidData, invalidInfo, input2TensorInfo, nullptr);
         AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        CHECK_THROWS_AS(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 
     // Output size not compatible with input sizes.
@@ -388,11 +403,11 @@ BOOST_AUTO_TEST_CASE(AdditionQueueDescriptor_Validate_InputShapes)
         AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
         // Output differs.
-        BOOST_CHECK_THROW(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        CHECK_THROWS_AS(RefAdditionWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 }
 
-BOOST_AUTO_TEST_CASE(MultiplicationQueueDescriptor_Validate_InputTensorDimensionMismatch)
+TEST_CASE("MultiplicationQueueDescriptor_Validate_InputTensorDimensionMismatch")
 {
     armnn::TensorInfo input0TensorInfo;
     armnn::TensorInfo input1TensorInfo;
@@ -423,7 +438,7 @@ BOOST_AUTO_TEST_CASE(MultiplicationQueueDescriptor_Validate_InputTensorDimension
         AddInputToWorkload(invalidData, invalidInfo, input0TensorInfo, nullptr);
         AddInputToWorkload(invalidData, invalidInfo, input1TensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        CHECK_THROWS_AS(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 
     // Checks dimension consistency for input and output tensors.
@@ -448,11 +463,11 @@ BOOST_AUTO_TEST_CASE(MultiplicationQueueDescriptor_Validate_InputTensorDimension
         AddInputToWorkload(invalidData, invalidInfo, input0TensorInfo, nullptr);
         AddInputToWorkload(invalidData, invalidInfo, input1TensorInfo, nullptr);
 
-        BOOST_CHECK_THROW(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
+        CHECK_THROWS_AS(RefMultiplicationWorkload<>(invalidData, invalidInfo), armnn::InvalidArgumentException);
     }
 }
 
-BOOST_AUTO_TEST_CASE(ReshapeQueueDescriptor_Validate_MismatchingNumElements)
+TEST_CASE("ReshapeQueueDescriptor_Validate_MismatchingNumElements")
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -471,15 +486,15 @@ BOOST_AUTO_TEST_CASE(ReshapeQueueDescriptor_Validate_MismatchingNumElements)
     AddOutputToWorkload(invalidData, invalidInfo, outputTensorInfo, nullptr);
 
     // InvalidArgumentException is expected, because the number of elements don't match.
-    BOOST_CHECK_THROW(RefReshapeWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(RefReshapeWorkload(invalidData, invalidInfo), armnn::InvalidArgumentException);
 }
 
 
-BOOST_AUTO_TEST_CASE(LstmQueueDescriptor_Validate)
+TEST_CASE("LstmQueueDescriptor_Validate")
 {
     armnn::DataType dataType = armnn::DataType::Float32;
 
-    float qScale = 0.0f;
+    float qScale = 1.0f;
     int32_t qOffset = 0;
 
     unsigned int batchSize = 2;
@@ -515,27 +530,27 @@ BOOST_AUTO_TEST_CASE(LstmQueueDescriptor_Validate)
     AddOutputToWorkload(data, info, cellStateOutTensorInfo, nullptr);
     // AddOutputToWorkload(data, info, outputTensorInfo, nullptr); is left out
 
-    armnn::ScopedCpuTensorHandle inputToInputWeightsTensor(tensorInfo4x5);
-    armnn::ScopedCpuTensorHandle inputToForgetWeightsTensor(tensorInfo4x5);
-    armnn::ScopedCpuTensorHandle inputToCellWeightsTensor(tensorInfo4x5);
-    armnn::ScopedCpuTensorHandle inputToOutputWeightsTensor(tensorInfo4x5);
-    armnn::ScopedCpuTensorHandle recurrentToForgetWeightsTensor(tensorInfo4x3);
-    armnn::ScopedCpuTensorHandle recurrentToInputWeightsTensor(tensorInfo4x3);
-    armnn::ScopedCpuTensorHandle recurrentToCellWeightsTensor(tensorInfo4x3);
-    armnn::ScopedCpuTensorHandle recurrentToOutputWeightsTensor(tensorInfo4x3);
-    armnn::ScopedCpuTensorHandle cellToInputWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle inputGateBiasTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle forgetGateBiasTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle cellBiasTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle outputGateBiasTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle cellToForgetWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle cellToOutputWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle projectionWeightsTensor(tensorInfo3x4);
-    armnn::ScopedCpuTensorHandle projectionBiasTensor(tensorInfo3);
-    armnn::ScopedCpuTensorHandle inputLayerNormWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle forgetLayerNormWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle cellLayerNormWeightsTensor(tensorInfo4);
-    armnn::ScopedCpuTensorHandle outputLayerNormWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle inputToInputWeightsTensor(tensorInfo4x5);
+    armnn::ScopedTensorHandle inputToForgetWeightsTensor(tensorInfo4x5);
+    armnn::ScopedTensorHandle inputToCellWeightsTensor(tensorInfo4x5);
+    armnn::ScopedTensorHandle inputToOutputWeightsTensor(tensorInfo4x5);
+    armnn::ScopedTensorHandle recurrentToForgetWeightsTensor(tensorInfo4x3);
+    armnn::ScopedTensorHandle recurrentToInputWeightsTensor(tensorInfo4x3);
+    armnn::ScopedTensorHandle recurrentToCellWeightsTensor(tensorInfo4x3);
+    armnn::ScopedTensorHandle recurrentToOutputWeightsTensor(tensorInfo4x3);
+    armnn::ScopedTensorHandle cellToInputWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle inputGateBiasTensor(tensorInfo4);
+    armnn::ScopedTensorHandle forgetGateBiasTensor(tensorInfo4);
+    armnn::ScopedTensorHandle cellBiasTensor(tensorInfo4);
+    armnn::ScopedTensorHandle outputGateBiasTensor(tensorInfo4);
+    armnn::ScopedTensorHandle cellToForgetWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle cellToOutputWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle projectionWeightsTensor(tensorInfo3x4);
+    armnn::ScopedTensorHandle projectionBiasTensor(tensorInfo3);
+    armnn::ScopedTensorHandle inputLayerNormWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle forgetLayerNormWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle cellLayerNormWeightsTensor(tensorInfo4);
+    armnn::ScopedTensorHandle outputLayerNormWeightsTensor(tensorInfo4);
 
     data.m_InputToInputWeights = &inputToInputWeightsTensor;
     data.m_InputToForgetWeights = &inputToForgetWeightsTensor;
@@ -568,61 +583,61 @@ BOOST_AUTO_TEST_CASE(LstmQueueDescriptor_Validate)
     data.m_Parameters.m_LayerNormEnabled = true;
 
     // check wrong number of outputs
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     AddOutputToWorkload(data, info, outputTensorInfo, nullptr);
 
     // check wrong cifg parameter configuration
     data.m_Parameters.m_CifgEnabled = true;
     armnn::TensorInfo scratchBufferTensorInfo2({batchSize, numUnits * 3}, dataType, qScale, qOffset);
     SetWorkloadOutput(data, info, 0, scratchBufferTensorInfo2, nullptr);
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_Parameters.m_CifgEnabled = false;
     SetWorkloadOutput(data, info, 0, scratchBufferTensorInfo, nullptr);
 
     // check wrong inputGateBias configuration
     data.m_InputGateBias = nullptr;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_InputGateBias = &inputGateBiasTensor;
 
     // check inconsistant projection parameters
     data.m_Parameters.m_ProjectionEnabled = false;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_Parameters.m_ProjectionEnabled = true;
     data.m_ProjectionWeights = nullptr;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_ProjectionWeights = &projectionWeightsTensor;
 
     // check missing input layer normalisation weights
     data.m_InputLayerNormWeights = nullptr;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_InputLayerNormWeights = &inputLayerNormWeightsTensor;
 
     // layer norm disabled but normalisation weights are present
     data.m_Parameters.m_LayerNormEnabled = false;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_Parameters.m_LayerNormEnabled = true;
 
     // check invalid outputTensor shape
     armnn::TensorInfo incorrectOutputTensorInfo({batchSize, outputSize + 1}, dataType, qScale, qOffset);
     SetWorkloadOutput(data, info, 3, incorrectOutputTensorInfo, nullptr);
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     SetWorkloadOutput(data, info, 3, outputTensorInfo, nullptr);
 
     // check invalid cell clipping parameters
     data.m_Parameters.m_ClippingThresCell = -1.0f;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_Parameters.m_ClippingThresCell = 0.0f;
 
     // check invalid projection clipping parameters
     data.m_Parameters.m_ClippingThresProj = -1.0f;
-    BOOST_CHECK_THROW(data.Validate(info), armnn::InvalidArgumentException);
+    CHECK_THROWS_AS(data.Validate(info), armnn::InvalidArgumentException);
     data.m_Parameters.m_ClippingThresProj = 0.0f;
 
     // check correct configuration
-    BOOST_CHECK_NO_THROW(data.Validate(info));
+    CHECK_NOTHROW(data.Validate(info));
 }
 
-BOOST_AUTO_TEST_CASE(BiasPerAxisQuantization_Validate)
+TEST_CASE("BiasPerAxisQuantization_ValidateCorrectValues")
 {
     constexpr unsigned int nInput  = 1u;
     constexpr unsigned int cInput  = 3u;
@@ -655,37 +670,108 @@ BOOST_AUTO_TEST_CASE(BiasPerAxisQuantization_Validate)
 
     WorkloadInfo workloadInfo;
     AddInputToWorkload(queueDescriptor, workloadInfo, inputInfo, nullptr);
+    AddInputToWorkload(queueDescriptor, workloadInfo, weightInfo, nullptr);
     AddOutputToWorkload(queueDescriptor, workloadInfo, outputInfo, nullptr);
-
-    ScopedCpuTensorHandle weightTensor(weightInfo);
-    queueDescriptor.m_Weight = &weightTensor;
 
     // Test 1: correct per-axis quantization values
     const std::vector<float> biasPerAxisScales1  = { 3.75f, 5.25f };
     const TensorInfo biasInfo1(biasShape, biasType, biasPerAxisScales1, 0);
 
-    ScopedCpuTensorHandle biasHandle1(biasInfo1);
-    queueDescriptor.m_Bias = &biasHandle1;
+    AddInputToWorkload(queueDescriptor, workloadInfo, biasInfo1, nullptr);
 
-    BOOST_CHECK_NO_THROW(queueDescriptor.Validate(workloadInfo));
+    CHECK_NOTHROW(queueDescriptor.Validate(workloadInfo));
+}
+
+TEST_CASE("BiasPerAxisQuantization_ValidateIncorrectValues")
+{
+    constexpr unsigned int nInput  = 1u;
+    constexpr unsigned int cInput  = 3u;
+    constexpr unsigned int hInput  = 3u;
+    constexpr unsigned int wInput  = 3u;
+
+    constexpr unsigned int nOutput = nInput;
+    constexpr unsigned int cOutput = cInput;
+    constexpr unsigned int hOutput = 1u;
+    constexpr unsigned int wOutput = 1u;
+
+    const TensorShape inputShape { nInput,  cInput,  hInput,  wInput  };
+    const TensorShape outputShape{ nOutput, cOutput, hOutput, wOutput };
+    const TensorShape weightShape{ cOutput, cInput,  hInput,  wInput  };
+    const TensorShape biasShape  { cOutput                            };
+
+    constexpr DataType inputType  = DataType::QAsymmU8;
+    constexpr DataType weightType = DataType::QSymmS8;
+    constexpr DataType biasType   = DataType::Signed32;
+
+    constexpr float perTensorScale = 1.5f;
+    const TensorInfo inputInfo (inputShape,  inputType, perTensorScale);
+    const TensorInfo outputInfo(outputShape, inputType, perTensorScale);
+
+    const std::vector<float> weightPerAxisScales = { 2.50f, 3.50f };
+    const TensorInfo weightInfo(weightShape, weightType, weightPerAxisScales, 0);
+
+    Convolution2dQueueDescriptor queueDescriptor;
+    queueDescriptor.m_Parameters.m_BiasEnabled = true;
+
+    WorkloadInfo workloadInfo;
+    AddInputToWorkload(queueDescriptor, workloadInfo, inputInfo, nullptr);
+    AddInputToWorkload(queueDescriptor, workloadInfo, weightInfo, nullptr);
+    AddOutputToWorkload(queueDescriptor, workloadInfo, outputInfo, nullptr);
 
     // Test 2: wrong per-axis quantization values
     const std::vector<float> biasPerAxisScales2 = { 4.00f, 5.00f };
     const TensorInfo biasInfo2(biasShape, biasType, biasPerAxisScales2, 0);
 
-    ScopedCpuTensorHandle biasHandle2(biasInfo2);
-    queueDescriptor.m_Bias = &biasHandle2;
+    AddInputToWorkload(queueDescriptor, workloadInfo, biasInfo2, nullptr);
 
-    BOOST_CHECK_THROW(queueDescriptor.Validate(workloadInfo), InvalidArgumentException);
+    CHECK_NOTHROW(queueDescriptor.Validate(workloadInfo));
+
+}
+
+TEST_CASE("BiasPerAxisQuantization_ValidateInvalidArgumentException")
+{
+    constexpr unsigned int nInput  = 1u;
+    constexpr unsigned int cInput  = 3u;
+    constexpr unsigned int hInput  = 3u;
+    constexpr unsigned int wInput  = 3u;
+
+    constexpr unsigned int nOutput = nInput;
+    constexpr unsigned int cOutput = cInput;
+    constexpr unsigned int hOutput = 1u;
+    constexpr unsigned int wOutput = 1u;
+
+    const TensorShape inputShape { nInput,  cInput,  hInput,  wInput  };
+    const TensorShape outputShape{ nOutput, cOutput, hOutput, wOutput };
+    const TensorShape weightShape{ cOutput, cInput,  hInput,  wInput  };
+    const TensorShape biasShape  { cOutput                            };
+
+    constexpr DataType inputType  = DataType::QAsymmU8;
+    constexpr DataType weightType = DataType::QSymmS8;
+    constexpr DataType biasType   = DataType::Signed32;
+
+    constexpr float perTensorScale = 1.5f;
+    const TensorInfo inputInfo (inputShape,  inputType, perTensorScale);
+    const TensorInfo outputInfo(outputShape, inputType, perTensorScale);
+
+    const std::vector<float> weightPerAxisScales = { 2.50f, 3.50f };
+    const TensorInfo weightInfo(weightShape, weightType, weightPerAxisScales, 0);
+
+    Convolution2dQueueDescriptor queueDescriptor;
+    queueDescriptor.m_Parameters.m_BiasEnabled = true;
+
+    WorkloadInfo workloadInfo;
+    AddInputToWorkload(queueDescriptor, workloadInfo, inputInfo, nullptr);
+    AddInputToWorkload(queueDescriptor, workloadInfo, weightInfo, nullptr);
+    AddOutputToWorkload(queueDescriptor, workloadInfo, outputInfo, nullptr);
 
     // Test 3: mismatched number of quantization scales
     const std::vector<float> biasPerAxisScales3 = { 3.75f, 5.25f, 5.25f };
     const TensorInfo biasInfo3(biasShape, biasType, biasPerAxisScales3, 0);
 
-    ScopedCpuTensorHandle biasHandle3(biasInfo3);
-    queueDescriptor.m_Bias = &biasHandle3;
+    AddInputToWorkload(queueDescriptor, workloadInfo, biasInfo3, nullptr);
 
-    BOOST_CHECK_THROW(queueDescriptor.Validate(workloadInfo), InvalidArgumentException);
+    CHECK_THROWS_AS(queueDescriptor.Validate(workloadInfo), InvalidArgumentException);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+
+}

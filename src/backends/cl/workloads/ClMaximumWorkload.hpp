@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/runtime/CL/functions/CLElementwiseOperations.h>
 
@@ -16,10 +16,12 @@ arm_compute::Status ClMaximumWorkloadValidate(const TensorInfo& input0,
                                               const TensorInfo& input1,
                                               const TensorInfo& output);
 
-class ClMaximumWorkload : public BaseWorkload<MaximumQueueDescriptor>
+class ClMaximumWorkload : public ClBaseWorkload<MaximumQueueDescriptor>
 {
 public:
-    ClMaximumWorkload(const MaximumQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClMaximumWorkload(const MaximumQueueDescriptor& descriptor,
+                      const WorkloadInfo& info,
+                      const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:

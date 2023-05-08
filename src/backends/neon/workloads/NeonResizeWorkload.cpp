@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <neon/NeonTensorHandle.hpp>
 
@@ -51,8 +51,14 @@ arm_compute::Status NeonResizeWorkloadValidate(const TensorInfo& input,
 
 NeonResizeWorkload::NeonResizeWorkload(const ResizeQueueDescriptor& descriptor,
                                                        const WorkloadInfo& info)
-    : BaseWorkload<ResizeQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<ResizeQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonResizeWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("NeonResizeWorkload", 1, 1);
 
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -83,7 +89,7 @@ NeonResizeWorkload::NeonResizeWorkload(const ResizeQueueDescriptor& descriptor,
 
 void NeonResizeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonResizeWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonResizeWorkload_Execute", this->GetGuid());
     m_ResizeLayer.run();
 }
 

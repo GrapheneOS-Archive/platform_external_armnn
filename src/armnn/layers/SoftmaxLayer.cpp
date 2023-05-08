@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> SoftmaxLayer::CreateWorkload(const IWorkloadFactory& 
     SoftmaxQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSoftmax(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Softmax, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SoftmaxLayer* SoftmaxLayer::Clone(Graph& graph) const
@@ -46,9 +46,9 @@ void SoftmaxLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "SoftmaxLayer");
 }
 
-void SoftmaxLayer::Accept(ILayerVisitor& visitor) const
+void SoftmaxLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSoftmaxLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

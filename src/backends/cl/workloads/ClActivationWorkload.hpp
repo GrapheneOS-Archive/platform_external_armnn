@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/runtime/CL/functions/CLActivationLayer.h>
 
@@ -15,10 +15,12 @@ arm_compute::Status ClActivationWorkloadValidate(const TensorInfo& input,
                                                  const TensorInfo& output,
                                                  const ActivationDescriptor& descriptor);
 
-class ClActivationWorkload : public BaseWorkload<ActivationQueueDescriptor>
+class ClActivationWorkload : public ClBaseWorkload<ActivationQueueDescriptor>
 {
 public:
-    ClActivationWorkload(const ActivationQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClActivationWorkload(const ActivationQueueDescriptor& descriptor,
+                         const WorkloadInfo& info,
+                         const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:

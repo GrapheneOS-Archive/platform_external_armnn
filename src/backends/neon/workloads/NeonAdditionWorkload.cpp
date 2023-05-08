@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEArithmeticAddition.h>
 
@@ -39,7 +39,7 @@ arm_compute::Status NeonAdditionWorkloadValidate(const TensorInfo& input0,
 
 NeonAdditionWorkload::NeonAdditionWorkload(const AdditionQueueDescriptor& descriptor,
                                            const WorkloadInfo& info)
-    : BaseWorkload<AdditionQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<AdditionQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonAdditionWorkload", 2, 1);
 
@@ -56,7 +56,7 @@ NeonAdditionWorkload::NeonAdditionWorkload(const AdditionQueueDescriptor& descri
 
 void NeonAdditionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonAdditionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonAdditionWorkload_Execute", this->GetGuid());
     m_AddLayer->run();
 }
 
