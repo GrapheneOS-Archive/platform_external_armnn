@@ -41,8 +41,9 @@ void StandInLayer::ValidateTensorShapesFromInputs()
     // so do nothing here.
 }
 
-void StandInLayer::Accept(ILayerVisitor& visitor) const
+void StandInLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitStandInLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
+
 } // namespace armnn

@@ -9,8 +9,8 @@
 
 #include <armnn/TypesUtils.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> LogSoftmaxLayer::CreateWorkload(const IWorkloadFactor
     LogSoftmaxQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateLogSoftmax(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::LogSoftmax, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 LogSoftmaxLayer* LogSoftmaxLayer::Clone(Graph& graph) const
@@ -45,9 +45,9 @@ void LogSoftmaxLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LogSoftmaxLayer");
 }
 
-void LogSoftmaxLayer::Accept(ILayerVisitor& visitor) const
+void LogSoftmaxLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitLogSoftmaxLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

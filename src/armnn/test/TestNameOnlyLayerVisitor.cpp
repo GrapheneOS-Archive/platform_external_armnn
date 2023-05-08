@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2019-2021,2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,49 +7,67 @@
 
 #include <Network.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 namespace
 {
 
-#define TEST_CASE_CHECK_LAYER_VISITOR_NAME(name) \
-BOOST_AUTO_TEST_CASE(Check##name##LayerVisitorName) \
+#define TEST_CASE_CHECK_LAYER_VISITOR_NAME(name, testName) \
+TEST_CASE(#testName) \
 { \
     Test##name##LayerVisitor visitor("name##Layer"); \
-    armnn::Network net; \
+    armnn::NetworkImpl net; \
     armnn::IConnectableLayer *const layer = net.Add##name##Layer("name##Layer"); \
-    layer->Accept(visitor); \
+    layer->ExecuteStrategy(visitor); \
 }
 
-#define TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(name) \
-BOOST_AUTO_TEST_CASE(Check##name##LayerVisitorNameNullptr) \
+#define TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(name, testName) \
+TEST_CASE(#testName) \
 { \
     Test##name##LayerVisitor visitor; \
-    armnn::Network net; \
+    armnn::NetworkImpl net; \
     armnn::IConnectableLayer *const layer = net.Add##name##Layer(); \
-    layer->Accept(visitor); \
+    layer->ExecuteStrategy(visitor); \
 }
-
-#define TEST_SUITE_NAME_ONLY_LAYER_VISITOR(name) \
-TEST_CASE_CHECK_LAYER_VISITOR_NAME(name) \
-TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(name)
 
 } // anonymous namespace
 
-BOOST_AUTO_TEST_SUITE(TestNameOnlyLayerVisitor)
-
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Addition)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Dequantize)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Division)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Floor)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Maximum)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Merge)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Minimum)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Multiplication)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Prelu)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Quantize)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Rank)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Subtraction)
-TEST_SUITE_NAME_ONLY_LAYER_VISITOR(Switch)
-
-BOOST_AUTO_TEST_SUITE_END()
+TEST_SUITE("TestNameOnlyLayerVisitor")
+{
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Addition, CheckAdditionLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Addition, CheckAdditionLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_END
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Dequantize, CheckDequantizeLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Dequantize, CheckDequantizeLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Division, CheckDivisionLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Division, CheckDivisionLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_END
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Floor, CheckFloorLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Floor, CheckFloorLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Maximum, CheckMaximumLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Maximum, CheckMaximumLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_END
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Merge, CheckMergeLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Merge, CheckMergeLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Minimum, CheckMinimumLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Minimum, CheckMinimumLayerVisitorNameNullptr)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Multiplication, CheckMultiplicationLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Multiplication, CheckMultiplicationLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_END
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Prelu, CheckPreluLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Prelu, CheckPreluLayerVisitorNameNullptr)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Quantize, CheckQuantizeLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Quantize, CheckQuantizeLayerVisitorNameNullptr)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Rank, CheckRankLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Rank, CheckRankLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_BEGIN
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Subtraction, CheckSubtractionLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Subtraction, CheckSubtractionLayerVisitorNameNullptr)
+ARMNN_NO_DEPRECATE_WARN_END
+TEST_CASE_CHECK_LAYER_VISITOR_NAME(Switch, CheckSwitchLayerVisitorName)
+TEST_CASE_CHECK_LAYER_VISITOR_NAME_NULLPTR(Switch, CheckSwitchLayerVisitorNameNullptr)
+}

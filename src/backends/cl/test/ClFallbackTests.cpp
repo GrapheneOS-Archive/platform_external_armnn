@@ -1,17 +1,17 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <backendsCommon/test/CommonTestUtils.hpp>
+#include <CommonTestUtils.hpp>
 
-#include <test/GraphUtils.hpp>
+#include <GraphUtils.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
-BOOST_AUTO_TEST_SUITE(ClFallback)
-
-BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
+TEST_SUITE("ClFallback")
+{
+TEST_CASE("ClImportEnabledFallbackToNeon")
 {
     using namespace armnn;
 
@@ -24,8 +24,8 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
     IConnectableLayer* input0 = net->AddInputLayer(0, "input0");
     IConnectableLayer* input1 = net->AddInputLayer(1, "input1");
     IConnectableLayer* input2 = net->AddInputLayer(2, "input2");
-    IConnectableLayer* add = net->AddAdditionLayer("add");
-    IConnectableLayer* sub = net->AddSubtractionLayer("sub");
+    IConnectableLayer* add = net->AddElementwiseBinaryLayer(BinaryOperation::Add, "add");
+    IConnectableLayer* sub = net->AddElementwiseBinaryLayer(BinaryOperation::Sub, "sub");
     IConnectableLayer* output = net->AddOutputLayer(0, "output");
 
     input0->GetOutputSlot(0).Connect(add->GetInputSlot(0));
@@ -34,7 +34,8 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
     add->GetOutputSlot(0).Connect(sub->GetInputSlot(1));
     sub->GetOutputSlot(0).Connect(output->GetInputSlot(0));
 
-    TensorInfo info = TensorInfo({ 1, 2, 3, 2 }, DataType::Float32);
+    TensorInfo info = TensorInfo({ 1, 2, 4, 2 }, DataType::Float32);
+    info.SetConstant(true);
 
     input0->GetOutputSlot(0).SetTensorInfo(info);
     input1->GetOutputSlot(0).SetTensorInfo(info);
@@ -47,12 +48,12 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
     sub->BackendSelectionHint(backends[1]);
 
     // optimize the network
-    OptimizerOptions optOptions;
-    optOptions.m_ImportEnabled = true;
+    OptimizerOptionsOpaque optOptions;
+    optOptions.SetImportEnabled(true);
+    optOptions.SetExportEnabled(true);
     IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec(), optOptions);
 
-    OptimizedNetwork* optNetObjPtr = PolymorphicDowncast<OptimizedNetwork*>(optNet.get());
-    Graph& graph = optNetObjPtr->GetGraph();
+    Graph& graph = GetGraphForTesting(optNet.get());
 
     armnn::Layer* const layer0 = GetFirstLayerWithName(graph, "input0");
     armnn::Layer* const layer1 = GetFirstLayerWithName(graph, "input1");
@@ -63,51 +64,69 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
     armnn::Layer* const layer6 = GetFirstLayerWithName(graph, "output");
 
     // Checks order is valid.
-    BOOST_TEST(CheckOrder(graph, layer0, layer1));
-    BOOST_TEST(CheckOrder(graph, layer1, layer2));
-    BOOST_TEST(CheckOrder(graph, layer2, layer3));
-    BOOST_TEST(CheckOrder(graph, layer3, layer4));
-    BOOST_TEST(CheckOrder(graph, layer4, layer5));
-    BOOST_TEST(CheckOrder(graph, layer5, layer6));
+    CHECK(CheckOrder(graph, layer0, layer1));
+    CHECK(CheckOrder(graph, layer1, layer2));
+    CHECK(CheckOrder(graph, layer2, layer3));
+    CHECK(CheckOrder(graph, layer3, layer4));
+    CHECK(CheckOrder(graph, layer4, layer5));
+    CHECK(CheckOrder(graph, layer5, layer6));
 
     // Use memory import between backends
-    BOOST_TEST((layer4->GetType() == LayerType::MemCopy));
+    CHECK((layer4->GetType() == LayerType::MemCopy));
 
     // Correctly use backend hint
-    BOOST_TEST((layer5->GetBackendId() == Compute::CpuAcc ));
+    CHECK((layer5->GetBackendId() == Compute::CpuAcc ));
 
     // Load it into the runtime. It should pass.
     NetworkId netId;
     std::string ignoredErrorMessage;
-    INetworkProperties networkProperties(true, true);
-
+    INetworkProperties networkProperties(false, MemorySource::Malloc, MemorySource::Malloc);
     runtime->LoadNetwork(netId, std::move(optNet), ignoredErrorMessage, networkProperties);
 
     // Creates structures for input & output
-    std::vector<float> inputData0
+    std::vector<float> inputValue0
     {
-        1.0f, 1.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 6.0f
+        1.0f, 1.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 6.0f, 1.0f, 1.0f, 2.0f, 2.0f
     };
-    std::vector<float> inputData1
+    std::vector<float> inputValue1
     {
-        0.0f, 1.0f, 1.0f, 2.0f, 3.0f, 3.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f
+        0.0f, 1.0f, 1.0f, 2.0f, 3.0f, 3.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 0.0f, 1.0f, 1.0f, 2.0f
     };
     std::vector<float> inputData2
     {
-        12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f
+        12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f, 12.0f, 11.0f, 10.0f, 9.0f
     };
 
-    std::vector<float> outputData(12);
+    std::vector<float> outputData(16);
 
     std::vector<float> expectedOutput
     {
-        11.0f, 9.0f, 7.0f, 5.0f, 3.0f, 1.0f, -1.0f, -3.0f, -5.0f, -7.0f, -9.0f, -11.0f
+        11.0f, 9.0f, 7.0f, 5.0f, 3.0f, 1.0f, -1.0f, -3.0f, -5.0f, -7.0f, -9.0f, -11.0f, 11.0f, 9.0f, 7.0f, 5.0f
     };
+
+    // Prepare aligned data
+    unsigned int numElements = info.GetNumElements();
+    size_t totalBytes = numElements * sizeof(float);
+    const size_t alignment = 64;
+    size_t space = totalBytes + alignment + alignment;
+    auto inputData0 = std::make_unique<uint8_t[]>(space);
+    void* alignedInputPtr0 = inputData0.get();
+    CHECK(std::align(alignment, totalBytes, alignedInputPtr0, space));
+
+    auto* intputPtr0 = reinterpret_cast<float*>(alignedInputPtr0);
+    std::copy(inputValue0.begin(), inputValue0.end(), intputPtr0);
+
+    auto inputData1 = std::make_unique<uint8_t[]>(space);
+    void* alignedInputPtr1 = inputData1.get();
+    CHECK(std::align(alignment, totalBytes, alignedInputPtr1, space));
+
+    auto* intputPtr1 = reinterpret_cast<float*>(alignedInputPtr1);
+    std::copy(inputValue1.begin(), inputValue1.end(), intputPtr1);
 
     InputTensors inputTensors
     {
-        { 0, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData0.data()) },
-        { 1, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 1), inputData1.data()) },
+        { 0, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), alignedInputPtr0) },
+        { 1, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 1), alignedInputPtr1) },
         { 2, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 2), inputData2.data()) }
     };
     OutputTensors outputTensors
@@ -128,17 +147,19 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackToNeon)
 
     // Executed Subtraction using CpuAcc
     std::size_t found = dump.find("NeonSubtractionWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Contain CopyMemGeneric
     found = dump.find("CopyMemGeneric");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Check output is as expected
-    BOOST_TEST(outputData == expectedOutput);
+    CHECK(outputData == expectedOutput);
+
+    runtime->UnloadNetwork(netId);
 }
 
-BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
+TEST_CASE("ClImportDisabledFallbackToNeon")
 {
     using namespace armnn;
 
@@ -151,8 +172,8 @@ BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
     IConnectableLayer* input0 = net->AddInputLayer(0, "input0");
     IConnectableLayer* input1 = net->AddInputLayer(1, "input1");
     IConnectableLayer* input2 = net->AddInputLayer(2, "input2");
-    IConnectableLayer* add = net->AddAdditionLayer("add");
-    IConnectableLayer* sub = net->AddSubtractionLayer("sub");
+    IConnectableLayer* add = net->AddElementwiseBinaryLayer(BinaryOperation::Add, "add");
+    IConnectableLayer* sub = net->AddElementwiseBinaryLayer(BinaryOperation::Sub, "sub");
     IConnectableLayer* output = net->AddOutputLayer(0, "output");
 
     input0->GetOutputSlot(0).Connect(add->GetInputSlot(0));
@@ -162,6 +183,7 @@ BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
     sub->GetOutputSlot(0).Connect(output->GetInputSlot(0));
 
     TensorInfo info = TensorInfo({ 1, 2, 3, 2 }, DataType::Float32);
+    info.SetConstant(true);
 
     input0->GetOutputSlot(0).SetTensorInfo(info);
     input1->GetOutputSlot(0).SetTensorInfo(info);
@@ -174,11 +196,10 @@ BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
     sub->BackendSelectionHint(backends[1]);
 
     // optimize the network
-    OptimizerOptions optOptions;
+    OptimizerOptionsOpaque optOptions;
     IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec(), optOptions);
 
-    OptimizedNetwork* optNetObjPtr = PolymorphicDowncast<OptimizedNetwork*>(optNet.get());
-    Graph& graph = optNetObjPtr->GetGraph();
+    Graph& graph = GetGraphForTesting(optNet.get());
 
     armnn::Layer* const layer0 = GetFirstLayerWithName(graph, "input0");
     armnn::Layer* const layer1 = GetFirstLayerWithName(graph, "input1");
@@ -189,18 +210,18 @@ BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
     armnn::Layer* const layer6 = GetFirstLayerWithName(graph, "output");
 
     // Checks order is valid.
-    BOOST_TEST(CheckOrder(graph, layer0, layer1));
-    BOOST_TEST(CheckOrder(graph, layer1, layer2));
-    BOOST_TEST(CheckOrder(graph, layer2, layer3));
-    BOOST_TEST(CheckOrder(graph, layer3, layer4));
-    BOOST_TEST(CheckOrder(graph, layer4, layer5));
-    BOOST_TEST(CheckOrder(graph, layer5, layer6));
+    CHECK(CheckOrder(graph, layer0, layer1));
+    CHECK(CheckOrder(graph, layer1, layer2));
+    CHECK(CheckOrder(graph, layer2, layer3));
+    CHECK(CheckOrder(graph, layer3, layer4));
+    CHECK(CheckOrder(graph, layer4, layer5));
+    CHECK(CheckOrder(graph, layer5, layer6));
 
     // Use memory import between backends
-    BOOST_TEST((layer4->GetType() == LayerType::MemCopy));
+    CHECK((layer4->GetType() == LayerType::MemCopy));
 
     // Correctly use backend hint
-    BOOST_TEST((layer5->GetBackendId() == Compute::CpuAcc ));
+    CHECK((layer5->GetBackendId() == Compute::CpuAcc ));
 
     // Load it into the runtime. It should pass.
     NetworkId netId;
@@ -251,17 +272,17 @@ BOOST_AUTO_TEST_CASE(ClImportDisabledFallbackToNeon)
 
     // Executed Subtraction using CpuAcc
     std::size_t found = dump.find("NeonSubtractionWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Contain CopyMemGeneric
     found = dump.find("CopyMemGeneric");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Check output is as expected
-    BOOST_TEST(outputData == expectedOutput);
+    CHECK(outputData == expectedOutput);
 }
 
-BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
+TEST_CASE("ClImportEnabledFallbackSubgraphToNeon")
 {
     using namespace armnn;
 
@@ -272,12 +293,16 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
     INetworkPtr net(INetwork::Create());
 
     Pooling2dDescriptor desc;
+    desc.m_PoolWidth = 2;
+    desc.m_PoolHeight = 2;
+    desc.m_StrideX = 2;
+    desc.m_StrideY = 2;
 
     IConnectableLayer* input0 = net->AddInputLayer(0, "input0");
     IConnectableLayer* input1 = net->AddInputLayer(1, "input1");
     IConnectableLayer* input2 = net->AddInputLayer(2, "input2");
-    IConnectableLayer* add = net->AddAdditionLayer("add");
-    IConnectableLayer* sub = net->AddSubtractionLayer("sub");
+    IConnectableLayer* add = net->AddElementwiseBinaryLayer(BinaryOperation::Add, "add");
+    IConnectableLayer* sub = net->AddElementwiseBinaryLayer(BinaryOperation::Sub, "sub");
     IConnectableLayer* pooling = net->AddPooling2dLayer(desc, "pooling");
     IConnectableLayer* output = net->AddOutputLayer(0, "output");
 
@@ -288,8 +313,9 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
     sub->GetOutputSlot(0).Connect(pooling->GetInputSlot(0));
     pooling->GetOutputSlot(0).Connect(output->GetInputSlot(0));
 
-    TensorInfo info = TensorInfo({ 1, 2, 3, 2 }, DataType::Float32);
-    TensorInfo poolingInfo = TensorInfo({ 1, 2, 1, 1 }, DataType::Float32);
+    TensorInfo info = TensorInfo({ 1, 2, 4, 2 }, DataType::Float32);
+    info.SetConstant(true);
+    TensorInfo poolingInfo = TensorInfo({ 1, 2, 2, 1 }, DataType::Float32);
 
     input0->GetOutputSlot(0).SetTensorInfo(info);
     input1->GetOutputSlot(0).SetTensorInfo(info);
@@ -303,12 +329,12 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
     sub->BackendSelectionHint(backends[1]);
 
     // optimize the network
-    OptimizerOptions optOptions;
-    optOptions.m_ImportEnabled = true;
+    OptimizerOptionsOpaque optOptions;
+    optOptions.SetImportEnabled(true);
+    optOptions.SetExportEnabled(true);
     IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec(), optOptions);
 
-    OptimizedNetwork* optNetObjPtr = PolymorphicDowncast<OptimizedNetwork*>(optNet.get());
-    Graph& graph = optNetObjPtr->GetGraph();
+    Graph& graph = GetGraphForTesting(optNet.get());
 
     armnn::Layer* const layer0 = GetFirstLayerWithName(graph, "input0");
     armnn::Layer* const layer1 = GetFirstLayerWithName(graph, "input1");
@@ -321,51 +347,68 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
     armnn::Layer* const layer8 = GetFirstLayerWithName(graph, "output");
 
     // Checks order is valid.
-    BOOST_TEST(CheckOrder(graph, layer0, layer1));
-    BOOST_TEST(CheckOrder(graph, layer1, layer2));
-    BOOST_TEST(CheckOrder(graph, layer2, layer3));
-    BOOST_TEST(CheckOrder(graph, layer3, layer4));
-    BOOST_TEST(CheckOrder(graph, layer4, layer5));
-    BOOST_TEST(CheckOrder(graph, layer5, layer6));
-    BOOST_TEST(CheckOrder(graph, layer6, layer7));
-    BOOST_TEST(CheckOrder(graph, layer7, layer8));
+    CHECK(CheckOrder(graph, layer0, layer1));
+    CHECK(CheckOrder(graph, layer1, layer2));
+    CHECK(CheckOrder(graph, layer2, layer3));
+    CHECK(CheckOrder(graph, layer3, layer4));
+    CHECK(CheckOrder(graph, layer4, layer5));
+    CHECK(CheckOrder(graph, layer5, layer6));
+    CHECK(CheckOrder(graph, layer6, layer7));
+    CHECK(CheckOrder(graph, layer7, layer8));
 
     // Use memory import between backends
-    BOOST_TEST((layer4->GetType() == LayerType::MemCopy));
-    BOOST_TEST((layer6->GetType() == LayerType::MemCopy));
+    CHECK((layer4->GetType() == LayerType::MemCopy));
+    CHECK((layer6->GetType() == LayerType::MemCopy));
 
     // Correctly use backend hint
-    BOOST_TEST((layer5->GetBackendId() == Compute::CpuAcc ));
+    CHECK((layer5->GetBackendId() == Compute::CpuAcc ));
 
     // Load it into the runtime. It should pass.
     NetworkId netId;
     std::string ignoredErrorMessage;
-    INetworkProperties networkProperties(true, true);
-
+    INetworkProperties networkProperties(false, MemorySource::Malloc, MemorySource::Malloc);
     runtime->LoadNetwork(netId, std::move(optNet), ignoredErrorMessage, networkProperties);
 
     // Creates structures for input & output
-    std::vector<float> inputData0
+    std::vector<float> inputValue0
     {
-        1.0f, 1.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 6.0f
+        1.0f, 1.0f, 2.0f, 2.0f, 2.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 6.0f, 1.0f, 1.0f, 2.0f, 2.0f
     };
-    std::vector<float> inputData1
+    std::vector<float> inputValue1
     {
-        0.0f, 1.0f, 1.0f, 2.0f, 3.0f, 3.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f
+        0.0f, 1.0f, 1.0f, 2.0f, 3.0f, 3.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 6.0f, 0.0f, 1.0f, 1.0f, 2.0f
     };
     std::vector<float> inputData2
     {
-        12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f
+        12.0f, 11.0f, 10.0f, 9.0f, 8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f, 12.0f, 11.0f, 10.0f, 9.0f
     };
 
-    std::vector<float> outputData(2);
+    std::vector<float> outputData(4);
 
-    std::vector<float> expectedOutput{ 11.0f, -1.0f };
+    std::vector<float> expectedOutput{ 11.0f, 3.0f, -5.0f, 11.0f };
+
+    unsigned int numElements = info.GetNumElements();
+    size_t totalBytes = numElements * sizeof(float);
+    const size_t alignment = 64;
+    size_t space = totalBytes + alignment + alignment;
+    auto inputData0 = std::make_unique<uint8_t[]>(space);
+    void* alignedInputPtr0 = inputData0.get();
+    CHECK(std::align(alignment, totalBytes, alignedInputPtr0, space));
+
+    auto* intputPtr0 = reinterpret_cast<float*>(alignedInputPtr0);
+    std::copy(inputValue0.begin(), inputValue0.end(), intputPtr0);
+
+    auto inputData1 = std::make_unique<uint8_t[]>(space);
+    void* alignedInputPtr1 = inputData1.get();
+    CHECK(std::align(alignment, totalBytes, alignedInputPtr1, space));
+
+    auto* intputPtr1 = reinterpret_cast<float*>(alignedInputPtr1);
+    std::copy(inputValue1.begin(), inputValue1.end(), intputPtr1);
 
     InputTensors inputTensors
     {
-        { 0, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData0.data()) },
-        { 1, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 1), inputData1.data()) },
+        { 0, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), alignedInputPtr0) },
+        { 1, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 1), alignedInputPtr1) },
         { 2, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 2), inputData2.data()) }
     };
     OutputTensors outputTensors
@@ -386,21 +429,23 @@ BOOST_AUTO_TEST_CASE(ClImportEnabledFallbackSubgraphToNeon)
 
     // Executed Subtraction using CpuAcc
     std::size_t found = dump.find("NeonSubtractionWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Correctly switch back to GpuAcc
     found = dump.find("ClPooling2dWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Contain CopyMemGeneric
     found = dump.find("CopyMemGeneric");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Check output is as expected
-    BOOST_TEST(outputData == expectedOutput);
+    CHECK(outputData == expectedOutput);
+
+    runtime->UnloadNetwork(netId);
 }
 
-BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
+TEST_CASE("ClImportDisableFallbackSubgraphToNeon")
 {
     using namespace armnn;
 
@@ -415,8 +460,8 @@ BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
     IConnectableLayer* input0 = net->AddInputLayer(0, "input0");
     IConnectableLayer* input1 = net->AddInputLayer(1, "input1");
     IConnectableLayer* input2 = net->AddInputLayer(2, "input2");
-    IConnectableLayer* add = net->AddAdditionLayer("add");
-    IConnectableLayer* sub = net->AddSubtractionLayer("sub");
+    IConnectableLayer* add = net->AddElementwiseBinaryLayer(BinaryOperation::Add, "add");
+    IConnectableLayer* sub = net->AddElementwiseBinaryLayer(BinaryOperation::Sub, "sub");
     IConnectableLayer* pooling = net->AddPooling2dLayer(desc, "pooling");
     IConnectableLayer* output = net->AddOutputLayer(0, "output");
 
@@ -428,6 +473,7 @@ BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
     pooling->GetOutputSlot(0).Connect(output->GetInputSlot(0));
 
     TensorInfo info = TensorInfo({ 1, 2, 3, 2 }, DataType::Float32);
+    info.SetConstant(true);
     TensorInfo poolingInfo = TensorInfo({ 1, 2, 1, 1 }, DataType::Float32);
 
     input0->GetOutputSlot(0).SetTensorInfo(info);
@@ -442,11 +488,10 @@ BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
     sub->BackendSelectionHint(backends[1]);
 
     // optimize the network
-    OptimizerOptions optOptions;
+    OptimizerOptionsOpaque optOptions;
     IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec(), optOptions);
 
-    OptimizedNetwork* optNetObjPtr = PolymorphicDowncast<OptimizedNetwork*>(optNet.get());
-    Graph& graph = optNetObjPtr->GetGraph();
+    Graph& graph = GetGraphForTesting(optNet.get());
 
     armnn::Layer* const layer0 = GetFirstLayerWithName(graph, "input0");
     armnn::Layer* const layer1 = GetFirstLayerWithName(graph, "input1");
@@ -459,21 +504,21 @@ BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
     armnn::Layer* const layer8 = GetFirstLayerWithName(graph, "output");
 
     // Checks order is valid.
-    BOOST_TEST(CheckOrder(graph, layer0, layer1));
-    BOOST_TEST(CheckOrder(graph, layer1, layer2));
-    BOOST_TEST(CheckOrder(graph, layer2, layer3));
-    BOOST_TEST(CheckOrder(graph, layer3, layer4));
-    BOOST_TEST(CheckOrder(graph, layer4, layer5));
-    BOOST_TEST(CheckOrder(graph, layer5, layer6));
-    BOOST_TEST(CheckOrder(graph, layer6, layer7));
-    BOOST_TEST(CheckOrder(graph, layer7, layer8));
+    CHECK(CheckOrder(graph, layer0, layer1));
+    CHECK(CheckOrder(graph, layer1, layer2));
+    CHECK(CheckOrder(graph, layer2, layer3));
+    CHECK(CheckOrder(graph, layer3, layer4));
+    CHECK(CheckOrder(graph, layer4, layer5));
+    CHECK(CheckOrder(graph, layer5, layer6));
+    CHECK(CheckOrder(graph, layer6, layer7));
+    CHECK(CheckOrder(graph, layer7, layer8));
 
     // Use memory import between backends
-    BOOST_TEST((layer4->GetType() == LayerType::MemCopy));
-    BOOST_TEST((layer6->GetType() == LayerType::MemCopy));
+    CHECK((layer4->GetType() == LayerType::MemCopy));
+    CHECK((layer6->GetType() == LayerType::MemCopy));
 
     // Correctly use backend hint
-    BOOST_TEST((layer5->GetBackendId() == Compute::CpuAcc ));
+    CHECK((layer5->GetBackendId() == Compute::CpuAcc ));
 
     // Load it into the runtime. It should pass.
     NetworkId netId;
@@ -521,18 +566,18 @@ BOOST_AUTO_TEST_CASE(ClImportDisableFallbackSubgraphToNeon)
 
     // Executed Subtraction using CpuAcc
     std::size_t found = dump.find("NeonSubtractionWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Correctly switch back to GpuAcc
     found = dump.find("ClPooling2dWorkload_Execute");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Contain CopyMemGeneric
     found = dump.find("CopyMemGeneric");
-    BOOST_TEST(found != std::string::npos);
+    CHECK(found != std::string::npos);
 
     // Check output is as expected
-    BOOST_TEST(outputData == expectedOutput);
+    CHECK(outputData == expectedOutput);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

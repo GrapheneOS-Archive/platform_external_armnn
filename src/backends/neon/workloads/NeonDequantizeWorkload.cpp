@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -11,7 +11,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 namespace armnn
@@ -29,7 +29,7 @@ arm_compute::Status NeonDequantizeWorkloadValidate(const TensorInfo& input,
 }
 
 NeonDequantizeWorkload::NeonDequantizeWorkload(const DequantizeQueueDescriptor& descriptor, const WorkloadInfo& info)
-        : BaseWorkload<DequantizeQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<DequantizeQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonDequantizeWorkload", 1, 1);
 
@@ -44,7 +44,7 @@ NeonDequantizeWorkload::NeonDequantizeWorkload(const DequantizeQueueDescriptor& 
 
 void NeonDequantizeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonDequantizeWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonDequantizeWorkload_Execute", this->GetGuid());
     m_Layer->run();
 }
 

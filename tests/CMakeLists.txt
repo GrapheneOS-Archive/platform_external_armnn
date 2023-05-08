@@ -1,3 +1,8 @@
+#
+# Copyright © 2018-2023 Arm Ltd and Contributors. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+
 # UnitTests
 include(CheckIncludeFiles)
 
@@ -16,115 +21,7 @@ target_include_directories(inferenceTest PRIVATE ../src/armnnUtils)
 target_include_directories(inferenceTest PRIVATE ../src/backends)
 target_include_directories(inferenceTest PRIVATE ../third-party/stb)
 
-if(BUILD_CAFFE_PARSER)
-    macro(CaffeParserTest testName sources)
-        add_executable_ex(${testName} ${sources})
-        target_include_directories(${testName} PRIVATE ../src/armnnUtils)
-        target_include_directories(${testName} PRIVATE ../src/backends)
-        set_target_properties(${testName} PROPERTIES COMPILE_FLAGS "${CAFFE_PARSER_TEST_ADDITIONAL_COMPILE_FLAGS}")
-
-        target_link_libraries(${testName} inferenceTest)
-        target_link_libraries(${testName} armnnCaffeParser)
-        target_link_libraries(${testName} armnn)
-        target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        addDllCopyCommands(${testName})
-    endmacro()
-
-    set(CaffeCifar10AcrossChannels-Armnn_sources
-        CaffeCifar10AcrossChannels-Armnn/CaffeCifar10AcrossChannels-Armnn.cpp
-        Cifar10Database.hpp
-        Cifar10Database.cpp)
-    CaffeParserTest(CaffeCifar10AcrossChannels-Armnn "${CaffeCifar10AcrossChannels-Armnn_sources}")
-
-    set(CaffeMnist-Armnn_sources
-        CaffeMnist-Armnn/CaffeMnist-Armnn.cpp
-        MnistDatabase.hpp
-        MnistDatabase.cpp)
-    CaffeParserTest(CaffeMnist-Armnn "${CaffeMnist-Armnn_sources}")
-
-    set(CaffeAlexNet-Armnn_sources
-        CaffeAlexNet-Armnn/CaffeAlexNet-Armnn.cpp
-        CaffePreprocessor.hpp
-        CaffePreprocessor.cpp)
-    CaffeParserTest(CaffeAlexNet-Armnn "${CaffeAlexNet-Armnn_sources}")
-
-    set(MultipleNetworksCifar10_SRC
-        MultipleNetworksCifar10/MultipleNetworksCifar10.cpp
-        Cifar10Database.hpp
-        Cifar10Database.cpp)
-    CaffeParserTest(MultipleNetworksCifar10 "${MultipleNetworksCifar10_SRC}")
-
-    set(CaffeResNet-Armnn_sources
-        CaffeResNet-Armnn/CaffeResNet-Armnn.cpp
-        CaffePreprocessor.hpp
-        CaffePreprocessor.cpp)
-    CaffeParserTest(CaffeResNet-Armnn "${CaffeResNet-Armnn_sources}")
-
-    set(CaffeVGG-Armnn_sources
-        CaffeVGG-Armnn/CaffeVGG-Armnn.cpp
-        CaffePreprocessor.hpp
-        CaffePreprocessor.cpp)
-    CaffeParserTest(CaffeVGG-Armnn "${CaffeVGG-Armnn_sources}")
-
-    set(CaffeInception_BN-Armnn_sources
-        CaffeInception_BN-Armnn/CaffeInception_BN-Armnn.cpp
-        CaffePreprocessor.hpp
-        CaffePreprocessor.cpp)
-    CaffeParserTest(CaffeInception_BN-Armnn "${CaffeInception_BN-Armnn_sources}")
-
-    set(CaffeYolo-Armnn_sources
-        CaffeYolo-Armnn/CaffeYolo-Armnn.cpp
-        YoloDatabase.hpp
-        YoloDatabase.cpp
-        YoloInferenceTest.hpp)
-    CaffeParserTest(CaffeYolo-Armnn "${CaffeYolo-Armnn_sources}")
-endif()
-
-if(BUILD_TF_PARSER)
-    macro(TfParserTest testName sources)
-        add_executable_ex(${testName} ${sources})
-        target_include_directories(${testName} PRIVATE ../src/armnnUtils)
-        target_include_directories(${testName} PRIVATE ../src/backends)
-
-        target_link_libraries(${testName} inferenceTest)
-        target_link_libraries(${testName} armnnTfParser)
-        target_link_libraries(${testName} armnn)
-        target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
-        addDllCopyCommands(${testName})
-    endmacro()
-
-    set(TfMnist-Armnn_sources
-        TfMnist-Armnn/TfMnist-Armnn.cpp
-        MnistDatabase.hpp
-        MnistDatabase.cpp)
-    TfParserTest(TfMnist-Armnn "${TfMnist-Armnn_sources}")
-
-    set(TfCifar10-Armnn_sources
-        TfCifar10-Armnn/TfCifar10-Armnn.cpp
-        Cifar10Database.hpp
-        Cifar10Database.cpp)
-    TfParserTest(TfCifar10-Armnn "${TfCifar10-Armnn_sources}")
-
-    set(TfMobileNet-Armnn_sources
-        TfMobileNet-Armnn/TfMobileNet-Armnn.cpp
-        ImagePreprocessor.hpp
-        ImagePreprocessor.cpp)
-    TfParserTest(TfMobileNet-Armnn "${TfMobileNet-Armnn_sources}")
-
-    set(TfInceptionV3-Armnn_sources
-        TfInceptionV3-Armnn/TfInceptionV3-Armnn.cpp
-        ImagePreprocessor.hpp
-        ImagePreprocessor.cpp)
-    TfParserTest(TfInceptionV3-Armnn "${TfInceptionV3-Armnn_sources}")
-
-    set(TfResNext-Armnn_sources
-        TfResNext_Quantized-Armnn/TfResNext_Quantized-Armnn.cpp
-        CaffePreprocessor.hpp
-        CaffePreprocessor.cpp)
-    TfParserTest(TfResNext-Armnn "${TfResNext-Armnn_sources}")
-endif()
-
-if (BUILD_TF_LITE_PARSER)
+if (BUILD_TF_LITE_PARSER AND NOT EXECUTE_NETWORK_STATIC)
     macro(TfLiteParserTest testName sources)
         add_executable_ex(${testName} ${sources})
         target_include_directories(${testName} PRIVATE ../src/armnnUtils)
@@ -136,6 +33,10 @@ if (BUILD_TF_LITE_PARSER)
         target_link_libraries(${testName} ${CMAKE_THREAD_LIBS_INIT})
         addDllCopyCommands(${testName})
     endmacro()
+
+    set(TfLiteBenchmark-Armnn_sources
+        TfLiteBenchmark-Armnn/TfLiteBenchmark-Armnn.cpp)
+    TfLiteParserTest(TfLiteBenchmark-Armnn "${TfLiteBenchmark-Armnn_sources}")
 
     set(TfLiteMobilenetQuantized-Armnn_sources
         TfLiteMobilenetQuantized-Armnn/TfLiteMobilenetQuantized-Armnn.cpp
@@ -206,9 +107,12 @@ if (BUILD_TF_LITE_PARSER)
         ImagePreprocessor.hpp
         ImagePreprocessor.cpp)
     TfLiteParserTest(TfLiteYoloV3Big-Armnn "${TfLiteYoloV3Big-Armnn_sources}")
+
+
+
 endif()
 
-if (BUILD_ONNX_PARSER)
+if (BUILD_ONNX_PARSER AND NOT EXECUTE_NETWORK_STATIC)
     macro(OnnxParserTest testName sources)
         add_executable_ex(${testName} ${sources})
         target_include_directories(${testName} PRIVATE ../src/armnnUtils)
@@ -234,8 +138,14 @@ if (BUILD_ONNX_PARSER)
     OnnxParserTest(OnnxMobileNet-Armnn "${OnnxMobileNet-Armnn_sources}")
 endif()
 
-if (BUILD_ARMNN_SERIALIZER OR BUILD_CAFFE_PARSER OR BUILD_TF_PARSER OR BUILD_TF_LITE_PARSER OR BUILD_ONNX_PARSER)
+if (BUILD_ARMNN_SERIALIZER
+        OR BUILD_TF_LITE_PARSER
+        OR BUILD_ONNX_PARSER
+        OR BUILD_CLASSIC_DELEGATE)
     set(ExecuteNetwork_sources
+        ExecuteNetwork/IExecutor.hpp
+        ExecuteNetwork/ArmNNExecutor.cpp
+        ExecuteNetwork/ArmNNExecutor.hpp
         ExecuteNetwork/ExecuteNetwork.cpp
         ExecuteNetwork/ExecuteNetworkProgramOptions.cpp
         ExecuteNetwork/ExecuteNetworkProgramOptions.hpp
@@ -244,32 +154,43 @@ if (BUILD_ARMNN_SERIALIZER OR BUILD_CAFFE_PARSER OR BUILD_TF_PARSER OR BUILD_TF_
         NetworkExecutionUtils/NetworkExecutionUtils.cpp
         NetworkExecutionUtils/NetworkExecutionUtils.hpp)
 
+    if(BUILD_CLASSIC_DELEGATE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-comment")
+        set(ExecuteNetwork_sources
+            ${ExecuteNetwork_sources}
+            ExecuteNetwork/TfliteExecutor.cpp
+            ExecuteNetwork/TfliteExecutor.hpp)
+    endif()
+
     add_executable_ex(ExecuteNetwork ${ExecuteNetwork_sources})
     target_include_directories(ExecuteNetwork PRIVATE ../src/armnn)
     target_include_directories(ExecuteNetwork PRIVATE ../src/armnnUtils)
     target_include_directories(ExecuteNetwork PRIVATE ../src/backends)
     target_include_directories(ExecuteNetwork PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
-    if (BUILD_ARMNN_SERIALIZER)
-        target_link_libraries(ExecuteNetwork armnnSerializer)
+    if(EXECUTE_NETWORK_STATIC)
+        target_link_libraries(ExecuteNetwork
+                -Wl,--whole-archive
+                armnnSerializer
+                armnnTfLiteParser
+                armnn
+                pthread
+                -Wl,--no-whole-archive
+                )
+    else()
+        if (BUILD_ARMNN_SERIALIZER)
+            target_link_libraries(ExecuteNetwork armnnSerializer)
+        endif()
+        if (BUILD_TF_LITE_PARSER)
+            target_link_libraries(ExecuteNetwork armnnTfLiteParser)
+        endif()
+        if (BUILD_ONNX_PARSER)
+            target_link_libraries(ExecuteNetwork armnnOnnxParser)
+        endif()
+        if (BUILD_CLASSIC_DELEGATE)
+            target_link_libraries(ExecuteNetwork ArmnnDelegate::ArmnnDelegate)
+        endif()
+        target_link_libraries(ExecuteNetwork armnn)
     endif()
-    if (BUILD_CAFFE_PARSER)
-        target_link_libraries(ExecuteNetwork armnnCaffeParser)
-    endif()
-    if (BUILD_TF_PARSER)
-        target_link_libraries(ExecuteNetwork armnnTfParser)
-    endif()
-
-    if (BUILD_TF_LITE_PARSER)
-        target_link_libraries(ExecuteNetwork armnnTfLiteParser)
-    endif()
-    if (BUILD_ONNX_PARSER)
-        target_link_libraries(ExecuteNetwork armnnOnnxParser)
-    endif()
-    if (BUILD_ARMNN_TFLITE_DELEGATE)
-        target_link_libraries(ExecuteNetwork ArmnnDelegate::ArmnnDelegate)
-    endif()
-    target_link_libraries(ExecuteNetwork armnn)
 
    target_link_libraries(ExecuteNetwork ${CMAKE_THREAD_LIBS_INIT})
    addDllCopyCommands(ExecuteNetwork)
@@ -280,12 +201,6 @@ if(BUILD_ACCURACY_TOOL)
         target_link_libraries(${executorName} ${CMAKE_THREAD_LIBS_INIT})
         if (BUILD_ARMNN_SERIALIZER)
             target_link_libraries(${executorName} armnnSerializer)
-        endif()
-        if (BUILD_CAFFE_PARSER)
-            target_link_libraries(${executorName} armnnCaffeParser)
-        endif()
-        if (BUILD_TF_PARSER)
-            target_link_libraries(${executorName} armnnTfParser)
         endif()
         if (BUILD_TF_LITE_PARSER)
             target_link_libraries(${executorName} armnnTfLiteParser)
@@ -309,7 +224,7 @@ if(BUILD_ACCURACY_TOOL)
     AccuracyTool(ModelAccuracyTool)
 endif()
 
-if(BUILD_ARMNN_QUANTIZER)
+if(BUILD_ACCURACY_TOOL)
     macro(ImageTensorExecutor executorName)
         target_link_libraries(${executorName} ${CMAKE_THREAD_LIBS_INIT})
         addDllCopyCommands(${executorName})
@@ -333,4 +248,8 @@ if(BUILD_ARMNN_QUANTIZER)
     add_executable_ex(ImageCSVFileGenerator ${ImageCSVFileGenerator_sources})
     target_include_directories(ImageCSVFileGenerator PRIVATE ../src/armnnUtils)
     ImageTensorExecutor(ImageCSVFileGenerator)
+endif()
+
+if(BUILD_MEMORY_STRATEGY_BENCHMARK)
+    add_subdirectory(MemoryStrategyBenchmark)
 endif()

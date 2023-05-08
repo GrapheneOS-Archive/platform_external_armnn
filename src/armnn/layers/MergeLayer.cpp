@@ -6,8 +6,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -58,9 +58,9 @@ std::vector<TensorShape> MergeLayer::InferOutputShapes(const std::vector<TensorS
     return {inputShapes[0]};
 }
 
-void MergeLayer::Accept(ILayerVisitor& visitor) const
+void MergeLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitMergeLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

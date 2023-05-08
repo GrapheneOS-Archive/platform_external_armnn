@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -21,10 +21,11 @@ AbsLayer::AbsLayer(const char* name)
 
 std::unique_ptr<IWorkload> AbsLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    AbsQueueDescriptor descriptor;
+    ElementwiseUnaryQueueDescriptor descriptor;
+    descriptor.m_Parameters.m_Operation = UnaryOperation::Abs;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateAbs(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::ElementwiseUnary, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 AbsLayer* AbsLayer::Clone(Graph& graph) const
@@ -46,9 +47,9 @@ void AbsLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "AbsLayer");
 }
 
-void AbsLayer::Accept(ILayerVisitor& visitor) const
+void AbsLayer::ExecuteStrategy(IStrategy &strategy) const
 {
-    visitor.VisitAbsLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GeName());
 }
 
 } // namespace armnn

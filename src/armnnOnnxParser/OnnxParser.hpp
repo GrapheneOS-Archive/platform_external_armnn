@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -22,34 +22,56 @@ namespace armnnOnnxParser
 
 using ModelPtr = std::unique_ptr<onnx::ModelProto>;
 
-class OnnxParser : public IOnnxParser
+class OnnxParserImpl
 {
 
-using OperationParsingFunction = void(OnnxParser::*)(const onnx::NodeProto& NodeProto);
+using OperationParsingFunction = void(OnnxParserImpl::*)(const onnx::NodeProto& NodeProto);
 
 public:
 
     using GraphPtr = std::unique_ptr<onnx::GraphProto>;
 
     /// Create the network from a protobuf binary file on disk
-    virtual armnn::INetworkPtr CreateNetworkFromBinaryFile(const char* graphFile) override;
+    armnn::INetworkPtr CreateNetworkFromBinaryFile(const char* graphFile);
+
+    /// Create the network from a protobuf binary file on disk, with inputShapes specified
+    armnn::INetworkPtr CreateNetworkFromBinaryFile(const char* graphFile,
+                                                   const std::map<std::string, armnn::TensorShape>& inputShapes);
+
+    /// Create the network from a protobuf binary
+    armnn::INetworkPtr CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent);
+
+    /// Create the network from a protobuf binary, with inputShapes specified
+    armnn::INetworkPtr CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent,
+                                               const std::map<std::string, armnn::TensorShape>& inputShapes);
 
     /// Create the network from a protobuf text file on disk
-    virtual armnn::INetworkPtr CreateNetworkFromTextFile(const char* graphFile) override;
+    armnn::INetworkPtr CreateNetworkFromTextFile(const char* graphFile);
+
+    /// Create the network from a protobuf text file on disk, with inputShapes specified
+    armnn::INetworkPtr CreateNetworkFromTextFile(const char* graphFile,
+                                                 const std::map<std::string, armnn::TensorShape>& inputShapes);
 
     /// Create the network directly from protobuf text in a string. Useful for debugging/testing
-    virtual armnn::INetworkPtr CreateNetworkFromString(const std::string& protoText) override;
+    armnn::INetworkPtr CreateNetworkFromString(const std::string& protoText);
+
+     /// Create the network directly from protobuf text in a string, with inputShapes specified.
+     /// Useful for debugging/testing
+    armnn::INetworkPtr CreateNetworkFromString(const std::string& protoText,
+                                               const std::map<std::string, armnn::TensorShape>& inputShapes);
 
     /// Retrieve binding info (layer id and tensor info) for the network input identified by the given layer name
-    virtual BindingPointInfo GetNetworkInputBindingInfo(const std::string& name) const override;
+    BindingPointInfo GetNetworkInputBindingInfo(const std::string& name) const;
 
     /// Retrieve binding info (layer id and tensor info) for the network output identified by the given layer name
-    virtual BindingPointInfo GetNetworkOutputBindingInfo(const std::string& name) const override;
+    BindingPointInfo GetNetworkOutputBindingInfo(const std::string& name) const;
 
 public:
 
-    OnnxParser();
+    OnnxParserImpl();
+    ~OnnxParserImpl() = default;
 
+    static ModelPtr LoadModelFromBinary(const std::vector<uint8_t>& binaryContent);
     static ModelPtr LoadModelFromBinaryFile(const char * fileName);
     static ModelPtr LoadModelFromTextFile(const char * fileName);
     static ModelPtr LoadModelFromString(const std::string& inputString);
@@ -59,6 +81,9 @@ public:
 
     /// Retrieve outputs names
     static std::vector<std::string> GetOutputs(ModelPtr& model);
+
+    /// Retrieve version in X.Y.Z form
+    static const std::string GetVersion();
 
 private:
 
@@ -70,9 +95,11 @@ private:
 
     void SetupInfo(const google::protobuf::RepeatedPtrField<onnx::ValueInfoProto >* list);
 
-    std::vector<armnn::TensorInfo> ComputeOutputInfo(std::vector<std::string> outNames,
-                                                     const armnn::IConnectableLayer* layer,
-                                                     std::vector<armnn::TensorShape> inputShapes);
+    std::vector<armnn::TensorInfo> ComputeOutputInfo(
+        std::vector<std::string> outNames,
+        const armnn::IConnectableLayer* layer,
+        std::vector<armnn::TensorShape> inputShapes,
+        const onnx::TensorProto::DataType& type = onnx::TensorProto::FLOAT);
 
     void DetectFullyConnected();
 
@@ -94,6 +121,7 @@ private:
     void AddPoolingLayer(const onnx::NodeProto& nodeProto, armnn::Pooling2dDescriptor& desc);
 
     void CreateConstantLayer(const std::string& tensorName, const std::string& layerName);
+    void CreateInt64ConstantLayer(const std::string& tensorName, const std::string& layerName);
     void CreateReshapeLayer(const std::string& inputName,
                             const std::string& outputName,
                             const std::string& layerName);
@@ -108,13 +136,21 @@ private:
     void ParseAdd(const onnx::NodeProto& nodeProto);
     void ParseAveragePool(const onnx::NodeProto& nodeProto);
     void ParseBatchNormalization(const onnx::NodeProto& node);
+    void ParseConcat(const onnx::NodeProto& nodeProto);
     void ParseConstant(const onnx::NodeProto& nodeProto);
     void ParseConv(const onnx::NodeProto& nodeProto);
     void ParseFlatten(const onnx::NodeProto& node);
+    void ParseGather(const onnx::NodeProto& node);
+    void ParseGemm(const onnx::NodeProto& node);
     void ParseGlobalAveragePool(const onnx::NodeProto& node);
     void ParseMaxPool(const onnx::NodeProto& nodeProto);
+    void ParseShape(const onnx::NodeProto& node);
     void ParseReshape(const onnx::NodeProto& nodeProto);
+    void ParseUnsqueeze(const onnx::NodeProto& nodeProto);
 
+    void RegisterInputSlot(armnn::IConnectableLayer* layer,
+                           const std::string& tensorId,
+                           unsigned int slotIndex);
     void RegisterInputSlots(armnn::IConnectableLayer* layer, const std::vector<std::string>& tensorIndexes);
     void RegisterOutputSlots(armnn::IConnectableLayer* layer, const std::vector<std::string>& tensorIndexes);
 
@@ -124,7 +160,13 @@ private:
     void ResetParser();
     void Cleanup();
 
-    std::pair<armnn::ConstTensor, std::unique_ptr<float[]>> CreateConstTensor(const std::string name);
+    std::pair<armnn::ConstTensor, std::unique_ptr<float[]>>
+    CreateConstTensor(const std::string name,
+                      armnn::Optional<armnn::PermutationVector&> permutationVector = armnn::EmptyOptional());
+
+    std::pair<armnn::ConstTensor, std::unique_ptr<int32_t[]>>
+    CreateInt64ConstTensor(const std::string name,
+                           armnn::Optional<armnn::PermutationVector&> permutationVector = armnn::EmptyOptional());
 
     template <typename TypeList, typename Location>
     void ValidateInputs(const onnx::NodeProto& node,
@@ -154,7 +196,7 @@ private:
     static const std::map<std::string, OperationParsingFunction> m_ParserFunctions;
 
     /// A mapping of an output slot to each of the input slots it should be connected to
-    /// The outputSlot is from the layer that creates this tensor as one of its ouputs
+    /// The outputSlot is from the layer that creates this tensor as one of its outputs
     /// The inputSlots are from the layers that use this tensor as one of their inputs
     struct TensorSlots
     {
@@ -169,7 +211,7 @@ private:
     /// Map of the tensor names to their node and index in graph.node()
     std::unordered_map<std::string, std::pair<const onnx::NodeProto*, int>> m_OutputsMap;
 
-    /// Number of times a specific node (identified by his index number) was used as input
+    /// Number of times a specific node (identified by its index number) was used as input
     /// and list of the nodes it was fused with
     struct UsageSummary
     {
@@ -181,6 +223,12 @@ private:
     };
 
     std::vector<UsageSummary> m_OutputsFusedAndUsed;
+
+    std::map<std::string, armnn::TensorShape> m_InputShapes;
+
+    std::unordered_map<std::string, armnn::TensorInfo> m_InputInfos;
+
+    std::unordered_map<std::string, armnn::TensorInfo> m_OutputInfos;
 
 };
 }

@@ -7,9 +7,19 @@
 #include <armnn/Descriptors.hpp>
 #include <armnn/Tensor.hpp>
 #include <armnn/utility/Assert.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/utility/NumericCast.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 #include <arm_compute/core/Types.h>
+#include <arm_compute/runtime/FunctionDescriptors.h>
+
+#if defined(ARMCOMPUTENEON_ENABLED)
+#include "neon/workloads/NeonReduceWorkload.hpp"
+#endif
+
+#if defined(ARMCOMPUTECL_ENABLED)
+#include "cl/workloads/ClReduceWorkload.hpp"
+#endif
 
 namespace armnn
 {
@@ -100,6 +110,30 @@ ConvertAdditionalInfoToAclActivationLayerInfo(const QueueDescriptor& queueDescri
                 *activationDescPtr));
     }
     return arm_compute::ActivationLayerInfo();
+}
+
+inline arm_compute::ActivationLayerInfo
+ConvertLstmActivationFuncToAclLayerInfo(uint32_t activationFunction)
+{
+    // For preparing the object for the class ActivationLayerInfo, we need to consider 5 situations.
+    switch (activationFunction)
+    {
+        case 0:
+            return arm_compute::ActivationLayerInfo(); // no activation, do nothing
+        case 1:
+            return arm_compute::ActivationLayerInfo(arm_compute::ActivationLayerInfo::ActivationFunction::RELU);
+        case 3:
+            return arm_compute::ActivationLayerInfo(
+                arm_compute::ActivationLayerInfo::ActivationFunction::BOUNDED_RELU, 6.0);
+        case 4:
+            return arm_compute::ActivationLayerInfo(
+                arm_compute::ActivationLayerInfo::ActivationFunction::TANH, 1.0, 1.0);
+        case 6:
+            return arm_compute::ActivationLayerInfo(
+                arm_compute::ActivationLayerInfo::ActivationFunction::LOGISTIC);
+        default:
+            throw armnn::Exception("Wrong Type of Activation Function!");
+    }
 }
 
 inline arm_compute::ComparisonOperation ConvertComparisonOperationToAcl(const ComparisonDescriptor& descriptor)
@@ -254,5 +288,149 @@ inline unsigned int ComputePositiveAxis(const int& axis, const armnn::TensorInfo
     int positiveAxis = (axis < 0) ? rank + axis : axis;
     return static_cast<unsigned int>(positiveAxis);
 }
+
+/// Utility function used to setup an arm_compute::Conv3dInfo object from convolution3d descriptor.
+inline arm_compute::Conv3dInfo ComputeConv3DInfo(const armnn::Convolution3dDescriptor descriptor,
+                                                 bool isFastMathEnabled,
+                                                 const ActivationDescriptor* activationDescriptor)
+{
+    const arm_compute::Size3D    stride{descriptor.m_StrideX, descriptor.m_StrideY, descriptor.m_StrideZ};
+    const arm_compute::Padding3D padding{descriptor.m_PadLeft, descriptor.m_PadRight,
+                                         descriptor.m_PadTop, descriptor.m_PadBottom,
+                                         descriptor.m_PadFront, descriptor.m_PadBack};
+    const arm_compute::Size3D    dilation{descriptor.m_DilationX, descriptor.m_DilationY, descriptor.m_DilationZ};
+
+    const arm_compute::ActivationLayerInfo activationInfo =
+            ConvertActivationDescriptorToAclActivationLayerInfo(activationDescriptor);
+    const auto roundType = arm_compute::DimensionRoundingType::FLOOR;
+
+    return arm_compute::Conv3dInfo{stride, padding, activationInfo, dilation, roundType, isFastMathEnabled};
+}
+
+inline arm_compute::Conv3dInfo ComputeConv3DInfo(const armnn::Convolution3dQueueDescriptor queueDescriptor,
+                                                 bool isFastMathEnabled)
+{
+    auto descriptor = queueDescriptor.m_Parameters;
+    const arm_compute::Size3D    stride{descriptor.m_StrideX, descriptor.m_StrideY, descriptor.m_StrideZ};
+    const arm_compute::Padding3D padding{descriptor.m_PadLeft, descriptor.m_PadRight,
+                                         descriptor.m_PadTop, descriptor.m_PadBottom,
+                                         descriptor.m_PadFront, descriptor.m_PadBack};
+    const arm_compute::Size3D    dilation{descriptor.m_DilationX, descriptor.m_DilationY, descriptor.m_DilationZ};
+
+    const arm_compute::ActivationLayerInfo activationInfo =
+            ConvertAdditionalInfoToAclActivationLayerInfo(queueDescriptor);
+    const auto roundType = arm_compute::DimensionRoundingType::FLOOR;
+
+    return arm_compute::Conv3dInfo{stride, padding, activationInfo, dilation, roundType, isFastMathEnabled};
+}
+
+inline arm_compute::PaddingMode ConvertPaddingModeToAcl(const PaddingMode& paddingMode)
+{
+    switch (paddingMode)
+    {
+        case PaddingMode::Constant:   return arm_compute::PaddingMode::CONSTANT;
+        case PaddingMode::Reflect:    return arm_compute::PaddingMode::REFLECT;
+        case PaddingMode::Symmetric:  return arm_compute::PaddingMode::SYMMETRIC;
+        default:                      throw InvalidArgumentException("Unsupported Padding Mode");
+    }
+}
+
+inline arm_compute::ReductionOperation ConvertReductionOperationToAcl(const ReduceDescriptor& descriptor)
+{
+    switch (descriptor.m_ReduceOperation)
+    {
+        case ReduceOperation::Sum:    return arm_compute::ReductionOperation::SUM;
+        case ReduceOperation::Mean:   return arm_compute::ReductionOperation::MEAN_SUM;
+        case ReduceOperation::Max:    return arm_compute::ReductionOperation::MAX;
+        case ReduceOperation::Min:    return arm_compute::ReductionOperation::MIN;
+        case ReduceOperation::Prod:   return arm_compute::ReductionOperation::PROD;
+        default:                      throw InvalidArgumentException("Unsupported Reduction operation");
+    }
+}
+
+/// Function to compute the output tensor shape based on the axes and if keepDims is set.
+inline const TensorInfo ComputeReductionTensorShape(const armnn::TensorInfo& input,
+                                                    const std::vector<uint32_t>& vAxis,
+                                                    const bool keepDims)
+{
+    auto reducedTensorInfo = input;
+    unsigned int rank = reducedTensorInfo.GetNumDimensions();
+    unsigned int outputRank = 0;
+    // Calculate output dimension
+    if (keepDims)
+    {
+        outputRank = rank;
+    }
+    else if (vAxis.empty())
+    {
+        outputRank = 1;
+    }
+    else if (vAxis.size() > reducedTensorInfo.GetNumDimensions())
+    {
+        throw LayerValidationException("ReduceLayer: Dimensions to reduce can not be bigger than input dimensions");
+    }
+    else
+    {
+        outputRank = reducedTensorInfo.GetNumDimensions() - armnn::numeric_cast<unsigned int>(vAxis.size());
+        if (outputRank == 0)
+        {
+            outputRank = 1;
+        }
+    }
+    std::vector<unsigned int> dimSizes(outputRank, 1);
+    if (!vAxis.empty())
+    {
+        // Skip the dimension that has been reduced unless keepDims is true.
+        unsigned int outputIndex = 0;
+        for (unsigned int i = 0; i < reducedTensorInfo.GetNumDimensions(); ++i)
+        {
+            if (std::find(vAxis.begin(), vAxis.end(), i) == vAxis.end())
+            {
+                dimSizes[outputIndex] = armnn::numeric_cast<unsigned int>(reducedTensorInfo.GetShape()[i]);
+                ++outputIndex;
+            }
+            else if (keepDims)
+            {
+                dimSizes[outputIndex] = 1;
+                ++outputIndex;
+            }
+        }
+    }
+    const TensorShape inferredShape = TensorShape(outputRank, dimSizes.data());
+    reducedTensorInfo.SetShape(inferredShape);
+    return reducedTensorInfo;
+}
+
+/// Macro function check if layer with multiple axes is supported on each backend
+#define IS_MULTI_AXES_REDUCE_SUPPORTED(func, input, desc, status)                 \
+    armnn::TensorInfo inputTensorInfo = input;                                    \
+    unsigned int recalulatedAxis = 0;                                             \
+    std::vector<uint32_t> axes;                                                   \
+                                                                                  \
+    for (unsigned int i = 0; i != desc.m_vAxis.size(); ++i)                       \
+    {                                                                             \
+        axes.emplace_back(desc.m_vAxis[i]);                                       \
+                                                                                  \
+        const armnn::TensorInfo& reducedTensorInfo =                              \
+            ComputeReductionTensorShape(input, axes, desc.m_KeepDims);            \
+                                                                                  \
+        std::vector<uint32_t> singleAxis(1, desc.m_vAxis[i] - recalulatedAxis);   \
+                                                                                  \
+        armnn::ReduceDescriptor newReduceDescriptor = desc;                       \
+        newReduceDescriptor.m_vAxis.assign(singleAxis.begin(), singleAxis.end()); \
+                                                                                  \
+        status = func(inputTensorInfo, reducedTensorInfo, newReduceDescriptor);   \
+        if (!status)                                                              \
+        {                                                                         \
+            break;                                                                \
+        }                                                                         \
+                                                                                  \
+        if (!desc.m_KeepDims)                                                     \
+        {                                                                         \
+            recalulatedAxis++;                                                    \
+        }                                                                         \
+                                                                                  \
+        inputTensorInfo = reducedTensorInfo;                                      \
+    }
 
 } // namespace armnn
