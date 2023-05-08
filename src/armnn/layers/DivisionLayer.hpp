@@ -24,7 +24,7 @@ public:
     /// @param [in] graph The graph into which this layer is being cloned.
     DivisionLayer* Clone(Graph& graph) const override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a DivisionLayer.

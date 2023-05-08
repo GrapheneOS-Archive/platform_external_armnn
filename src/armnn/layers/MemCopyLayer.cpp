@@ -7,9 +7,9 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
-#include <backendsCommon/MemCopyWorkload.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
+#include <armnn/backends/MemCopyWorkload.hpp>
 
 namespace armnn
 {
@@ -49,10 +49,9 @@ void MemCopyLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "MemCopyLayer");
 }
 
-void MemCopyLayer::Accept(ILayerVisitor& visitor) const
+void MemCopyLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    IgnoreUnused(visitor);
-    throw armnn::Exception("MemCopyLayer should not appear in an input graph");
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

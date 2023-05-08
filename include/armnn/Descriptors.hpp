@@ -1,23 +1,39 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include "Deprecated.hpp"
-#include "DescriptorsFwd.hpp"
-
-#include <cstdint>
-#include <initializer_list>
-
+#include "DescriptorsFwd.hpp" // Required for class equivalence declarations.
 #include "Tensor.hpp"
 #include "Types.hpp"
+#include <armnn/Exceptions.hpp>
+
+#include <cstdint>
+#include <iterator>
+#include <utility>
+#include <vector>
 
 namespace armnn
 {
 
+/// Base class for all descriptors.
+struct BaseDescriptor
+{
+    virtual bool IsNull() const { return false; }
+    virtual ~BaseDescriptor() = default;
+};
+
+/// Null Descriptor used as a return value from the IConnectableLayer GetParameters method
+/// by layers which do not have a descriptor
+struct NullDescriptor : BaseDescriptor
+{
+    bool IsNull() const override { return true; }
+};
+
 /// An ActivationDescriptor for the ActivationLayer.
-struct ActivationDescriptor
+struct ActivationDescriptor : BaseDescriptor
 {
     ActivationDescriptor()
         : m_Function(ActivationFunction::Sigmoid)
@@ -48,7 +64,7 @@ struct ActivationDescriptor
 };
 
 /// An ArgMinMaxDescriptor for ArgMinMaxLayer
-struct ArgMinMaxDescriptor
+struct ArgMinMaxDescriptor : BaseDescriptor
 {
     ArgMinMaxDescriptor()
         : m_Function(ArgMinMaxFunction::Min)
@@ -65,12 +81,12 @@ struct ArgMinMaxDescriptor
     ArgMinMaxFunction m_Function;
     /// Axis to reduce across the input tensor.
     int m_Axis;
-    // Tensor data type and this could be int32 or int64. Default type is int64.
+    /// Deprecated and will be removed in future release.
     armnn::DataType m_Output_Type;
 };
 
 /// A ComparisonDescriptor for the ComparisonLayer
-struct ComparisonDescriptor
+struct ComparisonDescriptor : BaseDescriptor
 {
     ComparisonDescriptor()
         : ComparisonDescriptor(ComparisonOperation::Equal)
@@ -89,8 +105,28 @@ struct ComparisonDescriptor
     ComparisonOperation m_Operation;
 };
 
+/// A ElementwiseBinaryDescriptor for the ElementwiseBinaryLayer
+struct ElementwiseBinaryDescriptor : BaseDescriptor
+{
+    ElementwiseBinaryDescriptor()
+            : ElementwiseBinaryDescriptor(BinaryOperation::Add)
+    {}
+
+    ElementwiseBinaryDescriptor(BinaryOperation operation)
+            : m_Operation(operation)
+    {}
+
+    bool operator ==(const ElementwiseBinaryDescriptor &rhs) const
+    {
+        return m_Operation == rhs.m_Operation;
+    }
+
+    /// Specifies the elementwiseBinary operation to execute
+    BinaryOperation m_Operation;
+};
+
 /// A ElementwiseUnaryDescriptor for the ElementwiseUnaryLayer
-struct ElementwiseUnaryDescriptor
+struct ElementwiseUnaryDescriptor : BaseDescriptor
 {
     ElementwiseUnaryDescriptor()
         : ElementwiseUnaryDescriptor(UnaryOperation::Abs)
@@ -110,7 +146,7 @@ struct ElementwiseUnaryDescriptor
 };
 
 /// A PermuteDescriptor for the PermuteLayer.
-struct PermuteDescriptor
+struct PermuteDescriptor : BaseDescriptor
 {
     PermuteDescriptor()
         : m_DimMappings{}
@@ -126,12 +162,19 @@ struct PermuteDescriptor
     }
 
     /// @brief Indicates how to translate tensor elements from a given source into the target destination, when
-    /// source and target potentially have different memory layouts e.g. {0U, 3U, 1U, 2U}.
+    /// source and target potentially have different memory layouts e.g.
+    /// Input Shape        {1, 1, 4, 4}
+    /// Permutation Vector {0, 2, 3, 1}
+    /// Output Shape       {1, 4, 1, 4}
+    /// dim "0" goes into index 0 ([ 1, X, X, X ])
+    /// dim "1" goes into index 2 ([ 1, X, 1, X ])
+    /// dim "2" goes into index 3 ([ 1, X, 1, 4 ])
+    /// dim "3" goes into index 1 ([ 1, 4, 1, 4 ])
     PermutationVector m_DimMappings;
 };
 
 /// A SoftmaxDescriptor for the SoftmaxLayer.
-struct SoftmaxDescriptor
+struct SoftmaxDescriptor : BaseDescriptor
 {
     SoftmaxDescriptor()
         : m_Beta(1.0f)
@@ -155,7 +198,7 @@ using LogSoftmaxDescriptor = SoftmaxDescriptor;
 /// @brief An OriginsDescriptor for the ConcatLayer.
 /// Descriptor to configure the concatenation process. Number of views must be equal to the number of inputs, and
 /// their order must match - e.g. first view corresponds to the first input, second view to the second input, etc.
-struct OriginsDescriptor
+struct OriginsDescriptor : BaseDescriptor
 {
     OriginsDescriptor();
     OriginsDescriptor(uint32_t numViews, uint32_t numDimensions = 4);
@@ -198,7 +241,7 @@ private:
 /// @brief A ViewsDescriptor for the SplitterLayer.
 /// Descriptor to configure the splitting process. Number of Views must be equal to the number of outputs, and
 /// their order must match - e.g. first view corresponds to the first output, second view to the second output, etc.
-struct ViewsDescriptor
+struct ViewsDescriptor : BaseDescriptor
 {
     ViewsDescriptor(uint32_t numViews, uint32_t numDimensions = 4);
     ViewsDescriptor(const ViewsDescriptor& other);
@@ -238,14 +281,6 @@ private:
     uint32_t**        m_ViewSizes;
 };
 
-template <typename TensorShapeIt>
-ARMNN_DEPRECATED_MSG("Use CreateDescriptorForConcatenation instead")
-OriginsDescriptor CreateMergerDescriptorForConcatenation(TensorShapeIt first,
-                                                         TensorShapeIt last,
-                                                         unsigned int concatenationDimension)
-{
-    return CreateDescriptorForConcatenation(first, last, concatenationDimension);
-}
 
 /// @brief Convenience template to create an OriginsDescriptor to use when creating a ConcatLayer for performing
 /// concatenation of a number of input tensors.
@@ -321,7 +356,7 @@ OriginsDescriptor CreateDescriptorForConcatenation(TensorShapeIt first,
 }
 
 /// A Pooling2dDescriptor for the Pooling2dLayer.
-struct Pooling2dDescriptor
+struct Pooling2dDescriptor : BaseDescriptor
 {
     Pooling2dDescriptor()
         : m_PoolType(PoolingAlgorithm::Max)
@@ -380,35 +415,119 @@ struct Pooling2dDescriptor
     DataLayout   m_DataLayout;
 };
 
+/// A Pooling3dDescriptor for the Pooling3dLayer.
+struct Pooling3dDescriptor : BaseDescriptor
+{
+    Pooling3dDescriptor()
+        : m_PoolType(PoolingAlgorithm::Max)
+        , m_PadLeft(0)
+        , m_PadRight(0)
+        , m_PadTop(0)
+        , m_PadBottom(0)
+        , m_PadFront(0)
+        , m_PadBack(0)
+        , m_PoolWidth(0)
+        , m_PoolHeight(0)
+        , m_PoolDepth(0)
+        , m_StrideX(0)
+        , m_StrideY(0)
+        , m_StrideZ(0)
+        , m_OutputShapeRounding(OutputShapeRounding::Floor)
+        , m_PaddingMethod(PaddingMethod::Exclude)
+        , m_DataLayout(DataLayout::NCDHW)
+    {}
+
+    bool operator ==(const Pooling3dDescriptor& rhs) const
+    {
+        return m_PoolType            == rhs.m_PoolType &&
+               m_PadLeft             == rhs.m_PadLeft &&
+               m_PadRight            == rhs.m_PadRight &&
+               m_PadTop              == rhs.m_PadTop &&
+               m_PadBottom           == rhs.m_PadBottom &&
+               m_PadFront            == rhs.m_PadFront &&
+               m_PadBack             == rhs.m_PadBack &&
+               m_PoolWidth           == rhs.m_PoolWidth &&
+               m_PoolHeight          == rhs.m_PoolHeight &&
+               m_PoolDepth           == rhs.m_PoolDepth &&
+               m_StrideX             == rhs.m_StrideX &&
+               m_StrideY             == rhs.m_StrideY &&
+               m_StrideZ             == rhs.m_StrideZ &&
+               m_OutputShapeRounding == rhs.m_OutputShapeRounding &&
+               m_PaddingMethod       == rhs.m_PaddingMethod &&
+               m_DataLayout          == rhs.m_DataLayout;
+    }
+
+    /// The pooling algorithm to use (Max. Average, L2).
+    PoolingAlgorithm    m_PoolType;
+    /// Padding left value in the width dimension.
+    uint32_t            m_PadLeft;
+    /// Padding right value in the width dimension.
+    uint32_t            m_PadRight;
+    /// Padding top value in the height dimension.
+    uint32_t            m_PadTop;
+    /// Padding bottom value in the height dimension.
+    uint32_t            m_PadBottom;
+    /// Padding front value in the depth dimension.
+    uint32_t            m_PadFront;
+    /// Padding back value in the depth dimension.
+    uint32_t            m_PadBack;
+    /// Pooling width value.
+    uint32_t            m_PoolWidth;
+    /// Pooling height value.
+    uint32_t            m_PoolHeight;
+    /// Pooling depth value.
+    uint32_t            m_PoolDepth;
+    /// Stride value when proceeding through input for the width dimension.
+    uint32_t            m_StrideX;
+    /// Stride value when proceeding through input for the height dimension.
+    uint32_t            m_StrideY;
+    /// Stride value when proceeding through input for the depth dimension.
+    uint32_t            m_StrideZ;
+    /// The rounding method for the output shape. (Floor, Ceiling).
+    OutputShapeRounding m_OutputShapeRounding;
+    /// The padding method to be used. (Exclude, IgnoreValue).
+    PaddingMethod       m_PaddingMethod;
+    /// The data layout to be used (NCDHW, NDHWC).
+    DataLayout   m_DataLayout;
+};
+
 /// A FullyConnectedDescriptor for the FullyConnectedLayer.
-struct FullyConnectedDescriptor
+struct FullyConnectedDescriptor : BaseDescriptor
 {
     FullyConnectedDescriptor()
         : m_BiasEnabled(false)
         , m_TransposeWeightMatrix(false)
+        , m_ConstantWeights(true)
     {}
 
     bool operator ==(const FullyConnectedDescriptor& rhs) const
     {
-        return m_BiasEnabled == rhs.m_BiasEnabled && m_TransposeWeightMatrix == rhs.m_TransposeWeightMatrix;
+        return m_BiasEnabled == rhs.m_BiasEnabled
+               && m_TransposeWeightMatrix == rhs.m_TransposeWeightMatrix
+               && m_ConstantWeights == rhs.m_ConstantWeights;
     }
+
+    /// Get the number of inputs.
+    uint32_t GetNumInputs() const;
 
     /// Enable/disable bias.
     bool m_BiasEnabled;
     /// Enable/disable transpose weight matrix.
     bool m_TransposeWeightMatrix;
+    /// Enable/disable constant weights and biases.
+    bool m_ConstantWeights;
 };
 
 /// A Convolution2dDescriptor for the Convolution2dLayer.
-struct Convolution2dDescriptor
+struct Convolution2dDescriptor : BaseDescriptor
 {
     Convolution2dDescriptor()
         : m_PadLeft(0)
         , m_PadRight(0)
         , m_PadTop(0)
         , m_PadBottom(0)
-        , m_StrideX(0)
-        , m_StrideY(0)
+        , m_StrideX(1)
+        , m_StrideY(1)
         , m_DilationX(1)
         , m_DilationY(1)
         , m_BiasEnabled(false)
@@ -428,6 +547,8 @@ struct Convolution2dDescriptor
                m_BiasEnabled == rhs.m_BiasEnabled &&
                m_DataLayout  == rhs.m_DataLayout;
     }
+    uint32_t GetNumInputs() const;
+
 
     /// Padding left value in the width dimension.
     uint32_t             m_PadLeft;
@@ -451,16 +572,87 @@ struct Convolution2dDescriptor
     DataLayout           m_DataLayout;
 };
 
+/// A Convolution3dDescriptor for the Convolution3dLayer.
+struct Convolution3dDescriptor : BaseDescriptor
+{
+    Convolution3dDescriptor()
+        : m_PadLeft(0)
+        , m_PadRight(0)
+        , m_PadTop(0)
+        , m_PadBottom(0)
+        , m_PadFront(0)
+        , m_PadBack(0)
+        , m_StrideX(1)
+        , m_StrideY(1)
+        , m_StrideZ(1)
+        , m_DilationX(1)
+        , m_DilationY(1)
+        , m_DilationZ(1)
+        , m_BiasEnabled(false)
+        , m_DataLayout(DataLayout::NDHWC)
+    {}
+
+    bool operator ==(const Convolution3dDescriptor& rhs) const
+    {
+        return m_PadLeft     == rhs.m_PadLeft &&
+               m_PadRight    == rhs.m_PadRight &&
+               m_PadTop      == rhs.m_PadTop &&
+               m_PadBottom   == rhs.m_PadBottom &&
+               m_PadFront    == rhs.m_PadFront &&
+               m_PadBack     == rhs.m_PadBack &&
+               m_StrideX     == rhs.m_StrideX &&
+               m_StrideY     == rhs.m_StrideY &&
+               m_StrideZ     == rhs.m_StrideZ &&
+               m_DilationX   == rhs.m_DilationX &&
+               m_DilationY   == rhs.m_DilationY &&
+               m_DilationZ   == rhs.m_DilationZ &&
+               m_BiasEnabled == rhs.m_BiasEnabled &&
+               m_DataLayout  == rhs.m_DataLayout;
+    }
+
+    /// Get the number of views/inputs.
+    uint32_t GetNumInputs() const;
+
+    /// Padding left value in the width dimension.
+    uint32_t             m_PadLeft;
+    /// Padding right value in the width dimension.
+    uint32_t             m_PadRight;
+    /// Padding top value in the height dimension.
+    uint32_t             m_PadTop;
+    /// Padding bottom value in the height dimension.
+    uint32_t             m_PadBottom;
+    /// Padding front value in the depth dimension.
+    uint32_t             m_PadFront;
+    /// Padding back value in the depth dimension.
+    uint32_t             m_PadBack;
+    /// Stride value when proceeding through input for the width dimension.
+    uint32_t             m_StrideX;
+    /// Stride value when proceeding through input for the height dimension.
+    uint32_t             m_StrideY;
+    /// Stride value when proceeding through input for the depth dimension.
+    uint32_t             m_StrideZ;
+    /// Dilation along x axis
+    uint32_t             m_DilationX;
+    /// Dilation along y axis
+    uint32_t             m_DilationY;
+    /// Dilation along z axis
+    uint32_t             m_DilationZ;
+    /// Enable/disable bias.
+    bool                 m_BiasEnabled;
+    /// The data layout to be used (NDHWC, NCDHW).
+    DataLayout           m_DataLayout;
+};
+
 /// A DepthwiseConvolution2dDescriptor for the DepthwiseConvolution2dLayer.
-struct DepthwiseConvolution2dDescriptor
+struct DepthwiseConvolution2dDescriptor : BaseDescriptor
 {
     DepthwiseConvolution2dDescriptor()
         : m_PadLeft(0)
         , m_PadRight(0)
         , m_PadTop(0)
         , m_PadBottom(0)
-        , m_StrideX(0)
-        , m_StrideY(0)
+        , m_StrideX(1)
+        , m_StrideY(1)
         , m_DilationX(1)
         , m_DilationY(1)
         , m_BiasEnabled(false)
@@ -480,6 +672,9 @@ struct DepthwiseConvolution2dDescriptor
                m_BiasEnabled == rhs.m_BiasEnabled &&
                m_DataLayout  == rhs.m_DataLayout;
     }
+
+    /// Get the number of views/inputs.
+    uint32_t GetNumInputs() const;
 
     /// Padding left value in the width dimension.
     uint32_t   m_PadLeft;
@@ -503,7 +698,7 @@ struct DepthwiseConvolution2dDescriptor
     DataLayout m_DataLayout;
 };
 
-struct DetectionPostProcessDescriptor
+struct DetectionPostProcessDescriptor : BaseDescriptor
 {
     DetectionPostProcessDescriptor()
         : m_MaxDetections(0)
@@ -559,7 +754,7 @@ struct DetectionPostProcessDescriptor
 };
 
 /// A NormalizationDescriptor for the NormalizationLayer.
-struct NormalizationDescriptor
+struct NormalizationDescriptor : BaseDescriptor
 {
     NormalizationDescriptor()
         : m_NormChannelType(NormalizationAlgorithmChannel::Across)
@@ -599,7 +794,7 @@ struct NormalizationDescriptor
 };
 
 /// A L2NormalizationDescriptor for the L2NormalizationLayer.
-struct L2NormalizationDescriptor
+struct L2NormalizationDescriptor : BaseDescriptor
 {
     L2NormalizationDescriptor()
         : m_Eps(1e-12f)
@@ -618,7 +813,7 @@ struct L2NormalizationDescriptor
 };
 
 /// A BatchNormalizationDescriptor for the BatchNormalizationLayer.
-struct BatchNormalizationDescriptor
+struct BatchNormalizationDescriptor : BaseDescriptor
 {
     BatchNormalizationDescriptor()
         : m_Eps(0.0001f)
@@ -637,7 +832,7 @@ struct BatchNormalizationDescriptor
 };
 
 /// An InstanceNormalizationDescriptor for InstanceNormalizationLayer
-struct InstanceNormalizationDescriptor
+struct InstanceNormalizationDescriptor : BaseDescriptor
 {
     InstanceNormalizationDescriptor()
         : m_Gamma(1.0f)
@@ -665,7 +860,7 @@ struct InstanceNormalizationDescriptor
 };
 
 /// A BatchToSpaceNdDescriptor for the BatchToSpaceNdLayer.
-struct BatchToSpaceNdDescriptor
+struct BatchToSpaceNdDescriptor : BaseDescriptor
 {
     BatchToSpaceNdDescriptor()
         : m_BlockShape({1, 1})
@@ -696,7 +891,7 @@ struct BatchToSpaceNdDescriptor
 };
 
 /// A FakeQuantizationDescriptor for the FakeQuantizationLayer.
-struct FakeQuantizationDescriptor
+struct FakeQuantizationDescriptor : BaseDescriptor
 {
         FakeQuantizationDescriptor()
         : m_Min(-6.0f)
@@ -715,7 +910,7 @@ struct FakeQuantizationDescriptor
 };
 
 /// A FillDescriptor for the FillLayer
-struct FillDescriptor
+struct FillDescriptor : BaseDescriptor
 {
     FillDescriptor()
     : m_Value(0)
@@ -734,7 +929,7 @@ struct FillDescriptor
 };
 
 /// A GatherDescriptor for the GatherLayer.
-struct GatherDescriptor
+struct GatherDescriptor : BaseDescriptor
 {
     GatherDescriptor()
         : m_Axis(0)
@@ -753,31 +948,8 @@ struct GatherDescriptor
     int32_t m_Axis;
 };
 
-/// A ResizeBilinearDescriptor for the ResizeBilinearLayer.
-struct ResizeBilinearDescriptor
-{
-    ResizeBilinearDescriptor()
-        : m_TargetWidth(0)
-        , m_TargetHeight(0)
-        , m_DataLayout(DataLayout::NCHW)
-        , m_AlignCorners(false)
-        , m_HalfPixelCenters(false)
-    {}
-
-    /// Target width value.
-    uint32_t          m_TargetWidth;
-    /// Target height value.
-    uint32_t          m_TargetHeight;
-    /// The data layout to be used (NCHW, NHWC).
-    DataLayout m_DataLayout;
-    /// Aligned corners
-    bool m_AlignCorners;
-    /// Half Pixel Centers
-    bool m_HalfPixelCenters;
-};
-
 /// A ResizeDescriptor for the ResizeLayer.
-struct ResizeDescriptor
+struct ResizeDescriptor : BaseDescriptor
 {
     ResizeDescriptor()
         : m_TargetWidth(0)
@@ -815,7 +987,7 @@ struct ResizeDescriptor
 
 
 /// A ReshapeDescriptor for the ReshapeLayer.
-struct ReshapeDescriptor
+struct ReshapeDescriptor : BaseDescriptor
 {
     ReshapeDescriptor()
         : m_TargetShape()
@@ -835,7 +1007,7 @@ struct ReshapeDescriptor
 };
 
 /// A SpaceToBatchNdDescriptor for the SpaceToBatchNdLayer.
-struct SpaceToBatchNdDescriptor
+struct SpaceToBatchNdDescriptor : BaseDescriptor
 {
     SpaceToBatchNdDescriptor()
         : m_BlockShape({1, 1})
@@ -867,7 +1039,7 @@ struct SpaceToBatchNdDescriptor
 };
 
 /// A SpaceToDepthDescriptor for the SpaceToDepthLayer
-struct SpaceToDepthDescriptor
+struct SpaceToDepthDescriptor : BaseDescriptor
 {
     SpaceToDepthDescriptor()
         : SpaceToDepthDescriptor(1u, DataLayout::NHWC)
@@ -894,7 +1066,7 @@ struct SpaceToDepthDescriptor
 using DepthToSpaceDescriptor = SpaceToDepthDescriptor;
 
 /// An LstmDescriptor for the LstmLayer.
-struct LstmDescriptor
+struct LstmDescriptor : BaseDescriptor
 {
     LstmDescriptor()
         : m_ActivationFunc(1) // 0: None, 1: Relu, 3: Relu6, 4: Tanh, 6: Sigmoid
@@ -904,16 +1076,30 @@ struct LstmDescriptor
         , m_PeepholeEnabled(false)
         , m_ProjectionEnabled(false)
         , m_LayerNormEnabled(false)
+        , m_TimeMajor(false)
+        , m_InputIntermediateScale(0.0)
+        , m_ForgetIntermediateScale(0.0)
+        , m_CellIntermediateScale(0.0)
+        , m_OutputIntermediateScale(0.0)
+        , m_HiddenStateZeroPoint(0)
+        , m_HiddenStateScale(0.0)
     {}
 
     bool operator ==(const LstmDescriptor& rhs) const
     {
-        return m_ActivationFunc    == rhs.m_ActivationFunc &&
-               m_ClippingThresCell == rhs.m_ClippingThresCell &&
-               m_ClippingThresProj == rhs.m_ClippingThresProj &&
-               m_CifgEnabled       == rhs.m_CifgEnabled &&
-               m_PeepholeEnabled   == rhs.m_PeepholeEnabled &&
-               m_LayerNormEnabled  == rhs.m_LayerNormEnabled;
+        return m_ActivationFunc          == rhs.m_ActivationFunc &&
+               m_ClippingThresCell       == rhs.m_ClippingThresCell &&
+               m_ClippingThresProj       == rhs.m_ClippingThresProj &&
+               m_CifgEnabled             == rhs.m_CifgEnabled &&
+               m_PeepholeEnabled         == rhs.m_PeepholeEnabled &&
+               m_LayerNormEnabled        == rhs.m_LayerNormEnabled &&
+               m_TimeMajor               == rhs.m_TimeMajor &&
+               m_InputIntermediateScale  == rhs.m_InputIntermediateScale &&
+               m_ForgetIntermediateScale == rhs.m_ForgetIntermediateScale &&
+               m_CellIntermediateScale   == rhs.m_CellIntermediateScale &&
+               m_OutputIntermediateScale == rhs.m_OutputIntermediateScale &&
+               m_HiddenStateZeroPoint    == rhs.m_HiddenStateZeroPoint &&
+               m_HiddenStateScale        == rhs.m_HiddenStateScale;
     }
 
     /// @brief The activation function to use.
@@ -931,10 +1117,26 @@ struct LstmDescriptor
     bool m_ProjectionEnabled;
     /// Enable/disable layer normalization
     bool m_LayerNormEnabled;
+    /// Enable/disable time major
+    bool m_TimeMajor;
+    /// Input intermediate quantization scale
+    float m_InputIntermediateScale;
+    /// Forget intermediate quantization scale
+    float m_ForgetIntermediateScale;
+    /// Cell intermediate quantization scale
+    float m_CellIntermediateScale;
+    /// Output intermediate quantization scale
+    float m_OutputIntermediateScale;
+    /// Hidden State zero point
+    int32_t m_HiddenStateZeroPoint;
+    /// Hidden State quantization scale
+    float m_HiddenStateScale;
 };
 
+using UnidirectionalSequenceLstmDescriptor = LstmDescriptor;
+
 /// A MeanDescriptor for the MeanLayer.
-struct MeanDescriptor
+struct MeanDescriptor : BaseDescriptor
 {
     MeanDescriptor()
         : m_Axis()
@@ -958,19 +1160,22 @@ struct MeanDescriptor
 };
 
 /// A PadDescriptor for the PadLayer.
-struct PadDescriptor
+struct PadDescriptor : BaseDescriptor
 {
-    PadDescriptor() : m_PadValue(0)
+    PadDescriptor() : m_PadValue(0), m_PaddingMode(PaddingMode::Constant)
     {}
 
-    PadDescriptor(const std::vector<std::pair<unsigned int, unsigned int>>& padList, const float& padValue = 0)
+    PadDescriptor(const std::vector<std::pair<unsigned int, unsigned int>>& padList,
+                  const float& padValue = 0,
+                  const PaddingMode& paddingMode = PaddingMode::Constant)
         : m_PadList(padList)
         , m_PadValue(padValue)
+        , m_PaddingMode(paddingMode)
     {}
 
     bool operator ==(const PadDescriptor& rhs) const
     {
-        return m_PadList == rhs.m_PadList && m_PadValue == rhs.m_PadValue;
+        return m_PadList == rhs.m_PadList && m_PadValue == rhs.m_PadValue && m_PaddingMode == rhs.m_PaddingMode;
     }
 
     /// @brief Specifies the padding for input dimension.
@@ -981,10 +1186,13 @@ struct PadDescriptor
 
     /// Optional value to use for padding, defaults to 0
     float m_PadValue;
+
+    /// Specifies the Padding mode (Constant, Reflect or Symmetric)
+    PaddingMode m_PaddingMode;
 };
 
 /// A SliceDescriptor for the SliceLayer.
-struct SliceDescriptor
+struct SliceDescriptor : BaseDescriptor
 {
     SliceDescriptor(const std::vector<unsigned int>& begin, const std::vector<unsigned int>& size)
         : m_Begin(begin)
@@ -1007,7 +1215,7 @@ struct SliceDescriptor
 };
 
 /// A StackDescriptor for the StackLayer.
-struct StackDescriptor
+struct StackDescriptor : BaseDescriptor
 {
     StackDescriptor()
         : m_Axis(0)
@@ -1037,7 +1245,7 @@ struct StackDescriptor
 };
 
 /// A StandInDescriptor for the StandIn layer
-struct StandInDescriptor
+struct StandInDescriptor : BaseDescriptor
 {
     StandInDescriptor() {};
 
@@ -1059,7 +1267,7 @@ struct StandInDescriptor
 };
 
 /// A StridedSliceDescriptor for the StridedSliceLayer.
-struct StridedSliceDescriptor
+struct StridedSliceDescriptor : BaseDescriptor
 {
     StridedSliceDescriptor(const std::vector<int>& begin,
                            const std::vector<int>& end,
@@ -1123,7 +1331,7 @@ struct StridedSliceDescriptor
 };
 
 /// A PreCompiledDescriptor for the PreCompiledLayer.
-struct PreCompiledDescriptor
+struct PreCompiledDescriptor : BaseDescriptor
 {
     PreCompiledDescriptor(unsigned int numInputSlots = 1u, unsigned int numOutputSlots = 1u)
         : m_NumInputSlots(numInputSlots), m_NumOutputSlots(numOutputSlots)
@@ -1136,7 +1344,7 @@ struct PreCompiledDescriptor
 };
 
 /// A QLstmDescriptor for the QLstmLayer.
-struct QLstmDescriptor
+struct QLstmDescriptor : BaseDescriptor
 {
     QLstmDescriptor()
             : m_CellClip(0.0)
@@ -1196,7 +1404,7 @@ struct QLstmDescriptor
 };
 
 /// A TransposeConvolution2dDescriptor for the TransposeConvolution2dLayer.
-struct TransposeConvolution2dDescriptor
+struct TransposeConvolution2dDescriptor : BaseDescriptor
 {
     TransposeConvolution2dDescriptor() :
         m_PadLeft(0),
@@ -1246,7 +1454,7 @@ struct TransposeConvolution2dDescriptor
 };
 
 /// A TransposeDescriptor for the TransposeLayer.
-struct TransposeDescriptor
+struct TransposeDescriptor : BaseDescriptor
 {
     TransposeDescriptor()
             : m_DimMappings{}
@@ -1262,12 +1470,19 @@ struct TransposeDescriptor
     }
 
     /// @brief Indicates how to translate tensor elements from a given source into the target destination, when
-    /// source and target potentially have different memory layouts e.g. {0U, 3U, 1U, 2U}.
+    /// source and target potentially have different memory layouts e.g.
+    /// Input Shape        {1, 1, 4, 4}
+    /// Permutation Vector {0, 2, 3, 1}
+    /// Output Shape       {1, 4, 4, 1}
+    /// dim "0" of input goes into index 0 ([ 1, X, X, X])
+    /// dim "2" of input goes into index 1 ([ 1, 4, X, X ])
+    /// dim "3" of input goes into index 2 ([ 1, 4, 4, X ])
+    /// dim "1" of input goes into index 3 ([ 1, 4, 4, 1 ])
     PermutationVector m_DimMappings;
 };
 
 /// A LogicalBinaryDescriptor for the LogicalBinaryLayer
-struct LogicalBinaryDescriptor
+struct LogicalBinaryDescriptor : BaseDescriptor
 {
     LogicalBinaryDescriptor()
         : LogicalBinaryDescriptor(LogicalBinaryOperation::LogicalAnd)
@@ -1284,6 +1499,125 @@ struct LogicalBinaryDescriptor
 
     /// Specifies the logical operation to execute
     LogicalBinaryOperation m_Operation;
+};
+
+/// A ReduceDescriptor for the REDUCE operators.
+struct ReduceDescriptor : BaseDescriptor
+{
+    ReduceDescriptor()
+        : m_KeepDims(false)
+        , m_vAxis()
+        , m_ReduceOperation(ReduceOperation::Sum)
+    {}
+
+    bool operator ==(const ReduceDescriptor& rhs) const
+    {
+        return m_KeepDims             == rhs.m_KeepDims &&
+               m_vAxis                == rhs.m_vAxis &&
+               m_ReduceOperation      == rhs.m_ReduceOperation;
+    }
+
+    /// if true then output shape has no change.
+    bool m_KeepDims;
+    /// The indices of the dimensions to reduce.
+    std::vector<uint32_t> m_vAxis;
+    /// Specifies the reduction operation to execute
+    ReduceOperation m_ReduceOperation;
+};
+
+/// A ChannelShuffleDescriptor for the ChannelShuffle operator
+struct ChannelShuffleDescriptor : BaseDescriptor
+{
+    ChannelShuffleDescriptor()
+        : m_NumGroups(0), m_Axis(0)
+    {}
+
+    ChannelShuffleDescriptor(const uint32_t& numGroups, const uint32_t& axis)
+        : m_NumGroups(numGroups), m_Axis(axis)
+    {}
+
+    bool operator ==(const ChannelShuffleDescriptor& rhs) const
+    {
+        return m_NumGroups == rhs.m_NumGroups;
+    }
+
+    /// Number of groups for the channel shuffle operation
+    uint32_t m_NumGroups;
+    /// Axis to apply channel shuffle operation on
+    uint32_t m_Axis;
+};
+
+/// A BatchMatMulDescriptor for the BatchMatMul operator
+struct BatchMatMulDescriptor : BaseDescriptor
+{
+    BatchMatMulDescriptor(bool transposeX = false,
+                          bool transposeY = false,
+                          bool adjointX = false,
+                          bool adjointY = false,
+                          DataLayout dataLayoutX = DataLayout::NCHW,
+                          DataLayout dataLayoutY = DataLayout::NCHW)
+        : m_TransposeX(transposeX)
+        , m_TransposeY(transposeY)
+        , m_AdjointX(adjointX)
+        , m_AdjointY(adjointY)
+        , m_DataLayoutX(dataLayoutX)
+        , m_DataLayoutY(dataLayoutY)
+    {}
+
+    bool operator ==(const BatchMatMulDescriptor &rhs)  const
+    {
+        return m_TransposeX == rhs.m_TransposeX &&
+               m_TransposeY == rhs.m_TransposeY &&
+               m_AdjointX == rhs.m_AdjointX &&
+               m_AdjointY == rhs.m_AdjointY &&
+               m_DataLayoutX == rhs.m_DataLayoutX &&
+               m_DataLayoutY == rhs.m_DataLayoutY;
+    }
+
+    /// Transpose the slices of each input tensor
+    /// Transpose and Adjoint can not both be set to true for the same tensor at the same time
+    bool m_TransposeX;
+    bool m_TransposeY;
+
+    /// Adjoint the slices of each input tensor
+    /// Transpose and Adjoint can not both be set to true for the same tensor at the same time
+    bool m_AdjointX;
+    bool m_AdjointY;
+
+    /// Data layout of each input tensor, such as NHWC/NDHWC (leave as default for arbitrary layout)
+    DataLayout m_DataLayoutX;
+    DataLayout m_DataLayoutY;
+
+    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("This method is deprecated. Use ABI Stable "
+                                      "GetAxesToMul(DataLayout dataLayout, const TensorShape& tensorShape) instead.",
+                                      "23.05")
+    static std::pair<std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>> GetAxesToMul(
+        const BatchMatMulDescriptor& desc,
+        const TensorShape& tensorXShape,
+        const TensorShape& tensorYShape);
+
+    ARMNN_DEPRECATED_MSG_REMOVAL_DATE("This method is deprecated. Use ABI Stable "
+                                      "GetAxesNotMul(DataLayout dataLayout, const TensorShape& tensorShape) instead.",
+                                      "23.05")
+    static std::pair<std::vector<unsigned int>, std::vector<unsigned int>> GetAxesNotMul(
+        const BatchMatMulDescriptor& desc,
+        const TensorShape& inputXShape,
+        const TensorShape& inputYShape);
+
+    /// Static helper to get the two axes (for each input) for multiplication
+    static std::pair<unsigned int, unsigned int> GetAxesToMul(
+        DataLayout dataLayout,
+        const TensorShape& tensorShape);
+
+    /// Static helper to get the axes (for each input) that will not be multiplied together
+    static std::vector<unsigned int> GetAxesNotMul(
+        DataLayout dataLayout,
+        const TensorShape& tensorShape);
+
+    /// Static helper to get the axes which will be transposed
+    static PermutationVector GetPermuteVec(
+        DataLayout dataLayout,
+        const TensorShape& tensorShape);
 };
 
 } // namespace armnn

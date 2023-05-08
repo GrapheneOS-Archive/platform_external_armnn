@@ -1,18 +1,23 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <Half.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 LayerTestResult<float, 1> Gather1dParamsFloat32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+LayerTestResult<float, 1> Gather1dParamsAxisTest(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory);
@@ -63,6 +68,16 @@ LayerTestResult<int32_t, 2> GatherMultiDimParamsInt32Test(
     const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 LayerTestResult<float, 4> GatherMultiDimParamsMultiDimIndicesFloat32Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+LayerTestResult<float, 4> GatherMultiDimParamsMultiDimIndicesAxis1Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+LayerTestResult<float, 4> GatherMultiDimParamsMultiDimIndicesAxis2Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory);

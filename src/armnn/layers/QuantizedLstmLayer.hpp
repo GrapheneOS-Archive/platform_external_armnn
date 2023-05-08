@@ -9,36 +9,36 @@
 namespace armnn
 {
 
-class ScopedCpuTensorHandle;
+class ScopedTensorHandle;
 
 struct QuantizedLstmParameters
 {
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, inputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToInputWeights;
+    std::shared_ptr<ConstTensorHandle> m_InputToInputWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, inputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToForgetWeights;
+    std::shared_ptr<ConstTensorHandle> m_InputToForgetWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, inputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToCellWeights;
+    std::shared_ptr<ConstTensorHandle> m_InputToCellWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, inputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToOutputWeights;
+    std::shared_ptr<ConstTensorHandle> m_InputToOutputWeights;
 
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, outputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToInputWeights;
+    std::shared_ptr<ConstTensorHandle> m_RecurrentToInputWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, outputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToForgetWeights;
+    std::shared_ptr<ConstTensorHandle> m_RecurrentToForgetWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, outputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToCellWeights;
+    std::shared_ptr<ConstTensorHandle> m_RecurrentToCellWeights;
     /// A unique pointer to represent 2D weights tensor with dimensions [outputSize, outputSize] (QAsymm8).
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToOutputWeights;
+    std::shared_ptr<ConstTensorHandle> m_RecurrentToOutputWeights;
 
     /// A unique pointer to represent 1D bias tensor with dimensions [outputSize] (int32).
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputGateBias;
+    std::shared_ptr<ConstTensorHandle> m_InputGateBias;
     /// A unique pointer to represent 1D bias tensor with dimensions [outputSize] (int32).
-    std::unique_ptr<ScopedCpuTensorHandle> m_ForgetGateBias;
+    std::shared_ptr<ConstTensorHandle> m_ForgetGateBias;
     /// A unique pointer to represent 1D bias tensor with dimensions [outputSize] (int32).
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellBias;
+    std::shared_ptr<ConstTensorHandle> m_CellBias;
     /// A unique pointer to represent 1D bias tensor with dimensions [outputSize] (int32).
-    std::unique_ptr<ScopedCpuTensorHandle> m_OutputGateBias;
+    std::shared_ptr<ConstTensorHandle> m_OutputGateBias;
 };
 
 /// This layer represents a QuantizedLstm operation.
@@ -69,7 +69,7 @@ public:
     /// @return A vector to the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a QuantizedLstmLayer.
@@ -81,7 +81,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    Layer::ConstantTensors GetConstantTensorsByRef() override;
+    Layer::ImmutableConstantTensors GetConstantTensorsByRef() const override;
 };
 
 } // namespace armnn

@@ -93,9 +93,9 @@ struct TypeAnyOf : public Rule
     TypeAnyOf(const TensorInfo& info, const Container& c)
     {
         m_Res = std::any_of(c.begin(), c.end(), [&info](DataType dt)
-            {
-                return dt == info.GetDataType();
-            });
+        {
+            return dt == info.GetDataType();
+        });
     }
 };
 
@@ -183,6 +183,14 @@ struct TensorNumDimensionsAreCorrect : public Rule
     TensorNumDimensionsAreCorrect(const TensorInfo& info, unsigned int expectedNumDimensions)
     {
         m_Res = info.GetNumDimensions() == expectedNumDimensions;
+    }
+};
+
+struct TensorNumDimensionsAreGreaterOrEqualTo : public Rule
+{
+    TensorNumDimensionsAreGreaterOrEqualTo(const TensorInfo& info, unsigned int numDimensionsToCompare)
+    {
+        m_Res = info.GetNumDimensions() >= numDimensionsToCompare;
     }
 };
 

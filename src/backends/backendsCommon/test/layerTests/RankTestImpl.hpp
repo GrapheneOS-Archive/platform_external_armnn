@@ -5,17 +5,17 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <ResolveType.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 template<typename T , std::size_t n>
 LayerTestResult<int32_t, 1> RankTest(
         armnn::TensorInfo inputTensorInfo,
-        boost::multi_array<T, n> input,
+        std::vector<T> input,
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
         const armnn::ITensorHandleFactory& tensorHandleFactory);

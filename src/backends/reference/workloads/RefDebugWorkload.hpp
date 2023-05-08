@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,7 @@
 
 #include <armnn/TypesUtils.hpp>
 
-#include <backendsCommon/Workload.hpp>
+#include "RefBaseWorkload.hpp"
 
 namespace armnn
 {
@@ -30,10 +30,12 @@ public:
     using TypedWorkload<DebugQueueDescriptor, DataType>::TypedWorkload;
 
     void Execute() const override;
+    void ExecuteAsync(ExecutionData& executionData)  override;
 
     void RegisterDebugCallback(const DebugCallbackFunction& func) override;
 
 private:
+    void Execute(std::vector<ITensorHandle*> inputs) const;
     DebugCallbackFunction m_Callback;
 };
 

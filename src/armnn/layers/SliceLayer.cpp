@@ -10,8 +10,8 @@
 #include <armnn/TypesUtils.hpp>
 #include <armnn/utility/NumericCast.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -26,7 +26,7 @@ std::unique_ptr<IWorkload> SliceLayer::CreateWorkload(const IWorkloadFactory& fa
     SliceQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSlice(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Slice, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SliceLayer* SliceLayer::Clone(Graph& graph) const
@@ -59,9 +59,9 @@ std::vector<TensorShape> SliceLayer::InferOutputShapes(const std::vector<TensorS
     return std::vector<TensorShape>({ outputShape });
 }
 
-void SliceLayer::Accept(ILayerVisitor& visitor) const
+void SliceLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSliceLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

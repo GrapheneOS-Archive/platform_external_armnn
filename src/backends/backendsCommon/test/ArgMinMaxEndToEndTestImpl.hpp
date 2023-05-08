@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "CommonTestUtils.hpp"
+#include <CommonTestUtils.hpp>
 
-#include <QuantizeHelper.hpp>
+#include <armnnUtils/QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
@@ -47,7 +47,7 @@ void ArgMinMaxEndToEndImpl(const armnn::TensorShape& inputShape,
     const float qScale  = armnn::IsQuantizedType<T>() ? 2.0f : 1.0f;
     const int32_t qOffset = armnn::IsQuantizedType<T>() ? 2 : 0;
 
-    armnn::TensorInfo inputTensorInfo(inputShape, ArmnnType, qScale, qOffset);
+    armnn::TensorInfo inputTensorInfo(inputShape, ArmnnType, qScale, qOffset, true);
     armnn::TensorInfo outputTensorInfo(outputShape, armnn::DataType::Signed32);
 
     // quantize data

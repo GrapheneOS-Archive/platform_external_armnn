@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 namespace armnn
 {
@@ -35,7 +35,7 @@ arm_compute::Status NeonDivisionWorkloadValidate(const TensorInfo& input0,
 
 NeonDivisionWorkload::NeonDivisionWorkload(const DivisionQueueDescriptor& descriptor,
                                          const WorkloadInfo& info)
-    : BaseWorkload<DivisionQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<DivisionQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonDivisionWorkload", 2, 1);
 
@@ -50,7 +50,7 @@ NeonDivisionWorkload::NeonDivisionWorkload(const DivisionQueueDescriptor& descri
 
 void NeonDivisionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonDivisionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonDivisionWorkload_Execute", this->GetGuid());
     m_DivLayer.run();
 }
 

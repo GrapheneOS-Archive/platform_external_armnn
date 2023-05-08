@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,9 +8,9 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <cstring>
 
@@ -28,7 +28,7 @@ std::unique_ptr<IWorkload> MeanLayer::CreateWorkload(const armnn::IWorkloadFacto
     descriptor.m_Parameters.m_KeepDims = m_Param.m_KeepDims;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateMean(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Mean, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 MeanLayer* MeanLayer::Clone(Graph& graph) const
@@ -49,7 +49,19 @@ void MeanLayer::ValidateTensorShapesFromInputs()
 
     VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
-    const TensorInfo& input = GetInputSlot(0).GetConnection()->GetTensorInfo();
+    std::vector<TensorShape> inferredShapes = InferOutputShapes(
+            { GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
+
+    ARMNN_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified);
+
+    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "MeanLayer");
+}
+
+std::vector<TensorShape> MeanLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
+{
+    ARMNN_ASSERT(inputShapes.size() == 1);
+    const TensorShape& input = inputShapes[0];
 
     ARMNN_ASSERT_MSG(input.GetNumDimensions() > 0 && input.GetNumDimensions() <= 4,
                      "MeanLayer: Mean supports up to 4D input.");
@@ -88,7 +100,7 @@ void MeanLayer::ValidateTensorShapesFromInputs()
         {
             if (std::find(m_Param.m_Axis.begin(), m_Param.m_Axis.end(), i) == m_Param.m_Axis.end())
             {
-                dimSizes[outputIndex] = armnn::numeric_cast<unsigned int>(input.GetShape()[i]);
+                dimSizes[outputIndex] = armnn::numeric_cast<unsigned int>(input[i]);
                 ++outputIndex;
             }
             else if (m_Param.m_KeepDims)
@@ -98,14 +110,12 @@ void MeanLayer::ValidateTensorShapesFromInputs()
             }
         }
     }
-    const TensorShape& inferredShape = TensorShape(outputRank, dimSizes.data());
-
-    ValidateAndCopyShape(outputShape, inferredShape, m_ShapeInferenceMethod, "MeanLayer");
+    return std::vector<TensorShape>({ TensorShape(outputRank, dimSizes.data()) });
 }
 
-void MeanLayer::Accept(ILayerVisitor& visitor) const
+void MeanLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitMeanLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

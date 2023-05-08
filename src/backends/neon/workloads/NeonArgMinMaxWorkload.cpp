@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,7 +8,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
@@ -54,8 +54,14 @@ arm_compute::Status NeonArgMinMaxWorkloadValidate(const TensorInfo& input,
 
 NeonArgMinMaxWorkload::NeonArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& descriptor,
                                              const WorkloadInfo& info)
-        : BaseWorkload<ArgMinMaxQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<ArgMinMaxQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonArgMinMaxWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
@@ -79,7 +85,7 @@ NeonArgMinMaxWorkload::NeonArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& des
 
 void NeonArgMinMaxWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonArgMinMaxWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonArgMinMaxWorkload_Execute", this->GetGuid());
     m_ArgMinMaxLayer->run();
 }
 

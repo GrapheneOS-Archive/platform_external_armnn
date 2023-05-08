@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ClStackWorkload.hpp"
@@ -7,7 +7,7 @@
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <cl/ClTensorHandle.hpp>
 #include <cl/ClLayerSupport.hpp>
 
@@ -44,9 +44,17 @@ arm_compute::Status ClStackWorkloadValidate(const std::vector<const TensorInfo*>
     return arm_compute::CLStackLayer::validate(aclInputPtrs, aclAxis, &aclOutputInfo);
 }
 
-ClStackWorkload::ClStackWorkload(const StackQueueDescriptor& descriptor, const WorkloadInfo& info)
-: BaseWorkload<StackQueueDescriptor>(descriptor, info)
+ClStackWorkload::ClStackWorkload(const StackQueueDescriptor& descriptor,
+                                 const WorkloadInfo& info,
+                                 const arm_compute::CLCompileContext& clCompileContext)
+: ClBaseWorkload<StackQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClStackWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     std::vector<arm_compute::ICLTensor*> aclInputs;
     for (auto input : m_Data.m_Inputs)
     {
@@ -58,14 +66,17 @@ ClStackWorkload::ClStackWorkload(const StackQueueDescriptor& descriptor, const W
 
     m_Layer.reset(new arm_compute::CLStackLayer());
     int aclAxis = CalcAxis(descriptor.m_Parameters.m_Axis, descriptor.m_Parameters.m_InputShape.GetNumDimensions());
-    m_Layer->configure(aclInputs, aclAxis, &output);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClStackWorkload_configure");
+        m_Layer->configure(clCompileContext, aclInputs, aclAxis, &output);
+    }
 }
 
 void ClStackWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_CL("ClStackWorkload_Execute");
+        ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClStackWorkload_Execute", this->GetGuid());
         m_Layer->run();
     }
 }
