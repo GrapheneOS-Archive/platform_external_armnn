@@ -8,13 +8,13 @@
 #include <armnn/utility/Assert.hpp>
 #include <ResolveType.hpp>
 
-#include <armnn/backends/Workload.hpp>
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace {
 
@@ -35,7 +35,9 @@ LayerTestResult<uint8_t, NumDims> LogicalUnaryTestHelper(
     ARMNN_ASSERT(outputShape.GetNumDimensions() == NumDims);
     armnn::TensorInfo outputTensorInfo(outputShape, armnn::DataType::Boolean);
 
-    std::vector<uint8_t> actualOutput(outputTensorInfo.GetNumElements());
+    auto inputTensor = MakeTensor<uint8_t, NumDims>(inputTensorInfo, input);
+
+    LayerTestResult <uint8_t, NumDims> ret(outputTensorInfo);
 
     std::unique_ptr <armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr <armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -48,23 +50,21 @@ LayerTestResult<uint8_t, NumDims> LogicalUnaryTestHelper(
     AddInputToWorkload(qDesc, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(qDesc, info, outputTensorInfo, outputHandle.get());
 
-    auto workload = workloadFactory.CreateWorkload(armnn::LayerType::ElementwiseUnary, qDesc, info);
+    auto workload = workloadFactory.CreateElementwiseUnary(qDesc, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), inputTensor.origin());
 
     workload->PostAllocationConfigure();
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
 
-    return LayerTestResult<uint8_t, NumDims>(actualOutput,
-                                             expectedOutput,
-                                             outputHandle->GetShape(),
-                                             outputTensorInfo.GetShape(),
-                                             true);
+    ret.outputExpected = MakeTensor<uint8_t, NumDims>(outputTensorInfo, expectedOutput);
+    ret.compareBoolean = true;
+    return ret;
 }
 
 template <std::size_t NumDims>
@@ -89,7 +89,10 @@ LayerTestResult<uint8_t, NumDims> LogicalBinaryTestHelper(
     ARMNN_ASSERT(outputShape.GetNumDimensions() == NumDims);
     armnn::TensorInfo outputTensorInfo(outputShape, armnn::DataType::Boolean);
 
-    std::vector<uint8_t> actualOutput(outputTensorInfo.GetNumElements());
+    auto inputTensor0 = MakeTensor<uint8_t, NumDims>(inputTensorInfo0, input0);
+    auto inputTensor1 = MakeTensor<uint8_t, NumDims>(inputTensorInfo1, input1);
+
+    LayerTestResult <uint8_t, NumDims> ret(outputTensorInfo);
 
     std::unique_ptr <armnn::ITensorHandle> inputHandle0 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo0);
     std::unique_ptr <armnn::ITensorHandle> inputHandle1 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
@@ -104,25 +107,23 @@ LayerTestResult<uint8_t, NumDims> LogicalBinaryTestHelper(
     AddInputToWorkload(qDesc, info, inputTensorInfo1, inputHandle1.get());
     AddOutputToWorkload(qDesc, info, outputTensorInfo, outputHandle.get());
 
-    auto workload = workloadFactory.CreateWorkload(armnn::LayerType::LogicalBinary, qDesc, info);
+    auto workload = workloadFactory.CreateLogicalBinary(qDesc, info);
 
     inputHandle0->Allocate();
     inputHandle1->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle0.get(), input0.data());
-    CopyDataToITensorHandle(inputHandle1.get(), input1.data());
+    CopyDataToITensorHandle(inputHandle0.get(), inputTensor0.origin());
+    CopyDataToITensorHandle(inputHandle1.get(), inputTensor1.origin());
 
     workload->PostAllocationConfigure();
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
 
-    return LayerTestResult<uint8_t, NumDims>(actualOutput,
-                                             expectedOutput,
-                                             outputHandle->GetShape(),
-                                             outputTensorInfo.GetShape(),
-                                             true);
+    ret.outputExpected = MakeTensor<uint8_t, NumDims>(outputTensorInfo, expectedOutput);
+    ret.compareBoolean = true;
+    return ret;
 }
 
 class UnaryTestData

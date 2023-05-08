@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Concatenation")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct ConcatenationFixture : public ParserFlatbuffersFixture
 {
     explicit ConcatenationFixture(const std::string & inputShape1,
@@ -94,7 +98,7 @@ struct ConcatenationFixtureNegativeDim : ConcatenationFixture
                                                              "-3" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixtureNegativeDim, "ParseConcatenationNegativeDim")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenationNegativeDim, ConcatenationFixtureNegativeDim)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -108,7 +112,7 @@ struct ConcatenationFixtureNCHW : ConcatenationFixture
     ConcatenationFixtureNCHW() : ConcatenationFixture("[ 1, 1, 2, 2 ]", "[ 1, 1, 2, 2 ]", "[ 1, 2, 2, 2 ]", "1" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixtureNCHW, "ParseConcatenationNCHW")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenationNCHW, ConcatenationFixtureNCHW)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -122,7 +126,7 @@ struct ConcatenationFixtureNHWC : ConcatenationFixture
     ConcatenationFixtureNHWC() : ConcatenationFixture("[ 1, 1, 2, 2 ]", "[ 1, 1, 2, 2 ]", "[ 1, 1, 2, 4 ]", "3" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixtureNHWC, "ParseConcatenationNHWC")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenationNHWC, ConcatenationFixtureNHWC)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -136,7 +140,7 @@ struct ConcatenationFixtureDim1 : ConcatenationFixture
     ConcatenationFixtureDim1() : ConcatenationFixture("[ 1, 2, 3, 4 ]", "[ 1, 2, 3, 4 ]", "[ 1, 4, 3, 4 ]", "1" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixtureDim1, "ParseConcatenationDim1")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenationDim1, ConcatenationFixtureDim1)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -155,7 +159,7 @@ struct ConcatenationFixtureDim3 : ConcatenationFixture
     ConcatenationFixtureDim3() : ConcatenationFixture("[ 1, 2, 3, 4 ]", "[ 1, 2, 3, 4 ]", "[ 1, 2, 3, 8 ]", "3" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixtureDim3, "ParseConcatenationDim3")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenationDim3, ConcatenationFixtureDim3)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -190,7 +194,7 @@ struct ConcatenationFixture3DDim0 : ConcatenationFixture
     ConcatenationFixture3DDim0() : ConcatenationFixture("[ 1, 2, 3]", "[ 2, 2, 3]", "[ 3, 2, 3]", "0" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixture3DDim0, "ParseConcatenation3DDim0")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenation3DDim0, ConcatenationFixture3DDim0)
 {
     RunTest<3, armnn::DataType::QAsymmU8>(
         0,
@@ -207,7 +211,7 @@ struct ConcatenationFixture3DDim1 : ConcatenationFixture
     ConcatenationFixture3DDim1() : ConcatenationFixture("[ 1, 2, 3]", "[ 1, 4, 3]", "[ 1, 6, 3]", "1" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixture3DDim1, "ParseConcatenation3DDim1")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenation3DDim1, ConcatenationFixture3DDim1)
 {
     RunTest<3, armnn::DataType::QAsymmU8>(
         0,
@@ -224,7 +228,7 @@ struct ConcatenationFixture3DDim2 : ConcatenationFixture
     ConcatenationFixture3DDim2() : ConcatenationFixture("[ 1, 2, 3]", "[ 1, 2, 6]", "[ 1, 2, 9]", "2" ) {}
 };
 
-TEST_CASE_FIXTURE(ConcatenationFixture3DDim2, "ParseConcatenation3DDim2")
+BOOST_FIXTURE_TEST_CASE(ParseConcatenation3DDim2, ConcatenationFixture3DDim2)
 {
     RunTest<3, armnn::DataType::QAsymmU8>(
         0,
@@ -236,4 +240,4 @@ TEST_CASE_FIXTURE(ConcatenationFixture3DDim2, "ParseConcatenation3DDim2")
                               3,  4,  5, 12, 13, 14, 15, 16, 17 } } });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

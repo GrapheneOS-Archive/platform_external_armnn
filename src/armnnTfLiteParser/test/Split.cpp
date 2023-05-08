@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Split")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SplitFixture : public ParserFlatbuffersFixture
 {
     explicit SplitFixture(const std::string& inputShape,
@@ -104,7 +108,7 @@ struct SimpleSplitFixtureFloat32 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitFixtureFloat32, "ParseAxisOneSplitTwoFloat32")
+BOOST_FIXTURE_TEST_CASE(ParseAxisOneSplitTwoFloat32, SimpleSplitFixtureFloat32)
 {
 
     RunTest<4, armnn::DataType::Float32>(
@@ -122,7 +126,7 @@ struct SimpleSplitAxisThreeFixtureFloat32 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitAxisThreeFixtureFloat32, "ParseAxisThreeSplitTwoFloat32")
+BOOST_FIXTURE_TEST_CASE(ParseAxisThreeSplitTwoFloat32, SimpleSplitAxisThreeFixtureFloat32)
 {
     RunTest<4, armnn::DataType::Float32>(
         0,
@@ -139,7 +143,7 @@ struct SimpleSplit2DFixtureFloat32 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplit2DFixtureFloat32, "SimpleSplit2DFloat32")
+BOOST_FIXTURE_TEST_CASE(SimpleSplit2DFloat32, SimpleSplit2DFixtureFloat32)
 {
     RunTest<2, armnn::DataType::Float32>(
         0,
@@ -155,7 +159,7 @@ struct SimpleSplit3DFixtureFloat32 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplit3DFixtureFloat32, "SimpleSplit3DFloat32")
+BOOST_FIXTURE_TEST_CASE(SimpleSplit3DFloat32, SimpleSplit3DFixtureFloat32)
 {
     RunTest<3, armnn::DataType::Float32>(
         0,
@@ -172,7 +176,7 @@ struct SimpleSplitFixtureUint8 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitFixtureUint8, "ParseAxisOneSplitTwoUint8")
+BOOST_FIXTURE_TEST_CASE(ParseAxisOneSplitTwoUint8, SimpleSplitFixtureUint8)
 {
 
     RunTest<4, armnn::DataType::QAsymmU8>(
@@ -190,7 +194,7 @@ struct SimpleSplitAxisThreeFixtureUint8 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplitAxisThreeFixtureUint8, "ParseAxisThreeSplitTwoUint8")
+BOOST_FIXTURE_TEST_CASE(ParseAxisThreeSplitTwoUint8, SimpleSplitAxisThreeFixtureUint8)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -207,7 +211,7 @@ struct SimpleSplit2DFixtureUint8 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplit2DFixtureUint8, "SimpleSplit2DUint8")
+BOOST_FIXTURE_TEST_CASE(SimpleSplit2DUint8, SimpleSplit2DFixtureUint8)
 {
     RunTest<2, armnn::DataType::QAsymmU8>(
             0,
@@ -223,7 +227,7 @@ struct SimpleSplit3DFixtureUint8 : SplitFixture
         {}
 };
 
-TEST_CASE_FIXTURE(SimpleSplit3DFixtureUint8, "SimpleSplit3DUint8")
+BOOST_FIXTURE_TEST_CASE(SimpleSplit3DUint8, SimpleSplit3DFixtureUint8)
 {
     RunTest<3, armnn::DataType::QAsymmU8>(
         0,
@@ -233,4 +237,4 @@ TEST_CASE_FIXTURE(SimpleSplit3DFixtureUint8, "SimpleSplit3DUint8")
           {"outputTensor2", { 9, 10, 11, 12, 13, 14, 15, 16 } } } );
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

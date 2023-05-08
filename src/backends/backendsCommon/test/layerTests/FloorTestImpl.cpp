@@ -5,11 +5,11 @@
 
 #include "FloorTestImpl.hpp"
 
-#include <DataTypeUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataTypeUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> SimpleFloorTest(
@@ -24,20 +24,16 @@ LayerTestResult<T, 4> SimpleFloorTest(
     armnn::TensorInfo outputTensorInfo(inputTensorInfo);
     outputTensorInfo.SetQuantizationScale(0.1f);
 
-    std::vector<T> input = ConvertToDataType<ArmnnType>(
-        {
-            -37.5f, -15.2f, -8.76f, -2.0f, -1.5f, -1.3f, -0.5f, -0.4f, 0.0f,
-            1.0f, 0.4f, 0.5f, 1.3f, 1.5f, 2.0f, 8.76f, 15.2f, 37.5f
-        },
-        inputTensorInfo);
+    auto input = MakeTensor<T, 4>(inputTensorInfo, ConvertToDataType<ArmnnType>(
+        { -37.5f, -15.2f, -8.76f, -2.0f, -1.5f, -1.3f, -0.5f, -0.4f, 0.0f,
+        1.0f, 0.4f, 0.5f, 1.3f, 1.5f, 2.0f, 8.76f, 15.2f, 37.5f },
+        inputTensorInfo));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<T> expectedOutput = ConvertToDataType<ArmnnType>(
-        {
-            -38.0f, -16.0f, -9.0f, -2.0f, -2.0f, -2.0f, -1.0f, -1.0f, 0.0f,
-            1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 2.0f, 8.0f, 15.0f, 37.0f
-        },
-        outputTensorInfo);
+    LayerTestResult<T, 4> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo, ConvertToDataType<ArmnnType>(
+        { -38.0f, -16.0f, -9.0f, -2.0f, -2.0f, -2.0f, -1.0f, -1.0f, 0.0f,
+        1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 2.0f, 8.0f, 15.0f, 37.0f },
+        outputTensorInfo));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -47,21 +43,18 @@ LayerTestResult<T, 4> SimpleFloorTest(
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Floor, data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateFloor(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
 
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 //

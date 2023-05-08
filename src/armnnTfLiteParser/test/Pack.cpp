@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Pack")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct PackFixture : public ParserFlatbuffersFixture
 {
     explicit PackFixture(const std::string & inputShape,
@@ -99,7 +103,7 @@ struct SimplePackFixture : PackFixture
                                       "3") {}
 };
 
-TEST_CASE_FIXTURE(SimplePackFixture, "ParsePack")
+BOOST_FIXTURE_TEST_CASE(ParsePack, SimplePackFixture)
 {
     RunTest<4, armnn::DataType::Float32>(
     0,
@@ -146,4 +150,4 @@ TEST_CASE_FIXTURE(SimplePackFixture, "ParsePack")
                          18, 36 } } });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

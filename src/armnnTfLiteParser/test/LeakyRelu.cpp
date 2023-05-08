@@ -1,13 +1,17 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_LeakyRelu")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct LeakyReluFixture : public ParserFlatbuffersFixture
 {
     explicit LeakyReluFixture()
@@ -65,11 +69,11 @@ struct LeakyReluFixture : public ParserFlatbuffersFixture
     }
 };
 
-TEST_CASE_FIXTURE(LeakyReluFixture, "ParseLeakyRelu")
+BOOST_FIXTURE_TEST_CASE(ParseLeakyRelu, LeakyReluFixture)
 {
     RunTest<2, armnn::DataType::Float32>(0,
                                          {{ "inputTensor",  { -0.1f, -0.2f, -0.3f, -0.4f, 0.1f, 0.2f, 0.3f }}},
                                          {{ "outputTensor", { -0.001f, -0.002f, -0.003f, -0.004f, 0.1f, 0.2f, 0.3f }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

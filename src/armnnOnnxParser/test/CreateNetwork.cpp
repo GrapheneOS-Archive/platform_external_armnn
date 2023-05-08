@@ -3,14 +3,13 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include  "armnnOnnxParser/IOnnxParser.hpp"
-#include <doctest/doctest.h>
-
 #include "google/protobuf/stubs/logging.h"
 
-TEST_SUITE("OnnxParser_CreateNetwork")
-{
-TEST_CASE("CreateNetworkFromString")
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
+BOOST_AUTO_TEST_CASE(CreateNetworkFromString)
 {
   std::string TestModel = R"(
                           ir_version: 3
@@ -44,21 +43,21 @@ TEST_CASE("CreateNetworkFromString")
     armnnOnnxParser::IOnnxParserPtr parser(armnnOnnxParser::IOnnxParser::Create());
 
     armnn::INetworkPtr network = parser->CreateNetworkFromString(TestModel.c_str());
-    CHECK(network.get());
+    BOOST_TEST(network.get());
 }
 
-TEST_CASE("CreateNetworkFromStringWithNullptr")
+BOOST_AUTO_TEST_CASE(CreateNetworkFromStringWithNullptr)
 {
     armnnOnnxParser::IOnnxParserPtr parser(armnnOnnxParser::IOnnxParser::Create());
-    CHECK_THROWS_AS(parser->CreateNetworkFromString(""), armnn::InvalidArgumentException );
+    BOOST_CHECK_THROW(parser->CreateNetworkFromString(""), armnn::InvalidArgumentException );
 }
 
-TEST_CASE("CreateNetworkWithInvalidString")
+BOOST_AUTO_TEST_CASE(CreateNetworkWithInvalidString)
 {
     auto silencer = google::protobuf::LogSilencer(); //get rid of errors from protobuf
     armnnOnnxParser::IOnnxParserPtr parser(armnnOnnxParser::IOnnxParser::Create());
-    CHECK_THROWS_AS(parser->CreateNetworkFromString( "I'm not a model so I should raise an error" ),
+    BOOST_CHECK_THROW(parser->CreateNetworkFromString( "I'm not a model so I should raise an error" ),
                       armnn::ParseException );
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

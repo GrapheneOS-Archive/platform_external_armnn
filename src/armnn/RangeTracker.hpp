@@ -8,8 +8,6 @@
 #include <armnn/INetwork.hpp>
 #include <armnn/Types.hpp>
 
-#include <common/include/ProfilingGuid.hpp>
-
 #include <utility>
 #include <unordered_map>
 

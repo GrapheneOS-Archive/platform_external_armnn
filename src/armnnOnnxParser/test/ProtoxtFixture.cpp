@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include  "armnnOnnxParser/IOnnxParser.hpp"
 #include  "ParserPrototxtFixture.hpp"
 
-TEST_SUITE("OnnxParser_PrototxtFixture")
-{
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
 struct ProtoxtTestFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
 {
     ProtoxtTestFixture()
@@ -64,17 +65,17 @@ struct ProtoxtTestFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxPa
 };
 
 
-TEST_CASE_FIXTURE(ProtoxtTestFixture, "ProtoxtTest")
+BOOST_FIXTURE_TEST_CASE(ProtoxtTest, ProtoxtTestFixture)
 {
     //TODO : add a test to check if the inputs and outputs are correctly inferred.
 }
 
-TEST_CASE_FIXTURE(ProtoxtTestFixture, "ProtoxtTestWithBadInputs")
+BOOST_FIXTURE_TEST_CASE(ProtoxtTestWithBadInputs, ProtoxtTestFixture)
 {
 
-   // CHECK_THROWS_AS(RunTest<4>({{ "InexistantInput" , {0.0, 1.0, 2.0, 3.0}}},
+   // BOOST_CHECK_THROW(RunTest<4>({{ "InexistantInput" , {0.0, 1.0, 2.0, 3.0}}},
    //                              {{ "InexistantOutput" , {0.0, 1.0, 2.0, 3.0}}}),
    //                   armnn::InvalidArgumentException );
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

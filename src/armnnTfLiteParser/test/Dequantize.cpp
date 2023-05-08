@@ -1,13 +1,17 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Dequantize")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
     struct DequantizeFixture : public ParserFlatbuffersFixture
     {
         explicit DequantizeFixture(const std::string & inputShape,
@@ -76,7 +80,7 @@ TEST_SUITE("TensorflowLiteParser_Dequantize")
                                                              "UINT8") {}
     };
 
-    TEST_CASE_FIXTURE(SimpleDequantizeFixtureQAsymm8, "SimpleDequantizeQAsymm8")
+    BOOST_FIXTURE_TEST_CASE(SimpleDequantizeQAsymm8, SimpleDequantizeFixtureQAsymm8)
     {
         RunTest<2, armnn::DataType::QAsymmU8 , armnn::DataType::Float32>(
                 0,
@@ -91,7 +95,7 @@ TEST_SUITE("TensorflowLiteParser_Dequantize")
                                                              "INT16") {}
     };
 
-    TEST_CASE_FIXTURE(SimpleDequantizeFixtureQSymm16, "SimpleDequantizeQsymm16")
+    BOOST_FIXTURE_TEST_CASE(SimpleDequantizeQsymm16, SimpleDequantizeFixtureQSymm16)
     {
         RunTest<2, armnn::DataType::QSymmS16 , armnn::DataType::Float32>(
                 0,
@@ -106,7 +110,7 @@ TEST_SUITE("TensorflowLiteParser_Dequantize")
                                                              "INT8") {}
     };
 
-    TEST_CASE_FIXTURE(SimpleDequantizeFixtureQAsymmS8, "SimpleDequantizeQAsymmS8")
+    BOOST_FIXTURE_TEST_CASE(SimpleDequantizeQAsymmS8, SimpleDequantizeFixtureQAsymmS8)
     {
         RunTest<2, armnn::DataType::QAsymmS8 , armnn::DataType::Float32>(
                 0,
@@ -114,4 +118,4 @@ TEST_SUITE("TensorflowLiteParser_Dequantize")
                 {{"outputTensor", { 0.0f, 1.5f, 7.5f, 190.5f, -192.0f, -1.5f }}});
     }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

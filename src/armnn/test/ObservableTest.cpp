@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include "Graph.hpp"
 #include "Observable.hpp"
 
-TEST_SUITE("Observable")
-{
-TEST_CASE("AddedLayerObservableTest")
+BOOST_AUTO_TEST_SUITE(Observable)
+
+BOOST_AUTO_TEST_CASE(AddedLayerObservableTest)
 {
     armnn::Graph graph;
 
@@ -24,11 +24,11 @@ TEST_CASE("AddedLayerObservableTest")
     // Check the observable has observed the changes
     std::list<armnn::Layer*> testLayers({ output, input });
 
-    CHECK(std::equal(layerObservable.begin(), layerObservable.end(),
-                                  testLayers.begin(), testLayers.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(layerObservable.begin(), layerObservable.end(),
+                                  testLayers.begin(), testLayers.end());
 }
 
-TEST_CASE("ClearAddedLayerObservableTest")
+BOOST_AUTO_TEST_CASE(ClearAddedLayerObservableTest)
 {
     armnn::Graph graph;
 
@@ -44,11 +44,11 @@ TEST_CASE("ClearAddedLayerObservableTest")
     // Check the observable has observed the changes
     std::list<armnn::Layer*> emptyList({});
 
-    CHECK(std::equal(addedLayerObservable.begin(), addedLayerObservable.end(),
-                                  emptyList.begin(), emptyList.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(addedLayerObservable.begin(), addedLayerObservable.end(),
+                                  emptyList.begin(), emptyList.end());
 }
 
-TEST_CASE("ErasedLayerNamesObservableTest")
+BOOST_AUTO_TEST_CASE(ErasedLayerNamesObservableTest)
 {
     armnn::Graph graph;
 
@@ -64,11 +64,11 @@ TEST_CASE("ErasedLayerNamesObservableTest")
     // Check the observable has observed the changes
     std::list<std::string> testList({"output"});
 
-    CHECK(std::equal(erasedLayerNamesObservable.begin(), erasedLayerNamesObservable.end(),
-                                  testList.begin(), testList.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(erasedLayerNamesObservable.begin(), erasedLayerNamesObservable.end(),
+                                  testList.begin(), testList.end());
 }
 
-TEST_CASE("ClearErasedLayerNamesObservableTest")
+BOOST_AUTO_TEST_CASE(ClearErasedLayerNamesObservableTest)
 {
     armnn::Graph graph;
 
@@ -86,9 +86,9 @@ TEST_CASE("ClearErasedLayerNamesObservableTest")
     // Check the observable has observed the changes
     std::list<std::string> emptyList({});
 
-    CHECK(std::equal(erasedLayerNamesObservable.begin(), erasedLayerNamesObservable.end(),
-                                  emptyList.begin(), emptyList.end()));
+    BOOST_CHECK_EQUAL_COLLECTIONS(erasedLayerNamesObservable.begin(), erasedLayerNamesObservable.end(),
+                                  emptyList.begin(), emptyList.end());
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()
 

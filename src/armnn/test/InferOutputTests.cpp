@@ -5,10 +5,12 @@
 
 #include "InferOutputTests.hpp"
 
-#include <UnitTests.hpp>
+#include <test/UnitTests.hpp>
 
-TEST_SUITE("LayerValidateOutput")
-{
+#include <boost/test/unit_test.hpp>
+
+BOOST_AUTO_TEST_SUITE(LayerValidateOutput)
+
 // ArgMinMax
 ARMNN_SIMPLE_TEST_CASE(ArgMinMaxInferOutputShape4d, ArgMinMaxInferOutputShape4dTest)
 ARMNN_SIMPLE_TEST_CASE(ArgMinMaxInferOutputShape3d, ArgMinMaxInferOutputShape3dTest)
@@ -38,17 +40,11 @@ ARMNN_SIMPLE_TEST_CASE(StackValidateTensorShapesFromInputsNoMatch, StackValidate
 // Convolution2D
 ARMNN_SIMPLE_TEST_CASE(Convolution2dInferOutputShape, Convolution2dInferOutputShapeTest)
 
-// Convolution3D
-ARMNN_SIMPLE_TEST_CASE(Convolution3dInferOutputShape, Convolution3dInferOutputShapeTest)
-
 // DepthwiseConvolution2D
 ARMNN_SIMPLE_TEST_CASE(DepthwiseConvolution2dInferOutputShape, DepthwiseConvolution2dInferOutputShapeTest)
 
 // TransposeConvolution2D
 ARMNN_SIMPLE_TEST_CASE(TransposeConvolution2dInferOutputShape, TransposeConvolution2dInferOutputShapeTest)
-
-// Pooling3D
-ARMNN_SIMPLE_TEST_CASE(Pooling3dInferOutputShape, Pooling3dInferOutputShapeTest)
 
 // QLstm
 ARMNN_SIMPLE_TEST_CASE(QLstmInferOutputShape, QLstmInferOutputShapeTest)
@@ -56,4 +52,4 @@ ARMNN_SIMPLE_TEST_CASE(QLstmInferOutputShape, QLstmInferOutputShapeTest)
 // QuantizedLstm
 ARMNN_SIMPLE_TEST_CASE(QuantizedLstmInferOutputShape, QuantizedLstmInferOutputShapeTest)
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -5,14 +5,14 @@
 #pragma once
 
 #include "TestLayerVisitor.hpp"
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 namespace armnn
 {
 
 void CheckLayerBindingId(LayerBindingId visitorId, LayerBindingId id)
 {
-    CHECK_EQ(visitorId, id);
+    BOOST_CHECK_EQUAL(visitorId, id);
 }
 
 // Concrete TestLayerVisitor subclasses for layers taking LayerBindingId argument with overridden VisitLayer methods
@@ -27,28 +27,14 @@ public:
         , visitorId(id)
     {};
 
-    void ExecuteStrategy(const armnn::IConnectableLayer* layer,
-                         const armnn::BaseDescriptor& descriptor,
-                         const std::vector<armnn::ConstTensor>& constants,
-                         const char* name,
-                         const armnn::LayerBindingId id = 0) override
+    void VisitInputLayer(const IConnectableLayer* layer,
+                         LayerBindingId id,
+                         const char* name = nullptr) override
     {
-        armnn::IgnoreUnused(descriptor, constants, id);
-        switch (layer->GetType())
-        {
-            case armnn::LayerType::Input:
-            {
-                CheckLayerPointer(layer);
-                CheckLayerBindingId(visitorId, id);
-                CheckLayerName(name);
-                break;
-            }
-            default:
-            {
-                m_DefaultStrategy.Apply(GetLayerTypeAsCString(layer->GetType()));
-            }
-        }
-    }
+        CheckLayerPointer(layer);
+        CheckLayerBindingId(visitorId, id);
+        CheckLayerName(name);
+    };
 };
 
 class TestOutputLayerVisitor : public TestLayerVisitor
@@ -62,28 +48,14 @@ public:
         , visitorId(id)
     {};
 
-    void ExecuteStrategy(const armnn::IConnectableLayer* layer,
-                         const armnn::BaseDescriptor& descriptor,
-                         const std::vector<armnn::ConstTensor>& constants,
-                         const char* name,
-                         const armnn::LayerBindingId id = 0) override
+    void VisitOutputLayer(const IConnectableLayer* layer,
+                          LayerBindingId id,
+                          const char* name = nullptr) override
     {
-        armnn::IgnoreUnused(descriptor, constants, id);
-        switch (layer->GetType())
-        {
-            case armnn::LayerType::Output:
-            {
-                CheckLayerPointer(layer);
-                CheckLayerBindingId(visitorId, id);
-                CheckLayerName(name);
-                break;
-            }
-            default:
-            {
-                m_DefaultStrategy.Apply(GetLayerTypeAsCString(layer->GetType()));
-            }
-        }
-    }
+        CheckLayerPointer(layer);
+        CheckLayerBindingId(visitorId, id);
+        CheckLayerName(name);
+    };
 };
 
 } //namespace armnn

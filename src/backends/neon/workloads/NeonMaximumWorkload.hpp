@@ -1,11 +1,9 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
-
-#include "NeonBaseWorkload.hpp"
 
 #include <neon/workloads/NeonWorkloadUtils.hpp>
 
@@ -18,7 +16,7 @@ arm_compute::Status NeonMaximumWorkloadValidate(const TensorInfo& input0,
                                                 const TensorInfo& input1,
                                                 const TensorInfo& output);
 
-class NeonMaximumWorkload : public NeonBaseWorkload<MaximumQueueDescriptor>
+class NeonMaximumWorkload : public BaseWorkload<MaximumQueueDescriptor>
 {
 public:
     NeonMaximumWorkload(const MaximumQueueDescriptor& descriptor, const WorkloadInfo& info);

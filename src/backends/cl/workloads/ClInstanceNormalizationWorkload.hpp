@@ -1,11 +1,11 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLInstanceNormalizationLayer.h>
 
@@ -16,12 +16,10 @@ arm_compute::Status ClInstanceNormalizationWorkloadValidate(const TensorInfo& in
                                                             const TensorInfo& output,
                                                             const InstanceNormalizationDescriptor& descriptor);
 
-class ClInstanceNormalizationWorkload : public ClBaseWorkload<InstanceNormalizationQueueDescriptor>
+class ClInstanceNormalizationWorkload : public BaseWorkload<InstanceNormalizationQueueDescriptor>
 {
 public:
-    ClInstanceNormalizationWorkload(const InstanceNormalizationQueueDescriptor& descriptor,
-                                    const WorkloadInfo& info,
-                                    const arm_compute::CLCompileContext& clCompileContext);
+    ClInstanceNormalizationWorkload(const InstanceNormalizationQueueDescriptor& descriptor, const WorkloadInfo& info);
     void Execute() const override;
 
 private:

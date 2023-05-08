@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLElementwiseOperations.h>
 
@@ -16,12 +16,10 @@ arm_compute::Status ClMinimumWorkloadValidate(const TensorInfo& input0,
                                               const TensorInfo& input1,
                                               const TensorInfo& output);
 
-class ClMinimumWorkload : public ClBaseWorkload<MinimumQueueDescriptor>
+class ClMinimumWorkload : public BaseWorkload<MinimumQueueDescriptor>
 {
 public:
-    ClMinimumWorkload(const MinimumQueueDescriptor& descriptor,
-                      const WorkloadInfo& info,
-                      const arm_compute::CLCompileContext& clCompileContext);
+    ClMinimumWorkload(const MinimumQueueDescriptor& descriptor, const WorkloadInfo& info);
     void Execute() const override;
 
 private:

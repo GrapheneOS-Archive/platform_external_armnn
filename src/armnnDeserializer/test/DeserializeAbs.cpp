@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
-
-#include <doctest/doctest.h>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_Abs")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
     struct AbsFixture : public ParserFlatbuffersSerializeFixture
     {
         explicit AbsFixture(const std::string &inputShape,
@@ -109,7 +109,7 @@ TEST_SUITE("Deserializer_Abs")
         {}
     };
 
-    TEST_CASE_FIXTURE(SimpleAbsFixture, "SimpleAbsTest")
+    BOOST_FIXTURE_TEST_CASE(SimpleAbsTest, SimpleAbsFixture)
     {
         RunTest<4, armnn::DataType::Float32>(
                 0,
@@ -117,4 +117,4 @@ TEST_SUITE("Deserializer_Abs")
                 {{"OutputLayer", { 100.0f, 50.5f, 25.9999f, 0.5f , 0.0f, 1.5555f, 25.5f, 100.0f }}});
     }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

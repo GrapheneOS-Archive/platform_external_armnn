@@ -8,15 +8,13 @@
 #include "Encoders.hpp"
 #include "Decoders.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
 namespace armnn
 {
 
 void Stack (const StackQueueDescriptor&                   data,
             std::vector<std::unique_ptr<Decoder<float>>>& inputs,
-            Encoder<float>&                               output,
-            const TensorInfo&                             inputInfo,
-            const TensorInfo&                             outputInfo);
+            Encoder<float>&                               output);
 
 } // namespace armnn

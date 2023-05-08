@@ -7,21 +7,21 @@
 
 #include "ClWorkloadFactoryHelper.hpp"
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #include <cl/ClContextControl.hpp>
 #include <cl/ClWorkloadFactory.hpp>
 #include <cl/OpenClTimer.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
 #include <arm_compute/runtime/CL/CLScheduler.h>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <iostream>
 
@@ -32,16 +32,17 @@ struct OpenClFixture
     // Initialising ClContextControl to ensure OpenCL is loaded correctly for each test case.
     // NOTE: Profiling needs to be enabled in ClContextControl to be able to obtain execution
     // times from OpenClTimer.
-    OpenClFixture() : m_ClContextControl(nullptr, nullptr, true) {}
+    OpenClFixture() : m_ClContextControl(nullptr, true) {}
     ~OpenClFixture() {}
 
     ClContextControl m_ClContextControl;
 };
 
-TEST_CASE_FIXTURE(OpenClFixture, "OpenClTimerBatchNorm")
-{
-//using FactoryType = ClWorkloadFactory;
+BOOST_FIXTURE_TEST_SUITE(OpenClTimerBatchNorm, OpenClFixture)
+using FactoryType = ClWorkloadFactory;
 
+BOOST_AUTO_TEST_CASE(OpenClTimerBatchNorm)
+{
     auto memoryManager = ClWorkloadFactoryHelper::GetMemoryManager();
     ClWorkloadFactory workloadFactory = ClWorkloadFactoryHelper::GetFactory(memoryManager);
 
@@ -54,22 +55,22 @@ TEST_CASE_FIXTURE(OpenClFixture, "OpenClTimerBatchNorm")
     TensorInfo outputTensorInfo({num, channels, height, width}, DataType::Float32);
     TensorInfo tensorInfo({channels}, DataType::Float32);
 
-    std::vector<float> input =
-    {
-         1.f, 4.f,
-         4.f, 2.f,
-         1.f, 6.f,
+    auto input = MakeTensor<float, 4>(inputTensorInfo,
+        {
+             1.f, 4.f,
+             4.f, 2.f,
+             1.f, 6.f,
 
-         1.f, 1.f,
-         4.f, 1.f,
-        -2.f, 4.f
-    };
+             1.f, 1.f,
+             4.f, 1.f,
+            -2.f, 4.f
+        });
 
     // these values are per-channel of the input
-    std::vector<float> mean     = { 3.f, -2.f };
-    std::vector<float> variance = { 4.f,  9.f };
-    std::vector<float> beta     = { 3.f,  2.f };
-    std::vector<float> gamma    = { 2.f,  1.f };
+    auto mean     = MakeTensor<float, 1>(tensorInfo, { 3.f, -2.f });
+    auto variance = MakeTensor<float, 1>(tensorInfo, { 4.f,  9.f });
+    auto beta     = MakeTensor<float, 1>(tensorInfo, { 3.f,  2.f });
+    auto gamma    = MakeTensor<float, 1>(tensorInfo, { 2.f,  1.f });
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
@@ -78,15 +79,15 @@ TEST_CASE_FIXTURE(OpenClFixture, "OpenClTimerBatchNorm")
 
     BatchNormalizationQueueDescriptor data;
     WorkloadInfo info;
-    ScopedTensorHandle meanTensor(tensorInfo);
-    ScopedTensorHandle varianceTensor(tensorInfo);
-    ScopedTensorHandle betaTensor(tensorInfo);
-    ScopedTensorHandle gammaTensor(tensorInfo);
+    ScopedCpuTensorHandle meanTensor(tensorInfo);
+    ScopedCpuTensorHandle varianceTensor(tensorInfo);
+    ScopedCpuTensorHandle betaTensor(tensorInfo);
+    ScopedCpuTensorHandle gammaTensor(tensorInfo);
 
-    AllocateAndCopyDataToITensorHandle(&meanTensor, mean.data());
-    AllocateAndCopyDataToITensorHandle(&varianceTensor, variance.data());
-    AllocateAndCopyDataToITensorHandle(&betaTensor, beta.data());
-    AllocateAndCopyDataToITensorHandle(&gammaTensor, gamma.data());
+    AllocateAndCopyDataToITensorHandle(&meanTensor, &mean[0]);
+    AllocateAndCopyDataToITensorHandle(&varianceTensor, &variance[0]);
+    AllocateAndCopyDataToITensorHandle(&betaTensor, &beta[0]);
+    AllocateAndCopyDataToITensorHandle(&gammaTensor, &gamma[0]);
 
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
@@ -99,16 +100,16 @@ TEST_CASE_FIXTURE(OpenClFixture, "OpenClTimerBatchNorm")
     // for each channel:
     // substract mean, divide by standard deviation (with an epsilon to avoid div by 0)
     // multiply by gamma and add beta
-    std::unique_ptr<IWorkload> workload = workloadFactory.CreateWorkload(LayerType::BatchNormalization, data, info);
+    std::unique_ptr<IWorkload> workload = workloadFactory.CreateBatchNormalization(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
 
     OpenClTimer openClTimer;
 
-    CHECK_EQ(openClTimer.GetName(), "OpenClKernelTimer");
+    BOOST_CHECK_EQUAL(openClTimer.GetName(), "OpenClKernelTimer");
 
     //Start the timer
     openClTimer.Start();
@@ -119,13 +120,15 @@ TEST_CASE_FIXTURE(OpenClFixture, "OpenClTimerBatchNorm")
     //Stop the timer
     openClTimer.Stop();
 
-    CHECK_EQ(openClTimer.GetMeasurements().size(), 1);
+    BOOST_CHECK_EQUAL(openClTimer.GetMeasurements().size(), 1);
 
-    CHECK_EQ(openClTimer.GetMeasurements().front().m_Name,
+    BOOST_CHECK_EQUAL(openClTimer.GetMeasurements().front().m_Name,
                       "OpenClKernelTimer/0: batchnormalization_layer_nchw GWS[1,3,2]");
 
-    CHECK(openClTimer.GetMeasurements().front().m_Value > 0);
+    BOOST_CHECK(openClTimer.GetMeasurements().front().m_Value > 0);
 
 }
+
+BOOST_AUTO_TEST_SUITE_END()
 
 #endif //aarch64 or x86_64

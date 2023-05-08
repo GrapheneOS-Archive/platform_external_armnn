@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLPixelWiseMultiplication.h>
 
@@ -17,14 +17,12 @@ arm_compute::Status ClMultiplicationWorkloadValidate(const TensorInfo& input0,
                                                      const TensorInfo& output,
                                                      const ActivationDescriptor* activationDescriptor = nullptr);
 
-class ClMultiplicationWorkload : public ClBaseWorkload<MultiplicationQueueDescriptor>
+class ClMultiplicationWorkload : public BaseWorkload<MultiplicationQueueDescriptor>
 {
 public:
-    ClMultiplicationWorkload(const MultiplicationQueueDescriptor& descriptor,
-                             const WorkloadInfo& info,
-                             const arm_compute::CLCompileContext& clCompileContext);
+    ClMultiplicationWorkload(const MultiplicationQueueDescriptor& descriptor, const WorkloadInfo& info);
 
-    using ClBaseWorkload<MultiplicationQueueDescriptor>::ClBaseWorkload;
+    using BaseWorkload<MultiplicationQueueDescriptor>::BaseWorkload;
     void Execute() const override;
 
 private:
@@ -32,3 +30,6 @@ private:
 };
 
 } //namespace armnn
+
+
+

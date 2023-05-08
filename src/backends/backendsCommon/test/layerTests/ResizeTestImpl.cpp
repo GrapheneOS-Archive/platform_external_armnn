@@ -5,18 +5,18 @@
 
 #include "ResizeTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 
 
 #include <armnnUtils/TensorUtils.hpp>
 #include <armnnUtils/DataLayoutIndexed.hpp>
 #include <armnnUtils/Permute.hpp>
 
-#include <armnnTestUtils/DataLayoutUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataLayoutUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -95,16 +95,21 @@ LayerTestResult<T, NumDims> ResizeTestImpl(
     std::vector<T> inputData =
         armnnUtils::QuantizedVector<T>(params.m_InputData, params.m_InQuantScale, params.m_InQuantOffset);
 
-    std::vector<T> actualOutput(outputInfo.GetNumElements());
-    std::vector<T> expectedOutputData = armnnUtils::QuantizedVector<T>(params.m_ExpectedOutputData,
-                                                                       params.m_OutQuantScale,
-                                                                       params.m_OutQuantOffset);
+    std::vector<T> expectedOutputData =
+        armnnUtils::QuantizedVector<T>(params.m_ExpectedOutputData,
+                                       params.m_OutQuantScale,
+                                       params.m_OutQuantOffset);
 
     if (params.m_DataLayout == armnn::DataLayout::NHWC)
     {
         PermuteTensorNchwToNhwc(inputInfo, inputData);
         PermuteTensorNchwToNhwc(outputInfo, expectedOutputData);
     }
+
+    auto input = MakeTensor<T, NumDims>(inputInfo, inputData);
+
+    LayerTestResult<T, NumDims> result(outputInfo);
+    result.outputExpected = MakeTensor<T, NumDims>(outputInfo, expectedOutputData);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
@@ -123,23 +128,17 @@ LayerTestResult<T, NumDims> ResizeTestImpl(
     AddInputToWorkload(descriptor, info, inputInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Resize,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateResize(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
-    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-
-    return LayerTestResult<T, NumDims>(actualOutput,
-                                       expectedOutputData,
-                                       outputHandle->GetShape(),
-                                       outputInfo.GetShape());
+    CopyDataFromITensorHandle(result.output.origin(), outputHandle.get());
+    return result;
 }
 
 } // anonymous namespace

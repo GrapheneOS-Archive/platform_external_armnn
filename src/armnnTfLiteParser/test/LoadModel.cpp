@@ -1,19 +1,20 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
-#include <armnnUtils/Filesystem.hpp>
+#include <Filesystem.hpp>
 
-using armnnTfLiteParser::TfLiteParserImpl;
-using ModelPtr = TfLiteParserImpl::ModelPtr;
-using SubgraphPtr = TfLiteParserImpl::SubgraphPtr;
-using OperatorPtr = TfLiteParserImpl::OperatorPtr;
+using armnnTfLiteParser::TfLiteParser;
+using ModelPtr = TfLiteParser::ModelPtr;
+using SubgraphPtr = TfLiteParser::SubgraphPtr;
+using OperatorPtr = TfLiteParser::OperatorPtr;
 
-TEST_SUITE("TensorflowLiteParser_LoadModel")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct LoadModelFixture : public ParserFlatbuffersFixture
 {
     explicit LoadModelFixture()
@@ -136,56 +137,55 @@ struct LoadModelFixture : public ParserFlatbuffersFixture
                     const std::vector<tflite::BuiltinOperator>& opcodes,
                     size_t subgraphs, const std::string desc, size_t buffers)
     {
-        CHECK(model);
-        CHECK_EQ(version, model->version);
-        CHECK_EQ(opcodeSize, model->operator_codes.size());
+        BOOST_CHECK(model);
+        BOOST_CHECK_EQUAL(version, model->version);
+        BOOST_CHECK_EQUAL(opcodeSize, model->operator_codes.size());
         CheckBuiltinOperators(opcodes, model->operator_codes);
-        CHECK_EQ(subgraphs, model->subgraphs.size());
-        CHECK_EQ(desc, model->description);
-        CHECK_EQ(buffers, model->buffers.size());
+        BOOST_CHECK_EQUAL(subgraphs, model->subgraphs.size());
+        BOOST_CHECK_EQUAL(desc, model->description);
+        BOOST_CHECK_EQUAL(buffers, model->buffers.size());
     }
 
     void CheckBuiltinOperators(const std::vector<tflite::BuiltinOperator>& expectedOperators,
                                const std::vector<std::unique_ptr<tflite::OperatorCodeT>>& result)
     {
-        CHECK_EQ(expectedOperators.size(), result.size());
+        BOOST_CHECK_EQUAL(expectedOperators.size(), result.size());
         for (size_t i = 0; i < expectedOperators.size(); i++)
         {
-            CHECK_EQ(expectedOperators[i], result[i]->builtin_code);
+            BOOST_CHECK_EQUAL(expectedOperators[i], result[i]->builtin_code);
         }
     }
 
     void CheckSubgraph(const SubgraphPtr& subgraph, size_t tensors, const std::vector<int32_t>& inputs,
                        const std::vector<int32_t>& outputs, size_t operators, const std::string& name)
     {
-        CHECK(subgraph);
-        CHECK_EQ(tensors, subgraph->tensors.size());
-        CHECK(std::equal(inputs.begin(), inputs.end(), subgraph->inputs.begin(), subgraph->inputs.end()));
-        CHECK(std::equal(outputs.begin(), outputs.end(),
-                                      subgraph->outputs.begin(), subgraph->outputs.end()));
-        CHECK_EQ(operators, subgraph->operators.size());
-        CHECK_EQ(name, subgraph->name);
+        BOOST_CHECK(subgraph);
+        BOOST_CHECK_EQUAL(tensors, subgraph->tensors.size());
+        BOOST_CHECK_EQUAL_COLLECTIONS(inputs.begin(), inputs.end(), subgraph->inputs.begin(), subgraph->inputs.end());
+        BOOST_CHECK_EQUAL_COLLECTIONS(outputs.begin(), outputs.end(),
+                                      subgraph->outputs.begin(), subgraph->outputs.end());
+        BOOST_CHECK_EQUAL(operators, subgraph->operators.size());
+        BOOST_CHECK_EQUAL(name, subgraph->name);
     }
 
     void CheckOperator(const OperatorPtr& operatorPtr, uint32_t opcode,  const std::vector<int32_t>& inputs,
                        const std::vector<int32_t>& outputs, tflite::BuiltinOptions optionType,
                        tflite::CustomOptionsFormat custom_options_format)
     {
-        CHECK(operatorPtr);
-        CHECK_EQ(opcode, operatorPtr->opcode_index);
-        CHECK(std::equal(inputs.begin(), inputs.end(),
-                                      operatorPtr->inputs.begin(), operatorPtr->inputs.end()));
-        CHECK(std::equal(outputs.begin(), outputs.end(),
-                                      operatorPtr->outputs.begin(), operatorPtr->outputs.end()));
-        CHECK_EQ(optionType, operatorPtr->builtin_options.type);
-        CHECK_EQ(custom_options_format, operatorPtr->custom_options_format);
+        BOOST_CHECK(operatorPtr);
+        BOOST_CHECK_EQUAL(opcode, operatorPtr->opcode_index);
+        BOOST_CHECK_EQUAL_COLLECTIONS(inputs.begin(), inputs.end(),
+                                      operatorPtr->inputs.begin(), operatorPtr->inputs.end());
+        BOOST_CHECK_EQUAL_COLLECTIONS(outputs.begin(), outputs.end(),
+                                      operatorPtr->outputs.begin(), operatorPtr->outputs.end());
+        BOOST_CHECK_EQUAL(optionType, operatorPtr->builtin_options.type);
+        BOOST_CHECK_EQUAL(custom_options_format, operatorPtr->custom_options_format);
     }
 };
 
-TEST_CASE_FIXTURE(LoadModelFixture, "LoadModelFromBinary")
+BOOST_FIXTURE_TEST_CASE(LoadModelFromBinary, LoadModelFixture)
 {
-    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
-                                                                             m_GraphBinary.size());
+    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
     CheckModel(model, 3, 2, { tflite::BuiltinOperator_AVERAGE_POOL_2D, tflite::BuiltinOperator_CONV_2D },
                2, "Test loading a model", 2);
     CheckSubgraph(model->subgraphs[0], 2, { 1 }, { 0 }, 1, "");
@@ -196,16 +196,16 @@ TEST_CASE_FIXTURE(LoadModelFixture, "LoadModelFromBinary")
                   tflite::CustomOptionsFormat_FLEXBUFFERS);
 }
 
-TEST_CASE_FIXTURE(LoadModelFixture, "LoadModelFromFile")
+BOOST_FIXTURE_TEST_CASE(LoadModelFromFile, LoadModelFixture)
 {
     using namespace fs;
     fs::path fname = armnnUtils::Filesystem::NamedTempFile("Armnn-tfLite-LoadModelFromFile-TempFile.csv");
     bool saved = flatbuffers::SaveFile(fname.c_str(),
                                        reinterpret_cast<char *>(m_GraphBinary.data()),
                                        m_GraphBinary.size(), true);
-    CHECK_MESSAGE(saved, "Cannot save test file");
+    BOOST_CHECK_MESSAGE(saved, "Cannot save test file");
 
-    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromFile(fname.c_str());
+    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromFile(fname.c_str());
     CheckModel(model, 3, 2, { tflite::BuiltinOperator_AVERAGE_POOL_2D, tflite::BuiltinOperator_CONV_2D },
                2, "Test loading a model", 2);
     CheckSubgraph(model->subgraphs[0], 2, { 1 }, { 0 }, 1, "");
@@ -217,26 +217,26 @@ TEST_CASE_FIXTURE(LoadModelFixture, "LoadModelFromFile")
     remove(fname);
 }
 
-TEST_CASE("LoadNullBinary")
+BOOST_AUTO_TEST_CASE(LoadNullBinary)
 {
-    CHECK_THROWS_AS(TfLiteParserImpl::LoadModelFromBinary(nullptr, 0), armnn::InvalidArgumentException);
+    BOOST_CHECK_THROW(TfLiteParser::LoadModelFromBinary(nullptr, 0), armnn::InvalidArgumentException);
 }
 
-TEST_CASE("LoadInvalidBinary")
+BOOST_AUTO_TEST_CASE(LoadInvalidBinary)
 {
     std::string testData = "invalid data";
-    CHECK_THROWS_AS(TfLiteParserImpl::LoadModelFromBinary(reinterpret_cast<const uint8_t*>(&testData),
+    BOOST_CHECK_THROW(TfLiteParser::LoadModelFromBinary(reinterpret_cast<const uint8_t*>(&testData),
                                                         testData.length()), armnn::ParseException);
 }
 
-TEST_CASE("LoadFileNotFound")
+BOOST_AUTO_TEST_CASE(LoadFileNotFound)
 {
-    CHECK_THROWS_AS(TfLiteParserImpl::LoadModelFromFile("invalidfile.tflite"), armnn::FileNotFoundException);
+    BOOST_CHECK_THROW(TfLiteParser::LoadModelFromFile("invalidfile.tflite"), armnn::FileNotFoundException);
 }
 
-TEST_CASE("LoadNullPtrFile")
+BOOST_AUTO_TEST_CASE(LoadNullPtrFile)
 {
-    CHECK_THROWS_AS(TfLiteParserImpl::LoadModelFromFile(nullptr), armnn::InvalidArgumentException);
+    BOOST_CHECK_THROW(TfLiteParser::LoadModelFromFile(nullptr), armnn::InvalidArgumentException);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

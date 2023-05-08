@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 #include <neon/workloads/NeonWorkloadUtils.hpp>
 
 #include <armnn/TypesUtils.hpp>
@@ -19,7 +19,7 @@ namespace armnn
 
 arm_compute::Status NeonReshapeWorkloadValidate(const TensorInfo& input, const TensorInfo& output);
 
-class NeonReshapeWorkload : public NeonBaseWorkload<ReshapeQueueDescriptor>
+class NeonReshapeWorkload : public BaseWorkload<ReshapeQueueDescriptor>
 {
 public:
     NeonReshapeWorkload(const ReshapeQueueDescriptor& descriptor, const WorkloadInfo& info);

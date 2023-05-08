@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-#if !defined(ARMNN_DISABLE_SOCKETS)
-
 #include <common/include/NetworkSockets.hpp>
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -114,5 +112,3 @@ arm::pipe::Socket Accept(Socket s, sockaddr* addr, socklen_t* addrlen, int flags
 
 } // pipe
 } // arm
-
-#endif

@@ -9,20 +9,20 @@
 namespace armnn
 {
 
-class ScopedTensorHandle;
+class ScopedCpuTensorHandle;
 
 /// This layer represents a batch normalization operation.
 class BatchNormalizationLayer : public LayerWithParameters<BatchNormalizationDescriptor>
 {
 public:
     /// A unique pointer to store Mean values
-    std::shared_ptr<ConstTensorHandle> m_Mean;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Mean;
     /// A unique pointer to store Variance values
-    std::shared_ptr<ConstTensorHandle> m_Variance;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Variance;
     /// A unique pointer to store Beta values
-    std::shared_ptr<ConstTensorHandle> m_Beta;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Beta;
     /// A unique pointer to store Gamma values
-    std::shared_ptr<ConstTensorHandle> m_Gamma;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Gamma;
 
     /// Makes a workload for the BatchNormalization type.
     /// @param [in] graph The graph where this layer can be found.
@@ -39,7 +39,7 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
-    void ExecuteStrategy(IStrategy& strategy) const override;
+    void Accept(ILayerVisitor& visitor) const override;
 
 protected:
     /// Constructor to create a BatchNormalizationLayer.
@@ -52,7 +52,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    ImmutableConstantTensors GetConstantTensorsByRef() const override;
+    ConstantTensors GetConstantTensorsByRef() override;
 };
 
 } // namespace

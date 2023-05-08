@@ -8,10 +8,10 @@
 #include <iostream>
 #include <sstream>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
 
 std::vector<uint32_t> PrintPacketHeaderHandler::GetHeadersAccepted()
@@ -27,6 +27,6 @@ void PrintPacketHeaderHandler::HandlePacket(const arm::pipe::Packet& packet)
     std::cout << ss.str() << std::endl;
 };
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

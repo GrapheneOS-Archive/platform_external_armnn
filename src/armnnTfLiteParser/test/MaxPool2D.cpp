@@ -1,12 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-
+#include <boost/test/unit_test.hpp>
+#include "armnnTfLiteParser/ITfLiteParser.hpp"
 #include "ParserFlatbuffersFixture.hpp"
 
-TEST_SUITE("TensorflowLiteParser_MaxPool2D")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct MaxPool2DFixture : public ParserFlatbuffersFixture
 {
     explicit MaxPool2DFixture(std::string inputdim, std::string outputdim, std::string dataType)
@@ -95,25 +96,25 @@ struct MaxPoolLiteFixtureUint2DOutput : MaxPool2DFixture
     MaxPoolLiteFixtureUint2DOutput() : MaxPool2DFixture("[ 1, 4, 4, 1 ]", "[ 1, 2, 2, 1 ]", "UINT8") {}
 };
 
-TEST_CASE_FIXTURE(MaxPoolLiteFixtureUint1DOutput, "MaxPoolLiteUint1DOutput")
+BOOST_FIXTURE_TEST_CASE(MaxPoolLiteUint1DOutput, MaxPoolLiteFixtureUint1DOutput)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(0, { 2, 3, 5, 2 }, { 5 });
 }
 
-TEST_CASE_FIXTURE(MaxPoolLiteFixtureFloat1DOutput, "MaxPoolLiteFloat1DOutput")
+BOOST_FIXTURE_TEST_CASE(MaxPoolLiteFloat1DOutput, MaxPoolLiteFixtureFloat1DOutput)
 {
     RunTest<4, armnn::DataType::Float32>(0, { 2.0f, 3.0f, 5.0f, 2.0f },  { 5.0f });
 }
 
-TEST_CASE_FIXTURE(MaxPoolLiteFixtureUint2DOutput, "MaxPoolLiteUint2DOutput")
+BOOST_FIXTURE_TEST_CASE(MaxPoolLiteUint2DOutput, MaxPoolLiteFixtureUint2DOutput)
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0, { 1, 2, 2, 3, 5, 6, 7, 8, 3, 2, 1, 0, 1, 2, 3, 4 }, { 6, 8, 3, 4 });
 }
 
-TEST_CASE_FIXTURE(MaxPoolLiteFixtureFloat1DOutput, "MaxPoolIncorrectDataTypeError")
+BOOST_FIXTURE_TEST_CASE(MaxPoolIncorrectDataTypeError, MaxPoolLiteFixtureFloat1DOutput)
 {
-    CHECK_THROWS_AS((RunTest<4, armnn::DataType::QAsymmU8>(0, { 2, 3, 5, 2 }, { 5 })), armnn::Exception);
+    BOOST_CHECK_THROW((RunTest<4, armnn::DataType::QAsymmU8>(0, { 2, 3, 5, 2 }, { 5 })), armnn::Exception);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

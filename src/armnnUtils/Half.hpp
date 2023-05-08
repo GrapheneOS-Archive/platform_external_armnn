@@ -5,17 +5,11 @@
 
 #pragma once
 
-#include <type_traits>
-
 // Set style to round to nearest
-#ifndef HALF_ROUND_STYLE
-    #define HALF_ROUND_STYLE 1
-#endif
-#ifndef HALF_ROUND_TIES_TO_EVEN
-    #define HALF_ROUND_TIES_TO_EVEN 1
-#endif
+#define HALF_ROUND_STYLE 1
 
-#include "half/half.hpp"
+#include <type_traits>
+#include <half/half.hpp>
 
 namespace armnn
 {

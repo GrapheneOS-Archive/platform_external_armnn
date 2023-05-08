@@ -7,8 +7,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #include <algorithm>
 
@@ -23,7 +23,13 @@ ElementwiseUnaryLayer::ElementwiseUnaryLayer(const ElementwiseUnaryDescriptor& p
 std::unique_ptr<IWorkload> ElementwiseUnaryLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     ElementwiseUnaryQueueDescriptor descriptor;
-    return factory.CreateWorkload(LayerType::ElementwiseUnary, descriptor, PrepInfoAndDesc(descriptor));
+
+    if (descriptor.m_Parameters.m_Operation == UnaryOperation::LogicalNot)
+    {
+        return factory.CreateLogicalUnary(descriptor, PrepInfoAndDesc(descriptor));
+    }
+
+    return factory.CreateElementwiseUnary(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ElementwiseUnaryLayer* ElementwiseUnaryLayer::Clone(Graph& graph) const
@@ -55,9 +61,9 @@ void ElementwiseUnaryLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, GetLayerTypeAsCString(GetType()));
 }
 
-void ElementwiseUnaryLayer::ExecuteStrategy(IStrategy& strategy) const
+void ElementwiseUnaryLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitElementwiseUnaryLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

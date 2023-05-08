@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -31,14 +31,8 @@ arm_compute::Status NeonActivationWorkloadValidate(const TensorInfo& input,
 
 NeonActivationWorkload::NeonActivationWorkload(const ActivationQueueDescriptor& descriptor,
                                                const WorkloadInfo& info)
-    : NeonBaseWorkload<ActivationQueueDescriptor>(descriptor, info)
+    : BaseWorkload<ActivationQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonActivationWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonActivationWorkload", 1, 1);
 
     const arm_compute::ActivationLayerInfo activationLayerInfo =
@@ -55,7 +49,7 @@ NeonActivationWorkload::NeonActivationWorkload(const ActivationQueueDescriptor& 
 
 void NeonActivationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonActivationWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonActivationWorkload_Execute");
     m_ActivationLayer->run();
 }
 

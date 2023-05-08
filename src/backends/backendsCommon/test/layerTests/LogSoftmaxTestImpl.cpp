@@ -6,18 +6,18 @@
 #include "LogSoftmaxTestImpl.hpp"
 
 #include <Half.hpp>
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -38,11 +38,9 @@ LayerTestResult<T, NumDims> LogSoftmaxTestImpl(
     int32_t qOffset = 0)
 {
     IgnoreUnused(memoryManager);
-
-    auto inputTensor = armnnUtils::QuantizedVector<T>(inputValues, qScale, qOffset);
-
-    std::vector<T> actualOutput(outputInfo.GetNumElements());
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(expectedOutputValues, qScale, qOffset);
+    LayerTestResult<T, NumDims> result(outputInfo);
+    result.outputExpected =
+        MakeTensor<T, NumDims>(outputInfo, armnnUtils::QuantizedVector<T>(expectedOutputValues, qScale, qOffset));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
@@ -52,24 +50,19 @@ LayerTestResult<T, NumDims> LogSoftmaxTestImpl(
     AddInputToWorkload(descriptor, info, inputInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::LogSoftmax,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateLogSoftmax(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), inputTensor.data());
+    auto inputTensor = MakeTensor<T, NumDims>(inputInfo, armnnUtils::QuantizedVector<T>(inputValues, qScale, qOffset));
+    CopyDataToITensorHandle(inputHandle.get(), inputTensor.origin());
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(result.output.origin(), outputHandle.get());
 
-    return LayerTestResult<T, NumDims>(actualOutput,
-                                       expectedOutput,
-                                       outputHandle->GetShape(),
-                                       outputInfo.GetShape());
-
+    return result;
 }
 
 } // anonymous namespace
