@@ -2,16 +2,17 @@
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-
+#include <boost/test/unit_test.hpp>
 #include "../OnnxParser.hpp"
 #include  "ParserPrototxtFixture.hpp"
 #include <onnx/onnx.pb.h>
 #include "google/protobuf/stubs/logging.h"
 
+
 using ModelPtr = std::unique_ptr<onnx::ModelProto>;
 
-TEST_SUITE("OnnxParser_GetInputsOutputs")
-{
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
 struct GetInputsOutputsMainFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
 {
     explicit GetInputsOutputsMainFixture()
@@ -65,21 +66,21 @@ struct GetInputsOutputsMainFixture : public armnnUtils::ParserPrototxtFixture<ar
 };
 
 
-TEST_CASE_FIXTURE(GetInputsOutputsMainFixture, "GetInput")
+BOOST_FIXTURE_TEST_CASE(GetInput, GetInputsOutputsMainFixture)
 {
-    ModelPtr model = armnnOnnxParser::OnnxParserImpl::LoadModelFromString(m_Prototext.c_str());
-    std::vector<std::string> tensors = armnnOnnxParser::OnnxParserImpl::GetInputs(model);
-    CHECK_EQ(1, tensors.size());
-    CHECK_EQ("Input", tensors[0]);
+    ModelPtr model = armnnOnnxParser::OnnxParser::LoadModelFromString(m_Prototext.c_str());
+    std::vector<std::string> tensors = armnnOnnxParser::OnnxParser::GetInputs(model);
+    BOOST_CHECK_EQUAL(1, tensors.size());
+    BOOST_CHECK_EQUAL("Input", tensors[0]);
 
 }
 
-TEST_CASE_FIXTURE(GetInputsOutputsMainFixture, "GetOutput")
+BOOST_FIXTURE_TEST_CASE(GetOutput, GetInputsOutputsMainFixture)
 {
-    ModelPtr model = armnnOnnxParser::OnnxParserImpl::LoadModelFromString(m_Prototext.c_str());
-    std::vector<std::string> tensors = armnnOnnxParser::OnnxParserImpl::GetOutputs(model);
-    CHECK_EQ(1, tensors.size());
-    CHECK_EQ("Output", tensors[0]);
+    ModelPtr model = armnnOnnxParser::OnnxParser::LoadModelFromString(m_Prototext.c_str());
+    std::vector<std::string> tensors = armnnOnnxParser::OnnxParser::GetOutputs(model);
+    BOOST_CHECK_EQUAL(1, tensors.size());
+    BOOST_CHECK_EQUAL("Output", tensors[0]);
 }
 
 struct GetEmptyInputsOutputsFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
@@ -136,22 +137,22 @@ struct GetEmptyInputsOutputsFixture : public armnnUtils::ParserPrototxtFixture<a
     }
 };
 
-TEST_CASE_FIXTURE(GetEmptyInputsOutputsFixture, "GetEmptyInputs")
+BOOST_FIXTURE_TEST_CASE(GetEmptyInputs, GetEmptyInputsOutputsFixture)
 {
-    ModelPtr model = armnnOnnxParser::OnnxParserImpl::LoadModelFromString(m_Prototext.c_str());
-    std::vector<std::string> tensors = armnnOnnxParser::OnnxParserImpl::GetInputs(model);
-    CHECK_EQ(0, tensors.size());
+    ModelPtr model = armnnOnnxParser::OnnxParser::LoadModelFromString(m_Prototext.c_str());
+    std::vector<std::string> tensors = armnnOnnxParser::OnnxParser::GetInputs(model);
+    BOOST_CHECK_EQUAL(0, tensors.size());
 }
 
-TEST_CASE("GetInputsNullModel")
+BOOST_AUTO_TEST_CASE(GetInputsNullModel)
 {
-    CHECK_THROWS_AS(armnnOnnxParser::OnnxParserImpl::LoadModelFromString(""), armnn::InvalidArgumentException);
+    BOOST_CHECK_THROW(armnnOnnxParser::OnnxParser::LoadModelFromString(""), armnn::InvalidArgumentException);
 }
 
-TEST_CASE("GetOutputsNullModel")
+BOOST_AUTO_TEST_CASE(GetOutputsNullModel)
 {
     auto silencer = google::protobuf::LogSilencer(); //get rid of errors from protobuf
-    CHECK_THROWS_AS(armnnOnnxParser::OnnxParserImpl::LoadModelFromString("nknnk"), armnn::ParseException);
+    BOOST_CHECK_THROW(armnnOnnxParser::OnnxParser::LoadModelFromString("nknnk"), armnn::ParseException);
 }
 
 struct GetInputsMultipleFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
@@ -240,13 +241,15 @@ struct GetInputsMultipleFixture : public armnnUtils::ParserPrototxtFixture<armnn
     }
 };
 
-TEST_CASE_FIXTURE(GetInputsMultipleFixture, "GetInputsMultipleInputs")
+BOOST_FIXTURE_TEST_CASE(GetInputsMultipleInputs, GetInputsMultipleFixture)
 {
-    ModelPtr model = armnnOnnxParser::OnnxParserImpl::LoadModelFromString(m_Prototext.c_str());
-    std::vector<std::string> tensors = armnnOnnxParser::OnnxParserImpl::GetInputs(model);
-    CHECK_EQ(2, tensors.size());
-    CHECK_EQ("Input0", tensors[0]);
-    CHECK_EQ("Input1", tensors[1]);
+    ModelPtr model = armnnOnnxParser::OnnxParser::LoadModelFromString(m_Prototext.c_str());
+    std::vector<std::string> tensors = armnnOnnxParser::OnnxParser::GetInputs(model);
+    BOOST_CHECK_EQUAL(2, tensors.size());
+    BOOST_CHECK_EQUAL("Input0", tensors[0]);
+    BOOST_CHECK_EQUAL("Input1", tensors[1]);
 }
 
-}
+
+
+BOOST_AUTO_TEST_SUITE_END()

@@ -5,27 +5,25 @@
 
 #pragma once
 
-#include "TimelineModel.hpp"
-
-#include <client/include/ILocalPacketHandler.hpp>
-
-#include <client/src/ProfilingUtils.hpp>
-
-#include <common/include/Packet.hpp>
-
+#include <armnn/profiling/ILocalPacketHandler.hpp>
 #include <server/include/timelineDecoder/ITimelineDecoder.hpp>
+
+#include "ProfilingUtils.hpp"
 #include <server/include/timelineDecoder/TimelineCaptureCommandHandler.hpp>
 #include <server/include/timelineDecoder/TimelineDirectoryCaptureCommandHandler.hpp>
+#include "TimelineModel.hpp"
+
+#include <common/include/Packet.hpp>
 
 #include <condition_variable>
 #include <map>
 #include <mutex>
 #include <vector>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
 
 // forward declaration of class
@@ -89,6 +87,6 @@ private:
     arm::pipe::TimelineDirectoryCaptureCommandHandler m_DirectoryDecoder;
 };
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

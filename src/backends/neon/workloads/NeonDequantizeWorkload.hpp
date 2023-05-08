@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/IFunction.h>
@@ -18,7 +18,7 @@ namespace armnn
 arm_compute::Status NeonDequantizeWorkloadValidate(const TensorInfo& input,
                                                    const TensorInfo& output);
 
-class NeonDequantizeWorkload : public NeonBaseWorkload<DequantizeQueueDescriptor>
+class NeonDequantizeWorkload : public BaseWorkload<DequantizeQueueDescriptor>
 {
 public:
     NeonDequantizeWorkload(const DequantizeQueueDescriptor& descriptor, const WorkloadInfo& info);

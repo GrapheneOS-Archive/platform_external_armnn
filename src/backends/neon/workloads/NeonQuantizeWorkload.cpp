@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -25,7 +25,7 @@ arm_compute::Status NeonQuantizeWorkloadValidate(const TensorInfo& input, const 
 
 NeonQuantizeWorkload::NeonQuantizeWorkload(const QuantizeQueueDescriptor& descriptor,
      const WorkloadInfo& workloadInfo)
-     : NeonBaseWorkload<QuantizeQueueDescriptor>(descriptor, workloadInfo)
+     : BaseWorkload<QuantizeQueueDescriptor>(descriptor, workloadInfo)
 {
     m_Data.ValidateInputsOutputs("NeonQuantizeWorkload", 1, 1);
 
@@ -43,7 +43,7 @@ void NeonQuantizeWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonQuantizeWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonQuantizeWorkload_Execute");
         m_Layer->run();
     }
 }

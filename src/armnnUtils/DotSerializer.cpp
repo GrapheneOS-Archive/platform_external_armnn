@@ -5,7 +5,6 @@
 
 #include "DotSerializer.hpp"
 #include "armnn/utility/StringUtils.hpp"
-#include <common/include/ProfilingGuid.hpp>
 
 #include <sstream>
 #include <cstring>

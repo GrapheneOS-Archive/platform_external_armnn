@@ -5,14 +5,13 @@
 
 #include <armnn/utility/TransformIterator.hpp>
 
-#include <doctest/doctest.h>
-#include <vector>
+#include <boost/test/unit_test.hpp>
 #include <iostream>
 
 using namespace armnn;
 
-TEST_SUITE("TransformIteratorSuite")
-{
+BOOST_AUTO_TEST_SUITE(TransformIteratorSuite)
+
 namespace
 {
 
@@ -26,7 +25,7 @@ static std::string concat(const std::string val)
     return val + "a";
 }
 
-TEST_CASE("TransformIteratorTest")
+BOOST_AUTO_TEST_CASE(TransformIteratorTest)
 {
     struct WrapperTestClass
     {
@@ -64,14 +63,14 @@ TEST_CASE("TransformIteratorTest")
 
     for(auto val : wrapperStringClass)
     {
-        CHECK(val != "e");
+        BOOST_CHECK(val != "e");
         i++;
     }
 
     i = 1;
     for(auto val : wrapperTestClass)
     {
-        CHECK(val == square(i));
+        BOOST_CHECK(val == square(i));
         i++;
     }
 
@@ -79,7 +78,7 @@ TEST_CASE("TransformIteratorTest")
     // Check original vector is unchanged
     for(auto val : wrapperTestClass.m_Vec)
     {
-        CHECK(val == i);
+        BOOST_CHECK(val == i);
         i++;
     }
 
@@ -93,11 +92,11 @@ TEST_CASE("TransformIteratorTest")
     i = 1;
     for(auto val : transformedVec)
     {
-        CHECK(val == square(i));
+        BOOST_CHECK(val == square(i));
         i++;
     }
 }
 
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

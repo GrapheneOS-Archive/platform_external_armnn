@@ -5,11 +5,11 @@
 
 #include "FillTestImpl.hpp"
 
-#include <DataTypeUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataTypeUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 template<armnn::DataType ArmnnType, typename T>
 LayerTestResult<T, 4> SimpleFillTest(
@@ -21,15 +21,15 @@ LayerTestResult<T, 4> SimpleFillTest(
     armnn::TensorInfo inputTensorInfo({4}, armnn::DataType::Signed32);
     armnn::TensorInfo outputTensorInfo({2, 2, 3, 2}, ArmnnType);
 
-    std::vector<int32_t> input = ConvertToDataType<armnn::DataType::Signed32>( { 2, 2, 3, 2 }, inputTensorInfo);
+    auto input = MakeTensor<int32_t, 1>(inputTensorInfo, ConvertToDataType<armnn::DataType::Signed32>(
+        {2, 2, 3, 2},
+        inputTensorInfo));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<T> expectedOutput = ConvertToDataType<ArmnnType>(
-        {
-            1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-            1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f
-        },
-        outputTensorInfo);
+    LayerTestResult<T, 4> ret(outputTensorInfo);
+        ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo, ConvertToDataType<ArmnnType>(
+        { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+          1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+        outputTensorInfo));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -40,21 +40,18 @@ LayerTestResult<T, 4> SimpleFillTest(
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Fill, data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateFill(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), &input[0]);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
 
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 //

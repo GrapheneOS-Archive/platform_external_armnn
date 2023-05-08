@@ -5,11 +5,11 @@
 
 #include "ReshapeTestImpl.hpp"
 
-#include <DataTypeUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataTypeUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -25,7 +25,10 @@ LayerTestResult<T, NumDims> SimpleReshapeTestImpl(
     const std::vector<T>& outputExpectedData)
 {
     IgnoreUnused(memoryManager);
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    auto input = MakeTensor<T, NumDims>(inputTensorInfo, inputData);
+
+    LayerTestResult<T, NumDims> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T, NumDims>(outputTensorInfo, outputExpectedData);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -35,21 +38,18 @@ LayerTestResult<T, NumDims> SimpleReshapeTestImpl(
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Reshape, data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateReshape(data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
 
-    return LayerTestResult<T, NumDims>(actualOutput,
-                                       outputExpectedData,
-                                       outputHandle->GetShape(),
-                                       outputTensorInfo.GetShape());
+    return ret;
 }
 
 } // anonymous namespace

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 #include "NeonWorkloadUtils.hpp"
@@ -54,14 +54,8 @@ arm_compute::Status NeonSplitterWorkloadValidate(const TensorInfo& input,
 }
 
 NeonSplitterWorkload::NeonSplitterWorkload(const SplitterQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : NeonBaseWorkload<SplitterQueueDescriptor>(descriptor, info)
+    : BaseWorkload<SplitterQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonSplitterWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     bool allOutputsAreSubtensors = true;
 
     // Check that all outputs are sub-tensors
@@ -112,7 +106,7 @@ void NeonSplitterWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonSplitterWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonSplitterWorkload_Execute");
         m_Layer->run();
     }
 }

@@ -5,14 +5,14 @@
 
 #include "DepthToSpaceTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 
 
-#include <armnnTestUtils/DataLayoutUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataLayoutUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -44,10 +44,12 @@ LayerTestResult<T, 4> DepthToSpaceTestImpl(
         outputInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset);
+    boost::multi_array<T, 4> input =
+        MakeTensor<T, 4>(inputInfo, armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset));
 
-    std::vector<T> actualOutput(outputInfo.GetNumElements());
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(expectedOutputData, qScale, qOffset);
+    LayerTestResult<T, 4> result(outputInfo);
+    result.outputExpected =
+        MakeTensor<T, 4>(outputInfo, armnnUtils::QuantizedVector<T>(expectedOutputData, qScale, qOffset));
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputInfo);
@@ -58,23 +60,17 @@ LayerTestResult<T, 4> DepthToSpaceTestImpl(
     AddInputToWorkload(descriptor, info, inputInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::DepthToSpace,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateDepthToSpace(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.origin());
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputInfo.GetShape());
+    CopyDataFromITensorHandle(result.output.origin(), outputHandle.get());
+    return result;
 }
 
 } // anonymous namespace

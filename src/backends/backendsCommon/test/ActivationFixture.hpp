@@ -4,20 +4,27 @@
 //
 #pragma once
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include "TensorCopyUtils.hpp"
+#include "WorkloadTestUtils.hpp"
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
+
+#include <boost/multi_array.hpp>
 
 struct ActivationFixture
 {
     ActivationFixture()
     {
-        output.resize(batchSize * channels * height * width);
-        outputExpected.resize(batchSize * channels * height * width);
-        input.resize(batchSize * channels * height * width);
+        auto boostArrayExtents = boost::extents
+            [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(batchSize)]
+            [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(channels)]
+            [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(height)]
+            [armnn::numeric_cast<boost::multi_array_types::extent_gen::index>(width)];
+        output.resize(boostArrayExtents);
+        outputExpected.resize(boostArrayExtents);
+        input.resize(boostArrayExtents);
 
         unsigned int inputShape[]  = { batchSize, channels, height, width };
         unsigned int outputShape[] = { batchSize, channels, height, width };
@@ -25,7 +32,7 @@ struct ActivationFixture
         inputTensorInfo = armnn::TensorInfo(4, inputShape, armnn::DataType::Float32);
         outputTensorInfo = armnn::TensorInfo(4, outputShape, armnn::DataType::Float32);
 
-        input = MakeRandomTensor<float>(inputTensorInfo, 21453);
+        input = MakeRandomTensor<float, 4>(inputTensorInfo, 21453);
     }
 
     unsigned int width     = 17;
@@ -33,9 +40,9 @@ struct ActivationFixture
     unsigned int channels  = 2;
     unsigned int batchSize = 5;
 
-    std::vector<float> output;
-    std::vector<float> outputExpected;
-    std::vector<float> input;
+    boost::multi_array<float, 4> output;
+    boost::multi_array<float, 4> outputExpected;
+    boost::multi_array<float, 4> input;
 
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -50,6 +57,6 @@ struct PositiveActivationFixture : public ActivationFixture
 {
     PositiveActivationFixture()
     {
-        input = MakeRandomTensor<float>(inputTensorInfo, 2342423, 0.0f, 1.0f);
+        input = MakeRandomTensor<float, 4>(inputTensorInfo, 2342423, 0.0f, 1.0f);
     }
 };

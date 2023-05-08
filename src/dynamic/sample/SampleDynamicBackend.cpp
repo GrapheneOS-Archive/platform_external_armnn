@@ -11,8 +11,6 @@
 
 #include <armnn/backends/IBackendInternal.hpp>
 #include <armnn/backends/OptimizationViews.hpp>
-#include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/TensorHandleFactoryRegistry.hpp>
 
 namespace sdb // sample dynamic backend
 {

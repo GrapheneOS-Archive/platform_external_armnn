@@ -2,9 +2,9 @@
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
+#include <boost/test/unit_test.hpp>
 
-#include <doctest/doctest.h>
-
+#include <armnn/LayerVisitorBase.hpp>
 
 #include <armnn/backends/IBackendContext.hpp>
 #include <armnn/backends/IBackendInternal.hpp>
@@ -139,8 +139,7 @@ public:
         {
             "TestHandleFactoryA1",
             "TestHandleFactoryA2",
-            "TestHandleFactoryB1",
-            "TestHandleFactoryD1"
+            "TestHandleFactoryB1"
         };
     }
 
@@ -253,7 +252,7 @@ public:
     std::vector<ITensorHandleFactory::FactoryId> GetHandleFactoryPreferences() const override
     {
         return std::vector<ITensorHandleFactory::FactoryId>{
-            "TestHandleFactoryD1",
+            "TestHandleFactoryD1"
         };
     }
 
@@ -270,29 +269,28 @@ private:
 };
 
 
-TEST_SUITE("TensorHandle")
-{
-TEST_CASE("RegisterFactories")
+BOOST_AUTO_TEST_SUITE(TensorHandle)
+
+BOOST_AUTO_TEST_CASE(RegisterFactories)
 {
     TestBackendA backendA;
     TestBackendB backendB;
 
-    CHECK(backendA.GetHandleFactoryPreferences()[0] == "TestHandleFactoryA1");
-    CHECK(backendA.GetHandleFactoryPreferences()[1] == "TestHandleFactoryA2");
-    CHECK(backendA.GetHandleFactoryPreferences()[2] == "TestHandleFactoryB1");
-    CHECK(backendA.GetHandleFactoryPreferences()[3] == "TestHandleFactoryD1");
+    BOOST_TEST(backendA.GetHandleFactoryPreferences()[0] == "TestHandleFactoryA1");
+    BOOST_TEST(backendA.GetHandleFactoryPreferences()[1] == "TestHandleFactoryA2");
+    BOOST_TEST(backendA.GetHandleFactoryPreferences()[2] == "TestHandleFactoryB1");
 
     TensorHandleFactoryRegistry registry;
     backendA.RegisterTensorHandleFactories(registry);
     backendB.RegisterTensorHandleFactories(registry);
 
-    CHECK((registry.GetFactory("Non-existing Backend") == nullptr));
-    CHECK((registry.GetFactory("TestHandleFactoryA1") != nullptr));
-    CHECK((registry.GetFactory("TestHandleFactoryA2") != nullptr));
-    CHECK((registry.GetFactory("TestHandleFactoryB1") != nullptr));
+    BOOST_TEST((registry.GetFactory("Non-existing Backend") == nullptr));
+    BOOST_TEST((registry.GetFactory("TestHandleFactoryA1") != nullptr));
+    BOOST_TEST((registry.GetFactory("TestHandleFactoryA2") != nullptr));
+    BOOST_TEST((registry.GetFactory("TestHandleFactoryB1") != nullptr));
 }
 
-TEST_CASE("TensorHandleSelectionStrategy")
+BOOST_AUTO_TEST_CASE(TensorHandleSelectionStrategy)
 {
     auto backendA = std::make_unique<TestBackendA>();
     auto backendB = std::make_unique<TestBackendB>();
@@ -341,10 +339,10 @@ TEST_CASE("TensorHandleSelectionStrategy")
     graph.TopologicalSort();
 
     std::vector<std::string> errors;
-    auto result = SelectTensorHandleStrategy(graph, backends, registry, true, true, errors);
+    auto result = SelectTensorHandleStrategy(graph, backends, registry, true, errors);
 
-    CHECK(result.m_Error == false);
-    CHECK(result.m_Warning == false);
+    BOOST_TEST(result.m_Error == false);
+    BOOST_TEST(result.m_Warning == false);
 
     OutputSlot& inputLayerOut = inputLayer->GetOutputSlot(0);
     OutputSlot& softmaxLayer1Out = softmaxLayer1->GetOutputSlot(0);
@@ -353,18 +351,18 @@ TEST_CASE("TensorHandleSelectionStrategy")
     OutputSlot& softmaxLayer4Out = softmaxLayer4->GetOutputSlot(0);
 
     // Check that the correct factory was selected
-    CHECK(inputLayerOut.GetTensorHandleFactoryId() == "TestHandleFactoryD1");
-    CHECK(softmaxLayer1Out.GetTensorHandleFactoryId() == "TestHandleFactoryB1");
-    CHECK(softmaxLayer2Out.GetTensorHandleFactoryId() == "TestHandleFactoryB1");
-    CHECK(softmaxLayer3Out.GetTensorHandleFactoryId() == "TestHandleFactoryC1");
-    CHECK(softmaxLayer4Out.GetTensorHandleFactoryId() == "TestHandleFactoryD1");
+    BOOST_TEST(inputLayerOut.GetTensorHandleFactoryId() == "TestHandleFactoryA1");
+    BOOST_TEST(softmaxLayer1Out.GetTensorHandleFactoryId() == "TestHandleFactoryB1");
+    BOOST_TEST(softmaxLayer2Out.GetTensorHandleFactoryId() == "TestHandleFactoryB1");
+    BOOST_TEST(softmaxLayer3Out.GetTensorHandleFactoryId() == "TestHandleFactoryC1");
+    BOOST_TEST(softmaxLayer4Out.GetTensorHandleFactoryId() == "TestHandleFactoryD1");
 
     // Check that the correct strategy was selected
-    CHECK((inputLayerOut.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    CHECK((softmaxLayer1Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    CHECK((softmaxLayer2Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::CopyToTarget));
-    CHECK((softmaxLayer3Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::ExportToTarget));
-    CHECK((softmaxLayer4Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    BOOST_TEST((inputLayerOut.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    BOOST_TEST((softmaxLayer1Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    BOOST_TEST((softmaxLayer2Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::CopyToTarget));
+    BOOST_TEST((softmaxLayer3Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::ExportToTarget));
+    BOOST_TEST((softmaxLayer4Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
 
     graph.AddCompatibilityLayers(backends, registry);
 
@@ -377,7 +375,7 @@ TEST_CASE("TensorHandleSelectionStrategy")
             copyCount++;
         }
     });
-    CHECK(copyCount == 1);
+    BOOST_TEST(copyCount == 1);
 
     // Test for import layers
     int importCount= 0;
@@ -388,21 +386,7 @@ TEST_CASE("TensorHandleSelectionStrategy")
             importCount++;
         }
     });
-    CHECK(importCount == 1);
+    BOOST_TEST(importCount == 1);
 }
 
-TEST_CASE("RegisterCopyAndImportFactoryPairTest")
-{
-    TensorHandleFactoryRegistry registry;
-    ITensorHandleFactory::FactoryId copyId = "CopyFactoryId";
-    ITensorHandleFactory::FactoryId importId = "ImportFactoryId";
-    registry.RegisterCopyAndImportFactoryPair(copyId, importId);
-
-    // Get mathing import factory id correctly
-    CHECK((registry.GetMatchingImportFactoryId(copyId) == importId));
-
-    // Return empty id when Invalid Id is given
-    CHECK((registry.GetMatchingImportFactoryId("InvalidFactoryId") == ""));
-}
-
-}
+BOOST_AUTO_TEST_SUITE_END()

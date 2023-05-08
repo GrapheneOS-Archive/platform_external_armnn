@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/IFunction.h>
 
@@ -16,7 +16,7 @@ arm_compute::Status NeonPreluWorkloadValidate(const TensorInfo& input,
                                               const TensorInfo& alpha,
                                               const TensorInfo& output);
 
-class NeonPreluWorkload : public NeonBaseWorkload<PreluQueueDescriptor>
+class NeonPreluWorkload : public BaseWorkload<PreluQueueDescriptor>
 {
 public:
     NeonPreluWorkload(const PreluQueueDescriptor& descriptor, const WorkloadInfo& info);

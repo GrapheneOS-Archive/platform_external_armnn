@@ -8,10 +8,10 @@
 #include <ResolveType.hpp>
 
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -27,8 +27,10 @@ LayerTestResult<T1, Dim> DequantizeTestImpl(
         armnn::DequantizeQueueDescriptor descriptor)
 {
     IgnoreUnused(memoryManager);
+    boost::multi_array<T, Dim> input = MakeTensor<T, Dim>(inputTensorInfo, inputData);
 
-    std::vector<T1> actualOutput(outputTensorInfo.GetNumElements());
+    LayerTestResult<T1, Dim> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T1, Dim>(outputTensorInfo, expectedOutputData);
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
@@ -39,23 +41,18 @@ LayerTestResult<T1, Dim> DequantizeTestImpl(
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Dequantize,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateDequantize(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), inputData.data());
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(ret.output.data(), outputHandle.get());
 
-    return LayerTestResult<T1, Dim>(actualOutput,
-                                    expectedOutputData,
-                                    outputHandle->GetShape(),
-                                    outputTensorInfo.GetShape());
+    return ret;
 }
 
 template <armnn::DataType ArmnnInputType,

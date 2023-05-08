@@ -1,16 +1,18 @@
 //
-// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <CommonTestUtils.hpp>
+#include "CommonTestUtils.hpp"
 
 #include <Graph.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
+
+#include <utility>
 
 using namespace armnn;
 using namespace std;
@@ -21,9 +23,9 @@ using namespace std;
 // Checks weights and biases before the method called and after.
 /////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_SUITE("LayerReleaseConstantDataTest")
-{
-TEST_CASE("ReleaseBatchNormalizationLayerConstantDataTest")
+BOOST_AUTO_TEST_SUITE(LayerReleaseConstantDataTest)
+
+BOOST_AUTO_TEST_CASE(ReleaseBatchNormalizationLayerConstantDataTest)
 {
     Graph graph;
 
@@ -33,10 +35,10 @@ TEST_CASE("ReleaseBatchNormalizationLayerConstantDataTest")
     BatchNormalizationLayer* const layer = graph.AddLayer<BatchNormalizationLayer>(layerDesc, "layer");
 
     armnn::TensorInfo weightInfo({3}, armnn::DataType::Float32);
-    layer->m_Mean     = std::make_unique<ScopedTensorHandle>(weightInfo);
-    layer->m_Variance = std::make_unique<ScopedTensorHandle>(weightInfo);
-    layer->m_Beta     = std::make_unique<ScopedTensorHandle>(weightInfo);
-    layer->m_Gamma    = std::make_unique<ScopedTensorHandle>(weightInfo);
+    layer->m_Mean     = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Variance = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Beta     = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
+    layer->m_Gamma    = std::make_unique<ScopedCpuTensorHandle>(weightInfo);
     layer->m_Mean->Allocate();
     layer->m_Variance->Allocate();
     layer->m_Beta->Allocate();
@@ -52,72 +54,68 @@ TEST_CASE("ReleaseBatchNormalizationLayerConstantDataTest")
     Connect(layer, output, tensorInfo);
 
     // check the constants that they are not NULL
-    CHECK(layer->m_Mean != nullptr);
-    CHECK(layer->m_Variance != nullptr);
-    CHECK(layer->m_Beta != nullptr);
-    CHECK(layer->m_Gamma != nullptr);
+    BOOST_CHECK(layer->m_Mean != nullptr);
+    BOOST_CHECK(layer->m_Variance != nullptr);
+    BOOST_CHECK(layer->m_Beta != nullptr);
+    BOOST_CHECK(layer->m_Gamma != nullptr);
 
     // free up the constants..
     layer->ReleaseConstantData();
 
     // check the constants that they are NULL now
-    CHECK(layer->m_Mean == nullptr);
-    CHECK(layer->m_Variance == nullptr);
-    CHECK(layer->m_Beta == nullptr);
-    CHECK(layer->m_Gamma == nullptr);
+    BOOST_CHECK(layer->m_Mean == nullptr);
+    BOOST_CHECK(layer->m_Variance == nullptr);
+    BOOST_CHECK(layer->m_Beta == nullptr);
+    BOOST_CHECK(layer->m_Gamma == nullptr);
 
  }
 
-TEST_CASE("ReleaseConvolution2dLayerConstantDataTest")
-{
-    Graph graph;
 
-    // create the layer we're testing
-    Convolution2dDescriptor layerDesc;
-    layerDesc.m_PadLeft = 3;
-    layerDesc.m_PadRight = 3;
-    layerDesc.m_PadTop = 1;
-    layerDesc.m_PadBottom = 1;
-    layerDesc.m_StrideX = 2;
-    layerDesc.m_StrideY = 4;
-    layerDesc.m_BiasEnabled = true;
+ BOOST_AUTO_TEST_CASE(ReleaseConvolution2dLayerConstantDataTest)
+ {
+     Graph graph;
 
-    auto* const convolutionLayer = graph.AddLayer<Convolution2dLayer>(layerDesc, "convolution");
-    auto* const weightsLayer = graph.AddLayer<ConstantLayer>("weights");
-    auto* const biasLayer = graph.AddLayer<ConstantLayer>("bias");
+     // create the layer we're testing
+     Convolution2dDescriptor layerDesc;
+     layerDesc.m_PadLeft = 3;
+     layerDesc.m_PadRight = 3;
+     layerDesc.m_PadTop = 1;
+     layerDesc.m_PadBottom = 1;
+     layerDesc.m_StrideX = 2;
+     layerDesc.m_StrideY = 4;
+     layerDesc.m_BiasEnabled = true;
 
-    TensorInfo weightsInfo = TensorInfo({ 2, 3, 5, 3 }, armnn::DataType::Float32, 1.0, 0.0, true);
-    TensorInfo biasInfo = TensorInfo({ 2 }, GetBiasDataType(armnn::DataType::Float32), 1.0, 0.0, true);
+     Convolution2dLayer* const layer = graph.AddLayer<Convolution2dLayer>(layerDesc, "layer");
 
-    weightsLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(weightsInfo);
-    biasLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(biasInfo);
+     layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({2, 3, 5, 3},
+                                                                          armnn::DataType::Float32));
+     layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>
+             (TensorInfo({2}, GetBiasDataType(armnn::DataType::Float32)));
 
-    weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-    biasLayer->GetOutputSlot(0).SetTensorInfo(biasInfo);
+     layer->m_Weight->Allocate();
+     layer->m_Bias->Allocate();
 
-    // create extra layers
-    Layer* const input = graph.AddLayer<InputLayer>(0, "input");
-    Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
+     // create extra layers
+     Layer* const input = graph.AddLayer<InputLayer>(0, "input");
+     Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
 
-    // connect up
-    Connect(input, convolutionLayer, TensorInfo({ 2, 3, 8, 16 }, armnn::DataType::Float32));
-    weightsLayer->GetOutputSlot().Connect(convolutionLayer->GetInputSlot(1));
-    biasLayer->GetOutputSlot().Connect(convolutionLayer->GetInputSlot(2));
-    Connect(convolutionLayer, output, TensorInfo({ 2, 2, 2, 10 }, armnn::DataType::Float32));
+     // connect up
+     Connect(input, layer, TensorInfo({2, 3, 8, 16}, armnn::DataType::Float32));
+     Connect(layer, output, TensorInfo({2, 2, 2, 10}, armnn::DataType::Float32));
 
-    // check the constants that they are not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+     // check the constants that they are not NULL
+     BOOST_CHECK(layer->m_Weight != nullptr);
+     BOOST_CHECK(layer->m_Bias != nullptr);
 
-    // free up the constants.
-    convolutionLayer->ReleaseConstantData();
+     // free up the constants..
+     layer->ReleaseConstantData();
 
-    // check the constants that they are still not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+     // check the constants that they are NULL now
+     BOOST_CHECK(layer->m_Weight == nullptr);
+     BOOST_CHECK(layer->m_Bias == nullptr);
 }
 
-TEST_CASE("ReleaseDepthwiseConvolution2dLayerConstantDataTest")
+BOOST_AUTO_TEST_CASE(ReleaseDepthwiseConvolution2dLayerConstantDataTest)
 {
     Graph graph;
 
@@ -131,42 +129,34 @@ TEST_CASE("ReleaseDepthwiseConvolution2dLayerConstantDataTest")
     layerDesc.m_StrideY         = 4;
     layerDesc.m_BiasEnabled     = true;
 
-    auto* const convolutionLayer = graph.AddLayer<DepthwiseConvolution2dLayer>(layerDesc, "convolution");
-    auto* const weightsLayer = graph.AddLayer<ConstantLayer>("weights");
-    auto* const biasLayer = graph.AddLayer<ConstantLayer>("bias");
+    DepthwiseConvolution2dLayer* const layer = graph.AddLayer<DepthwiseConvolution2dLayer>(layerDesc, "layer");
 
-    TensorInfo weightsInfo = TensorInfo({ 3, 3, 5, 3 }, armnn::DataType::Float32, 1.0, 0.0, true);
-    TensorInfo biasInfo = TensorInfo({ 9 }, GetBiasDataType(armnn::DataType::Float32), 1.0, 0.0, true);
-
-    weightsLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(weightsInfo);
-    biasLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(biasInfo);
-
-    weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-    biasLayer->GetOutputSlot(0).SetTensorInfo(biasInfo);
+    layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({3, 3, 5, 3}, DataType::Float32));
+    layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({9}, DataType::Float32));
+    layer->m_Weight->Allocate();
+    layer->m_Bias->Allocate();
 
     // create extra layers
     Layer* const input = graph.AddLayer<InputLayer>(0, "input");
     Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
 
     // connect up
-    Connect(input, convolutionLayer, TensorInfo({2, 3, 8, 16}, armnn::DataType::Float32));
-    weightsLayer->GetOutputSlot().Connect(convolutionLayer->GetInputSlot(1));
-    biasLayer->GetOutputSlot().Connect(convolutionLayer->GetInputSlot(2));
-    Connect(convolutionLayer, output, TensorInfo({2, 9, 2, 10}, armnn::DataType::Float32));
+    Connect(input, layer, TensorInfo({2, 3, 8, 16}, armnn::DataType::Float32));
+    Connect(layer, output, TensorInfo({2, 9, 2, 10}, armnn::DataType::Float32));
 
     // check the constants that they are not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+    BOOST_CHECK(layer->m_Weight != nullptr);
+    BOOST_CHECK(layer->m_Bias != nullptr);
 
-    // free up the constants.
-    convolutionLayer->ReleaseConstantData();
+    // free up the constants..
+    layer->ReleaseConstantData();
 
-    // check the constants that they are still not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+    // check the constants that they are NULL now
+    BOOST_CHECK(layer->m_Weight == nullptr);
+    BOOST_CHECK(layer->m_Bias == nullptr);
 }
 
-TEST_CASE("ReleaseFullyConnectedLayerConstantDataTest")
+BOOST_AUTO_TEST_CASE(ReleaseFullyConnectedLayerConstantDataTest)
 {
     Graph graph;
 
@@ -175,43 +165,37 @@ TEST_CASE("ReleaseFullyConnectedLayerConstantDataTest")
     layerDesc.m_BiasEnabled = true;
     layerDesc.m_TransposeWeightMatrix = true;
 
-    auto* const fullyConnectedLayer = graph.AddLayer<FullyConnectedLayer>(layerDesc, "layer");
-    auto* const weightsLayer = graph.AddLayer<ConstantLayer>("weights");
-    auto* const biasLayer = graph.AddLayer<ConstantLayer>("bias");
+    FullyConnectedLayer* const layer = graph.AddLayer<FullyConnectedLayer>(layerDesc, "layer");
 
     float inputsQScale = 1.0f;
     float outputQScale = 2.0f;
 
-    TensorInfo weightsInfo = TensorInfo({ 7, 20 }, DataType::QAsymmU8, inputsQScale, 0.0, true);
-    TensorInfo biasInfo = TensorInfo({ 7 }, GetBiasDataType(DataType::QAsymmU8), inputsQScale, 0.0, true);
-
-    weightsLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(weightsInfo);
-    biasLayer->m_LayerOutput = std::make_shared<ScopedTensorHandle>(biasInfo);
-
-    weightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
-    biasLayer->GetOutputSlot(0).SetTensorInfo(biasInfo);
+    layer->m_Weight = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({7, 20},
+                                                          DataType::QAsymmU8, inputsQScale, 0));
+    layer->m_Bias   = std::make_unique<ScopedCpuTensorHandle>(TensorInfo({7},
+                                                          GetBiasDataType(DataType::QAsymmU8), inputsQScale));
+    layer->m_Weight->Allocate();
+    layer->m_Bias->Allocate();
 
     // create extra layers
     Layer* const input = graph.AddLayer<InputLayer>(0, "input");
     Layer* const output = graph.AddLayer<OutputLayer>(0, "output");
 
     // connect up
-    Connect(input, fullyConnectedLayer, TensorInfo({ 3, 1, 4, 5 }, DataType::QAsymmU8, inputsQScale));
-    weightsLayer->GetOutputSlot().Connect(fullyConnectedLayer->GetInputSlot(1));
-    biasLayer->GetOutputSlot().Connect(fullyConnectedLayer->GetInputSlot(2));
-    Connect(fullyConnectedLayer, output, TensorInfo({ 3, 7 }, DataType::QAsymmU8, outputQScale));
+    Connect(input, layer, TensorInfo({3, 1, 4, 5}, DataType::QAsymmU8, inputsQScale));
+    Connect(layer, output, TensorInfo({3, 7}, DataType::QAsymmU8, outputQScale));
 
     // check the constants that they are not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+    BOOST_CHECK(layer->m_Weight != nullptr);
+    BOOST_CHECK(layer->m_Bias != nullptr);
 
-    // free up the constants.
-    fullyConnectedLayer->ReleaseConstantData();
+    // free up the constants..
+    layer->ReleaseConstantData();
 
-    // check the constants that they are still not NULL
-    CHECK(weightsLayer->m_LayerOutput != nullptr);
-    CHECK(biasLayer->m_LayerOutput != nullptr);
+    // check the constants that they are NULL now
+    BOOST_CHECK(layer->m_Weight == nullptr);
+    BOOST_CHECK(layer->m_Bias == nullptr);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()
 

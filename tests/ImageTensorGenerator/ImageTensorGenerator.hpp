@@ -7,7 +7,6 @@
 
 #include <armnn/TypesUtils.hpp>
 
-#include <armnnUtils/TContainer.hpp>
 #include <armnnUtils/Permute.hpp>
 
 #include <algorithm>
@@ -25,12 +24,14 @@ struct NormalizationParameters
 
 enum class SupportedFrontend
 {
-    TFLite     = 0,
+    Caffe      = 0,
+    TensorFlow = 1,
+    TFLite     = 2,
 };
 
 /** Get normalization parameters.
  * Note that different flavours of models and different model data types have different normalization methods.
- * This tool currently only supports TF and TFLite models
+ * This tool currently only supports Caffe, TF and TFLite models
  *
  * @param[in] modelFormat   One of the supported frontends
  * @param[in] outputType    Output type of the image tensor, also the type of the intended model
@@ -45,6 +46,9 @@ NormalizationParameters GetNormalizationParameters(const SupportedFrontend& mode
     normParams.stddev = { 1.0, 1.0, 1.0 };
     switch (modelFormat)
     {
+        case SupportedFrontend::Caffe:
+            break;
+        case SupportedFrontend::TensorFlow:
         case SupportedFrontend::TFLite:
         default:
             switch (outputType)
@@ -57,10 +61,6 @@ NormalizationParameters GetNormalizationParameters(const SupportedFrontend& mode
                     normParams.mean = { 128.0, 128.0, 128.0 };
                     break;
                 case armnn::DataType::QAsymmU8:
-                    break;
-                case armnn::DataType::QAsymmS8:
-                    normParams.mean = { 128.0, 128.0, 128.0 };
-                    break;
                 default:
                     break;
             }
@@ -143,7 +143,7 @@ std::vector<int> PrepareImageTensor<int>(const std::string& imagePath,
     return imageDataInt;
 }
 
-// Prepare qasymmu8 image tensor
+// Prepare qasymm8 image tensor
 template <>
 std::vector<uint8_t> PrepareImageTensor<uint8_t>(const std::string& imagePath,
                                                  unsigned int newWidth,
@@ -163,26 +163,6 @@ std::vector<uint8_t> PrepareImageTensor<uint8_t>(const std::string& imagePath,
     return imageDataQasymm8;
 }
 
-// Prepare qasymms8 image tensor
-template <>
-std::vector<int8_t> PrepareImageTensor<int8_t>(const std::string& imagePath,
-                                               unsigned int newWidth,
-                                               unsigned int newHeight,
-                                               const NormalizationParameters& normParams,
-                                               unsigned int batchSize,
-                                               const armnn::DataLayout& outputLayout)
-{
-    // Get float32 image tensor
-    std::vector<float> imageDataFloat =
-            PrepareImageTensor<float>(imagePath, newWidth, newHeight, normParams, batchSize, outputLayout);
-    std::vector<int8_t> imageDataQasymms8;
-    imageDataQasymms8.reserve(imageDataFloat.size());
-    // Convert to uint8 image tensor with static cast
-    std::transform(imageDataFloat.begin(), imageDataFloat.end(), std::back_inserter(imageDataQasymms8),
-                   [](float val) { return static_cast<uint8_t>(val); });
-    return imageDataQasymms8;
-}
-
 /** Write image tensor to ofstream
  *
  * @param[in] imageData         Image tensor data
@@ -198,14 +178,6 @@ void WriteImageTensorImpl(const std::vector<ElemType>& imageData, std::ofstream&
 // numerical values
 template <>
 void WriteImageTensorImpl<uint8_t>(const std::vector<uint8_t>& imageData, std::ofstream& imageTensorFile)
-{
-    std::copy(imageData.begin(), imageData.end(), std::ostream_iterator<int>(imageTensorFile, " "));
-}
-
-// For int8_t image tensor, cast it to int before writing it to prevent writing data as characters instead of
-// numerical values
-template <>
-void WriteImageTensorImpl<int8_t>(const std::vector<int8_t>& imageData, std::ofstream& imageTensorFile)
 {
     std::copy(imageData.begin(), imageData.end(), std::ostream_iterator<int>(imageTensorFile, " "));
 }

@@ -5,22 +5,22 @@
 
 #include "TransposeConvolution2dTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 
 
 #include <armnnUtils/Permute.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
-#include <armnnTestUtils/DataLayoutUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataLayoutUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
 #include <reference/RefWorkloadFactory.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <string>
 #include <utility>
@@ -68,7 +68,7 @@ void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
     }
 
     // set up weights
-    ScopedTensorHandle weightsTensor(weights.first);
+    ScopedCpuTensorHandle weightsTensor(weights.first);
 
     TransposeConvolution2dQueueDescriptor queueDescriptor;
     queueDescriptor.m_Parameters = descriptor;
@@ -76,11 +76,11 @@ void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
 
     AllocateAndCopyDataToITensorHandle(&weightsTensor, weights.second.data());
 
-    std::unique_ptr<ScopedTensorHandle> biasesTensor;
+    std::unique_ptr<ScopedCpuTensorHandle> biasesTensor;
     if (descriptor.m_BiasEnabled)
     {
         // set up biases
-        biasesTensor = std::make_unique<ScopedTensorHandle>(biases.value().first);
+        biasesTensor = std::make_unique<ScopedCpuTensorHandle>(biases.value().first);
         queueDescriptor.m_Bias = biasesTensor.get();
 
         AllocateAndCopyDataToITensorHandle(biasesTensor.get(), biases.value().second.data());
@@ -96,7 +96,7 @@ void TransposeConvolution2dTestImpl(armnn::IWorkloadFactory& workloadFactory,
     AddOutputToWorkload(queueDescriptor, workloadInfo, output.first, outputHandle.get());
 
     std::unique_ptr<armnn::IWorkload> workload =
-            workloadFactory.CreateWorkload(armnn::LayerType::TransposeConvolution2d, queueDescriptor, workloadInfo);
+            workloadFactory.CreateTransposeConvolution2d(queueDescriptor, workloadInfo);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
@@ -183,8 +183,8 @@ LayerTestResult<T, 4> TransposeConvolution2dTest(
 
     // execute test
     TransposeConvolution2dTestImpl(workloadFactory,
-                                   memoryManager,
-                                   tensorHandleFactory,
+                                                             memoryManager,
+                                                             tensorHandleFactory,
                                    descriptor,
                                    input,
                                    output,
@@ -193,10 +193,11 @@ LayerTestResult<T, 4> TransposeConvolution2dTest(
 
     // construct result object
     LayerTestResult<T, 4> testResult(outputInfo);
-    testResult.m_ActualData = output.second;
-    testResult.m_ExpectedData = armnnUtils::QuantizedVector<T>(expectedOutputData,
-                                                               outputInfo.GetQuantizationScale(),
-                                                               outputInfo.GetQuantizationOffset());
+    testResult.output         = MakeTensor<T, 4>(outputInfo, output.second);
+    testResult.outputExpected = MakeTensor<T, 4>(outputInfo,
+                                                 armnnUtils::QuantizedVector<T>(expectedOutputData,
+                                                                                outputInfo.GetQuantizationScale(),
+                                                                                outputInfo.GetQuantizationOffset()));
 
     return testResult;
 }
@@ -610,8 +611,6 @@ LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
 
     std::vector<int32_t> biasData = { -12, -8 };
 
-    std::vector<uint8_t> actualOutput(outputInfo.GetNumElements());
-
     std::vector<uint8_t> expectedOutputData =
     {
          9,  13,  21,  19,  27,
@@ -644,8 +643,8 @@ LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
     std::unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
 
     WorkloadInfo workloadInfo;
-    ScopedTensorHandle weightTensor(kernelInfo);
-    ScopedTensorHandle biasTensor(biasInfo);
+    ScopedCpuTensorHandle weightTensor(kernelInfo);
+    ScopedCpuTensorHandle biasTensor(biasInfo);
 
     AllocateAndCopyDataToITensorHandle(&weightTensor, kernelData.data());
     AllocateAndCopyDataToITensorHandle(&biasTensor, biasData.data());
@@ -658,9 +657,7 @@ LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
     AddInputToWorkload(queueDescriptor, workloadInfo, inputInfo, inputHandle.get());
     AddOutputToWorkload(queueDescriptor, workloadInfo, outputInfo, outputHandle.get());
 
-    std::unique_ptr<IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::TransposeConvolution2d,
-                                                                         queueDescriptor,
-                                                                         workloadInfo);
+    std::unique_ptr<IWorkload> workload = workloadFactory.CreateTransposeConvolution2d(queueDescriptor, workloadInfo);
     inputHandle->Allocate();
     outputHandle->Allocate();
 
@@ -668,12 +665,11 @@ LayerTestResult<uint8_t, 4> TransposeConvolution2dPerAxisQuantTest(
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    LayerTestResult<uint8_t, 4> ret(outputInfo);
+    CopyDataFromITensorHandle(ret.output.origin(), outputHandle.get());
+    ret.outputExpected = MakeTensor<uint8_t, 4>(outputInfo, expectedOutputData);
 
-    return LayerTestResult<uint8_t, 4>(actualOutput,
-                                       expectedOutputData,
-                                       outputHandle->GetShape(),
-                                       outputInfo.GetShape());
+    return ret;
 }
 
 //

@@ -25,9 +25,6 @@ public:
     virtual bool BeforeUnloadNetwork(NetworkId networkId) = 0;
     virtual bool AfterUnloadNetwork(NetworkId networkId) = 0;
 
-    // After Enqueue workload events
-    virtual bool AfterEnqueueWorkload(NetworkId networkId) = 0;
-
     virtual ~IBackendContext() {}
 };
 

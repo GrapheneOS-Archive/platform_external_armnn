@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> MinimumLayer::CreateWorkload(const IWorkloadFactory& 
     MinimumQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Minimum, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateMinimum(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 MinimumLayer* MinimumLayer::Clone(Graph& graph) const
@@ -32,9 +32,9 @@ MinimumLayer* MinimumLayer::Clone(Graph& graph) const
     return CloneBase<MinimumLayer>(graph, GetName());
 }
 
-void MinimumLayer::ExecuteStrategy(IStrategy& strategy) const
+void MinimumLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitMinimumLayer(this, GetName());
 }
 
 } // namespace armnn

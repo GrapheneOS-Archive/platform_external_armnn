@@ -1,17 +1,14 @@
 //
-// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <CreateWorkload.hpp>
+#include <test/CreateWorkload.hpp>
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 #include <reference/RefTensorHandle.hpp>
-#include <reference/RefTensorHandleFactory.hpp>
 #include <reference/RefWorkloadFactory.hpp>
 #include <reference/workloads/RefWorkloads.hpp>
-
-#include <doctest/doctest.h>
 
 namespace
 {
@@ -22,8 +19,8 @@ void CheckInputOutput(std::unique_ptr<Workload> workload, const TensorInfo& inpu
     auto queueDescriptor = workload->GetData();
     auto inputHandle  = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[0]);
     auto outputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((inputHandle->GetTensorInfo() == inputInfo));
-    CHECK((outputHandle->GetTensorInfo() == outputInfo));
+    BOOST_TEST((inputHandle->GetTensorInfo() == inputInfo));
+    BOOST_TEST((outputHandle->GetTensorInfo() == outputInfo));
 }
 
 template <typename Workload>
@@ -36,9 +33,9 @@ void CheckInputsOutput(std::unique_ptr<Workload> workload,
     auto inputHandle0     = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[0]);
     auto inputHandle1     = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[1]);
     auto outputHandle    = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((inputHandle0->GetTensorInfo() == inputInfo0));
-    CHECK((inputHandle1->GetTensorInfo() == inputInfo1));
-    CHECK((outputHandle->GetTensorInfo() == outputInfo));
+    BOOST_TEST((inputHandle0->GetTensorInfo() == inputInfo0));
+    BOOST_TEST((inputHandle1->GetTensorInfo() == inputInfo1));
+    BOOST_TEST((outputHandle->GetTensorInfo() == outputInfo));
 }
 
 armnn::RefWorkloadFactory GetFactory()
@@ -47,10 +44,11 @@ armnn::RefWorkloadFactory GetFactory()
     return RefWorkloadFactory(memoryManager);
 }
 
+
 }
 
-TEST_SUITE("CreateWorkloadRef")
-{
+BOOST_AUTO_TEST_SUITE(CreateWorkloadRef)
+
 template <typename ActivationWorkloadType, armnn::DataType DataType>
 static void RefCreateActivationWorkloadTest()
 {
@@ -64,12 +62,12 @@ static void RefCreateActivationWorkloadTest()
         TensorInfo({ 1, 1 }, DataType));
 }
 
-TEST_CASE("CreateActivationFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateActivationFloat32Workload)
 {
     RefCreateActivationWorkloadTest<RefActivationWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateActivationUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateActivationUint8Workload)
 {
     RefCreateActivationWorkloadTest<RefActivationWorkload, armnn::DataType::QAsymmU8>();
 }
@@ -91,7 +89,7 @@ static void RefCreateElementwiseWorkloadTest()
         TensorInfo({ 2, 3 }, DataType));
 }
 
-TEST_CASE("CreateSubtractionWorkloadWithBlobTest")
+BOOST_AUTO_TEST_CASE(CreateSubtractionWorkloadWithBlobTest)
 {
     Graph graph;
     RefWorkloadFactory factory = GetFactory();
@@ -108,7 +106,7 @@ TEST_CASE("CreateSubtractionWorkloadWithBlobTest")
         TensorInfo({ 2, 3 }, DataType));
 }
 
-TEST_CASE("CreateAdditionWorkloadWithBlobTest")
+BOOST_AUTO_TEST_CASE(CreateAdditionWorkloadWithBlobTest)
 {
     Graph graph;
     RefWorkloadFactory factory = GetFactory();
@@ -124,7 +122,7 @@ TEST_CASE("CreateAdditionWorkloadWithBlobTest")
         TensorInfo({ 2, 3 }, DataType));
 }
 
-TEST_CASE("CreateMultiplicationWorkloadWithBlobTest")
+BOOST_AUTO_TEST_CASE(CreateMultiplicationWorkloadWithBlobTest)
 {
     Graph              graph;
     RefWorkloadFactory factory  = GetFactory();
@@ -140,7 +138,7 @@ TEST_CASE("CreateMultiplicationWorkloadWithBlobTest")
                       TensorInfo({2, 3}, DataType));
 }
 
-TEST_CASE("CreateAdditionFloatWorkload")
+BOOST_AUTO_TEST_CASE(CreateAdditionFloatWorkload)
 {
     RefCreateElementwiseWorkloadTest<RefAdditionWorkload<>,
         AdditionQueueDescriptor,
@@ -148,7 +146,7 @@ TEST_CASE("CreateAdditionFloatWorkload")
         armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateAdditionUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateAdditionUint8Workload)
 {
     RefCreateElementwiseWorkloadTest<RefAdditionWorkload<>,
         AdditionQueueDescriptor,
@@ -156,7 +154,7 @@ TEST_CASE("CreateAdditionUint8Workload")
         armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateAdditionInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateAdditionInt16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefAdditionWorkload<>,
         AdditionQueueDescriptor,
@@ -164,7 +162,7 @@ TEST_CASE("CreateAdditionInt16Workload")
         armnn::DataType::QSymmS16>();
 }
 
-TEST_CASE("CreateAdditionInt32Workload")
+BOOST_AUTO_TEST_CASE(CreateAdditionInt32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefAdditionWorkload<int32_t>,
             AdditionQueueDescriptor,
@@ -172,7 +170,7 @@ TEST_CASE("CreateAdditionInt32Workload")
             armnn::DataType::Signed32>();
 }
 
-TEST_CASE("CreateSubtractionFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateSubtractionFloat32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefSubtractionWorkload<>,
         SubtractionQueueDescriptor,
@@ -180,7 +178,7 @@ TEST_CASE("CreateSubtractionFloat32Workload")
         armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateSubtractionFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreateSubtractionFloat16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefSubtractionWorkload<>,
         SubtractionQueueDescriptor,
@@ -188,7 +186,7 @@ TEST_CASE("CreateSubtractionFloat16Workload")
         armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateSubtractionUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateSubtractionUint8Workload)
 {
     RefCreateElementwiseWorkloadTest<RefSubtractionWorkload<>,
         SubtractionQueueDescriptor,
@@ -196,7 +194,7 @@ TEST_CASE("CreateSubtractionUint8Workload")
         armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateSubtractionInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateSubtractionInt16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefSubtractionWorkload<>,
         SubtractionQueueDescriptor,
@@ -204,7 +202,7 @@ TEST_CASE("CreateSubtractionInt16Workload")
         armnn::DataType::QSymmS16>();
 }
 
-TEST_CASE("CreateSubtractionInt32Workload")
+BOOST_AUTO_TEST_CASE(CreateSubtractionInt32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefSubtractionWorkload<int32_t>,
             SubtractionQueueDescriptor,
@@ -212,7 +210,7 @@ TEST_CASE("CreateSubtractionInt32Workload")
             armnn::DataType::Signed32>();
 }
 
-TEST_CASE("CreateMultiplicationFloatWorkload")
+BOOST_AUTO_TEST_CASE(CreateMultiplicationFloatWorkload)
 {
     RefCreateElementwiseWorkloadTest<RefMultiplicationWorkload<>,
         MultiplicationQueueDescriptor,
@@ -220,7 +218,7 @@ TEST_CASE("CreateMultiplicationFloatWorkload")
         armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateMultiplicationUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateMultiplicationUint8Workload)
 {
     RefCreateElementwiseWorkloadTest<RefMultiplicationWorkload<>,
         MultiplicationQueueDescriptor,
@@ -228,7 +226,7 @@ TEST_CASE("CreateMultiplicationUint8Workload")
         armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateMultiplicationInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateMultiplicationInt16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefMultiplicationWorkload<>,
         MultiplicationQueueDescriptor,
@@ -236,7 +234,7 @@ TEST_CASE("CreateMultiplicationInt16Workload")
         armnn::DataType::QSymmS16>();
 }
 
-TEST_CASE("CreateMultiplicationInt32Workload")
+BOOST_AUTO_TEST_CASE(CreateMultiplicationInt32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefMultiplicationWorkload<int32_t>,
             MultiplicationQueueDescriptor,
@@ -244,7 +242,7 @@ TEST_CASE("CreateMultiplicationInt32Workload")
             armnn::DataType::Signed32>();
 }
 
-TEST_CASE("CreateDivisionFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateDivisionFloat32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefDivisionWorkload<>,
         DivisionQueueDescriptor,
@@ -252,7 +250,7 @@ TEST_CASE("CreateDivisionFloat32Workload")
         armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateDivisionFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreateDivisionFloat16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefDivisionWorkload<>,
         DivisionQueueDescriptor,
@@ -260,7 +258,7 @@ TEST_CASE("CreateDivisionFloat16Workload")
         armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateDivisionUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateDivisionUint8Workload)
 {
     RefCreateElementwiseWorkloadTest<RefDivisionWorkload<>,
         DivisionQueueDescriptor,
@@ -268,7 +266,7 @@ TEST_CASE("CreateDivisionUint8Workload")
         armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateDivisionInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateDivisionInt16Workload)
 {
     RefCreateElementwiseWorkloadTest<RefDivisionWorkload<>,
         DivisionQueueDescriptor,
@@ -276,7 +274,7 @@ TEST_CASE("CreateDivisionInt16Workload")
         armnn::DataType::QSymmS16>();
 }
 
-TEST_CASE("CreateDivisionInt32Workload")
+BOOST_AUTO_TEST_CASE(CreateDivisionInt32Workload)
 {
     RefCreateElementwiseWorkloadTest<RefDivisionWorkload<int32_t>,
             DivisionQueueDescriptor,
@@ -313,7 +311,7 @@ static void RefCreateBatchNormalizationWorkloadTest(DataLayout dataLayout)
     CheckInputOutput(std::move(workload), TensorInfo(inputShape, DataType), TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreateBatchNormalizationWithBlobFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationWithBlobFloat32Workload)
 {
     Graph graph;
     RefWorkloadFactory factory = GetFactory();
@@ -331,55 +329,55 @@ TEST_CASE("CreateBatchNormalizationWithBlobFloat32Workload")
     CheckInputOutput(std::move(workload), TensorInfo(inputShape, dataType), TensorInfo(outputShape, dataType));
 }
 
-TEST_CASE("CreateBatchNormalizationFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationFloat32Workload)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload,armnn::DataType::Float32>
             (DataLayout::NCHW);
 }
 
-TEST_CASE("CreateBatchNormalizationFloat32WorkloadNhwc")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationFloat32WorkloadNhwc)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::Float32>
             (DataLayout::NHWC);
 }
 
-TEST_CASE("CreateBatchNormalizationFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationFloat16Workload)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload,armnn::DataType::Float16>
             (DataLayout::NCHW);
 }
 
-TEST_CASE("CreateBatchNormalizationFloat16WorkloadNhwc")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationFloat16WorkloadNhwc)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::Float16>
             (DataLayout::NHWC);
 }
 
-TEST_CASE("CreateBatchNormalizationUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationUint8Workload)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::QAsymmU8>
             (DataLayout::NCHW);
 }
 
-TEST_CASE("CreateBatchNormalizationUint8WorkloadNhwc")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationUint8WorkloadNhwc)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::QAsymmU8>
             (DataLayout::NHWC);
 }
 
-TEST_CASE("CreateBatchNormalizationInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationInt16Workload)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::QSymmS16>
             (DataLayout::NCHW);
 }
 
-TEST_CASE("CreateBatchNormalizationInt16WorkloadNhwc")
+BOOST_AUTO_TEST_CASE(CreateBatchNormalizationInt16WorkloadNhwc)
 {
     RefCreateBatchNormalizationWorkloadTest<RefBatchNormalizationWorkload, armnn::DataType::QSymmS16>
             (DataLayout::NHWC);
 }
 
-TEST_CASE("CreateConvertFp16ToFp32Float32Workload")
+BOOST_AUTO_TEST_CASE(CreateConvertFp16ToFp32Float32Workload)
 {
     Graph                graph;
     RefWorkloadFactory factory = GetFactory();
@@ -390,7 +388,7 @@ TEST_CASE("CreateConvertFp16ToFp32Float32Workload")
         std::move(workload), TensorInfo({1, 3, 2, 3}, DataType::Float16), TensorInfo({1, 3, 2, 3}, DataType::Float32));
 }
 
-TEST_CASE("CreateConvertFp32ToFp16Float16Workload")
+BOOST_AUTO_TEST_CASE(CreateConvertFp32ToFp16Float16Workload)
 {
     Graph                graph;
     RefWorkloadFactory factory = GetFactory();
@@ -419,17 +417,17 @@ static void RefCreateConvolution2dWorkloadTest(DataLayout dataLayout = DataLayou
                      TensorInfo(outputShape, DataType::Float32));
 }
 
-TEST_CASE("CreateConvolution2dFloatNchwWorkload")
+BOOST_AUTO_TEST_CASE(CreateConvolution2dFloatNchwWorkload)
 {
     RefCreateConvolution2dWorkloadTest(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateConvolution2dFloatNhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreateConvolution2dFloatNhwcWorkload)
 {
     RefCreateConvolution2dWorkloadTest(DataLayout::NHWC);
 }
 
-TEST_CASE("CreateConvolution2dWithBlobWorkload")
+BOOST_AUTO_TEST_CASE(CreateConvolution2dWithBlobWorkload)
 {
     DataLayout dataLayout = DataLayout::NHWC;
     Graph graph;
@@ -466,12 +464,12 @@ static void RefCreateDepthwiseConvolutionWorkloadTest(DataLayout dataLayout)
                      TensorInfo(outputShape, DataType::Float32));
 }
 
-TEST_CASE("CreateDepthwiseConvolutionFloat32NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreateDepthwiseConvolutionFloat32NhwcWorkload)
 {
     RefCreateDepthwiseConvolutionWorkloadTest(DataLayout::NHWC);
 }
 
-TEST_CASE("RefCreateFullyConnectedWithBlobWorkloadTest")
+BOOST_AUTO_TEST_CASE(RefCreateFullyConnectedWithBlobWorkloadTest)
 {
     Graph graph;
     RefWorkloadFactory factory = GetFactory();
@@ -479,29 +477,11 @@ TEST_CASE("RefCreateFullyConnectedWithBlobWorkloadTest")
                                                          armnn::DataType::Float32>(factory, graph);
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateFullyConnectedWorkloadTest).
-    float inputsQScale = 1.0f;
-    float outputQScale = 1.0f;
+    float inputsQScale = 0.0f;
+    float outputQScale = 0.0f;
     CheckInputOutput(std::move(workload),
         TensorInfo({ 3, 1, 4, 5 }, armnn::DataType::Float32, inputsQScale),
         TensorInfo({ 3, 7 }, armnn::DataType::Float32, outputQScale));
-}
-
-TEST_CASE("CreateFullyConnectedWorkloadWeightsBiasesAsInputsFloat32")
-{
-    Graph graph;
-    RefWorkloadFactory factory = GetFactory();
-
-    auto workload =
-            CreateFullyConnectedWorkloadWeightsBiasesAsInputsTest<RefFullyConnectedWorkload,
-                                                                  armnn::DataType::Float32>(factory, graph);
-
-    // Checks that outputs and inputs are as we expect them (see definition of CreateFullyConnectedWorkloadTest).
-    float inputsQScale = 1.0f;
-    float outputQScale = 1.0f;
-    CheckInputsOutput(std::move(workload),
-                      TensorInfo({ 3, 1, 4, 5 }, armnn::DataType::Float32, inputsQScale),
-                      TensorInfo({ 7, 20 }, armnn::DataType::Float32, inputsQScale),
-                      TensorInfo({ 3, 7 }, armnn::DataType::Float32, outputQScale));
 }
 
 template <typename FullyConnectedWorkloadType, armnn::DataType DataType>
@@ -512,24 +492,24 @@ static void RefCreateFullyConnectedWorkloadTest()
     auto workload = CreateFullyConnectedWorkloadTest<FullyConnectedWorkloadType, DataType>(factory, graph);
 
     // Checks that outputs and inputs are as we expect them (see definition of CreateFullyConnectedWorkloadTest).
-    float inputsQScale = DataType == armnn::DataType::QAsymmU8 ? 1.0f : 1.0f;
-    float outputQScale = DataType == armnn::DataType::QAsymmU8 ? 2.0f : 1.0f;
+    float inputsQScale = DataType == armnn::DataType::QAsymmU8 ? 1.0f : 0.0;
+    float outputQScale = DataType == armnn::DataType::QAsymmU8 ? 2.0f : 0.0;
     CheckInputOutput(std::move(workload),
         TensorInfo({ 3, 1, 4, 5 }, DataType, inputsQScale),
         TensorInfo({ 3, 7 }, DataType, outputQScale));
 }
 
-TEST_CASE("CreateFullyConnectedWorkloadFloat32")
+BOOST_AUTO_TEST_CASE(CreateFullyConnectedWorkloadFloat32)
 {
     RefCreateFullyConnectedWorkloadTest<RefFullyConnectedWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateFullyConnectedWorkloadQuantisedAsymm8")
+BOOST_AUTO_TEST_CASE(CreateFullyConnectedWorkloadQuantisedAsymm8)
 {
     RefCreateFullyConnectedWorkloadTest<RefFullyConnectedWorkload, armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateFullyConnectedWorkloadQuantisedSymm16")
+BOOST_AUTO_TEST_CASE(CreateFullyConnectedWorkloadQuantisedSymm16)
 {
     RefCreateFullyConnectedWorkloadTest<RefFullyConnectedWorkload, armnn::DataType::QSymmS16>();
 }
@@ -561,32 +541,32 @@ static void RefCreateNormalizationWorkloadTest(DataLayout dataLayout)
     CheckInputOutput(std::move(workload), TensorInfo(inputShape, DataType), TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreateRefNormalizationFloat32NchwWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationFloat32NchwWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::Float32>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateRefNormalizationFloat32NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationFloat32NhwcWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::Float32>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreateRefNormalizationUint8NchwWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationUint8NchwWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::QAsymmU8>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateRefNormalizationUint8NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationUint8NhwcWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::QAsymmU8>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreateRefNormalizationInt16NchwWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationInt16NchwWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::QSymmS16>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateRefNormalizationInt16NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreateRefNormalizationInt16NhwcWorkload)
 {
     RefCreateNormalizationWorkloadTest<RefNormalizationWorkload, armnn::DataType::QSymmS16>(DataLayout::NHWC);
 }
@@ -619,32 +599,32 @@ static void RefCreatePooling2dWorkloadTest(DataLayout dataLayout)
                      TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreatePooling2dFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dFloat32Workload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::Float32>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreatePooling2dFloat32NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dFloat32NhwcWorkload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::Float32>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreatePooling2dUint8Workload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dUint8Workload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::QAsymmU8>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreatePooling2dUint8NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dUint8NhwcWorkload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::QAsymmU8>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreatePooling2dInt16Workload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dInt16Workload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::QSymmS16>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreatePooling2dInt16NhwcWorkload")
+BOOST_AUTO_TEST_CASE(CreatePooling2dInt16NhwcWorkload)
 {
     RefCreatePooling2dWorkloadTest<RefPooling2dWorkload, armnn::DataType::QSymmS16>(DataLayout::NHWC);
 }
@@ -675,22 +655,22 @@ static void RefCreateSoftmaxWorkloadTest()
         tensorInfo);
 }
 
-TEST_CASE("CreateSoftmaxFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateSoftmaxFloat32Workload)
 {
     RefCreateSoftmaxWorkloadTest<RefSoftmaxWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateSoftmaxFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreateSoftmaxFloat16Workload)
 {
     RefCreateSoftmaxWorkloadTest<RefSoftmaxWorkload, armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateSoftmaxQuantisedAsymm8Workload")
+BOOST_AUTO_TEST_CASE(CreateSoftmaxQuantisedAsymm8Workload)
 {
     RefCreateSoftmaxWorkloadTest<RefSoftmaxWorkload, armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateSoftmaxQuantisedSymm16Workload")
+BOOST_AUTO_TEST_CASE(CreateSoftmaxQuantisedSymm16Workload)
 {
     RefCreateSoftmaxWorkloadTest<RefSoftmaxWorkload, armnn::DataType::QSymmS16>();
 }
@@ -705,29 +685,29 @@ static void RefCreateSplitterWorkloadTest()
     // Checks that outputs are as we expect them (see definition of CreateSplitterWorkloadTest).
     SplitterQueueDescriptor queueDescriptor = workload->GetData();
     auto inputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    CHECK((inputHandle->GetTensorInfo() == TensorInfo({ 5, 7, 7 }, DataType)));
+    BOOST_TEST((inputHandle->GetTensorInfo() == TensorInfo({ 5, 7, 7 }, DataType)));
 
     auto outputHandle0 = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((outputHandle0->GetTensorInfo() == TensorInfo({ 1, 7, 7 }, DataType)));
+    BOOST_TEST((outputHandle0->GetTensorInfo() == TensorInfo({ 1, 7, 7 }, DataType)));
 
     auto outputHandle1 = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[1]);
-    CHECK((outputHandle1->GetTensorInfo() == TensorInfo({ 2, 7, 7 }, DataType)));
+    BOOST_TEST((outputHandle1->GetTensorInfo() == TensorInfo({ 2, 7, 7 }, DataType)));
 
     auto outputHandle2 = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[2]);
-    CHECK((outputHandle2->GetTensorInfo() == TensorInfo({ 2, 7, 7 }, DataType)));
+    BOOST_TEST((outputHandle2->GetTensorInfo() == TensorInfo({ 2, 7, 7 }, DataType)));
 }
 
-TEST_CASE("CreateSplitterFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateSplitterFloat32Workload)
 {
     RefCreateSplitterWorkloadTest<RefSplitterWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateSplitterFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreateSplitterFloat16Workload)
 {
     RefCreateSplitterWorkloadTest<RefSplitterWorkload, armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateSplitterUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateSplitterUint8Workload)
 {
     RefCreateSplitterWorkloadTest<RefSplitterWorkload, armnn::DataType::QAsymmU8>();
 }
@@ -755,27 +735,27 @@ static void RefCreateSplitterConcatWorkloadTest()
     armnn::RefTensorHandle* mIn0 = dynamic_cast<armnn::RefTensorHandle*>(wlConcat->GetData().m_Inputs[0]);
     armnn::RefTensorHandle* mIn1 = dynamic_cast<armnn::RefTensorHandle*>(wlConcat->GetData().m_Inputs[1]);
 
-    CHECK(sOut0);
-    CHECK(sOut1);
-    CHECK(mIn0);
-    CHECK(mIn1);
+    BOOST_TEST(sOut0);
+    BOOST_TEST(sOut1);
+    BOOST_TEST(mIn0);
+    BOOST_TEST(mIn1);
 
     bool validDataPointers = (sOut0 == mIn1) && (sOut1 == mIn0);
 
-    CHECK(validDataPointers);
+    BOOST_TEST(validDataPointers);
 }
 
-TEST_CASE("CreateSplitterConcatFloat32")
+BOOST_AUTO_TEST_CASE(CreateSplitterConcatFloat32)
 {
     RefCreateSplitterConcatWorkloadTest<RefSplitterWorkload, RefConcatWorkload, DataType::Float32>();
 }
 
-TEST_CASE("CreateSplitterConcatFloat16")
+BOOST_AUTO_TEST_CASE(CreateSplitterConcatFloat16)
 {
     RefCreateSplitterConcatWorkloadTest<RefSplitterWorkload, RefConcatWorkload, DataType::Float16>();
 }
 
-TEST_CASE("CreateSplitterConcatUint8")
+BOOST_AUTO_TEST_CASE(CreateSplitterConcatUint8)
 {
     RefCreateSplitterConcatWorkloadTest<RefSplitterWorkload, RefConcatWorkload, DataType::QAsymmU8>();
 }
@@ -805,26 +785,26 @@ static void RefCreateSingleOutputMultipleInputsTest()
     armnn::RefTensorHandle* activ1_1Im = dynamic_cast<armnn::RefTensorHandle*>(wlActiv1_1->GetData().m_Inputs[0]);
 
 
-    CHECK(sOut0);
-    CHECK(sOut1);
-    CHECK(activ0_0Im);
-    CHECK(activ0_1Im);
-    CHECK(activ1_0Im);
-    CHECK(activ1_1Im);
+    BOOST_TEST(sOut0);
+    BOOST_TEST(sOut1);
+    BOOST_TEST(activ0_0Im);
+    BOOST_TEST(activ0_1Im);
+    BOOST_TEST(activ1_0Im);
+    BOOST_TEST(activ1_1Im);
 
     bool validDataPointers = (sOut0 == activ0_0Im) && (sOut0 == activ0_1Im) &&
                              (sOut1 == activ1_0Im) && (sOut1 == activ1_1Im);
 
-    CHECK(validDataPointers);
+    BOOST_TEST(validDataPointers);
 }
 
-TEST_CASE("CreateSingleOutputMultipleInputsFloat32")
+BOOST_AUTO_TEST_CASE(CreateSingleOutputMultipleInputsFloat32)
 {
     RefCreateSingleOutputMultipleInputsTest<RefSplitterWorkload, RefActivationWorkload,
         armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateSingleOutputMultipleInputsUint8")
+BOOST_AUTO_TEST_CASE(CreateSingleOutputMultipleInputsUint8)
 {
     RefCreateSingleOutputMultipleInputsTest<RefSplitterWorkload, RefActivationWorkload,
         armnn::DataType::QAsymmU8>();
@@ -858,27 +838,27 @@ static void RefCreateResizeBilinearTest(DataLayout dataLayout)
                      TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreateResizeBilinearFloat32")
+BOOST_AUTO_TEST_CASE(CreateResizeBilinearFloat32)
 {
     RefCreateResizeBilinearTest<RefResizeWorkload, armnn::DataType::Float32>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateResizeBilinearFloat16")
+BOOST_AUTO_TEST_CASE(CreateResizeBilinearFloat16)
 {
     RefCreateResizeBilinearTest<RefResizeWorkload, armnn::DataType::Float16>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateResizeBilinearUint8")
+BOOST_AUTO_TEST_CASE(CreateResizeBilinearUint8)
 {
     RefCreateResizeBilinearTest<RefResizeWorkload, armnn::DataType::QAsymmU8>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateResizeBilinearQuantisedAsymm16")
+BOOST_AUTO_TEST_CASE(CreateResizeBilinearQuantisedAsymm16)
 {
     RefCreateResizeBilinearTest<RefResizeWorkload, armnn::DataType::QSymmS16>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateResizeBilinearFloat32Nhwc")
+BOOST_AUTO_TEST_CASE(CreateResizeBilinearFloat32Nhwc)
 {
     RefCreateResizeBilinearTest<RefResizeWorkload, armnn::DataType::Float32>(DataLayout::NHWC);
 }
@@ -896,22 +876,22 @@ static void RefCreateBatchToSpaceNdTest()
                      TensorInfo({ 1, 1, 1, 1 }, DataType));
 }
 
-TEST_CASE("CreateBatchToSpaceNdFloat32")
+BOOST_AUTO_TEST_CASE(CreateBatchToSpaceNdFloat32)
 {
     RefCreateBatchToSpaceNdTest<RefBatchToSpaceNdWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateBatchToSpaceNdFloat16")
+BOOST_AUTO_TEST_CASE(CreateBatchToSpaceNdFloat16)
 {
     RefCreateBatchToSpaceNdTest<RefBatchToSpaceNdWorkload, armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateBatchToSpaceNdUint8")
+BOOST_AUTO_TEST_CASE(CreateBatchToSpaceNdUint8)
 {
     RefCreateBatchToSpaceNdTest<RefBatchToSpaceNdWorkload, armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateBatchToSpaceNdQSymm16")
+BOOST_AUTO_TEST_CASE(CreateBatchToSpaceNdQSymm16)
 {
     RefCreateBatchToSpaceNdTest<RefBatchToSpaceNdWorkload, armnn::DataType::QSymmS16>();
 }
@@ -944,32 +924,32 @@ static void RefCreateL2NormalizationTest(DataLayout dataLayout)
     CheckInputOutput(std::move(workload), TensorInfo(inputShape, DataType), TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreateL2NormalizationFloat32")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationFloat32)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::Float32>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateL2NormalizationFloat32Nhwc")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationFloat32Nhwc)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::Float32>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreateL2NormalizationInt16")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationInt16)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::QSymmS16>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateL2NormalizationInt16Nhwc")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationInt16Nhwc)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::QSymmS16>(DataLayout::NHWC);
 }
 
-TEST_CASE("CreateL2NormalizationUint8")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationUint8)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::QAsymmU8>(DataLayout::NCHW);
 }
 
-TEST_CASE("CreateL2NormalizationUint8Nhwc")
+BOOST_AUTO_TEST_CASE(CreateL2NormalizationUint8Nhwc)
 {
     RefCreateL2NormalizationTest<RefL2NormalizationWorkload, armnn::DataType::QAsymmU8>(DataLayout::NHWC);
 }
@@ -988,17 +968,17 @@ static void RefCreateReshapeWorkloadTest()
         TensorInfo({ 1, 4 }, DataType));
 }
 
-TEST_CASE("CreateReshapeWorkloadFloat32")
+BOOST_AUTO_TEST_CASE(CreateReshapeWorkloadFloat32)
 {
     RefCreateReshapeWorkloadTest<RefReshapeWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateReshapeWorkloadQuantisedAsymm8")
+BOOST_AUTO_TEST_CASE(CreateReshapeWorkloadQuantisedAsymm8)
 {
     RefCreateReshapeWorkloadTest<RefReshapeWorkload, armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateReshapeWorkloadQuantisedSymm16")
+BOOST_AUTO_TEST_CASE(CreateReshapeWorkloadQuantisedSymm16)
 {
     RefCreateReshapeWorkloadTest<RefReshapeWorkload, armnn::DataType::QSymmS16>();
 }
@@ -1017,52 +997,52 @@ static void RefCreateConcatWorkloadTest(const armnn::TensorShape& outputShape,
                       TensorInfo(outputShape, DataType));
 }
 
-TEST_CASE("CreateConcatDim0Float32Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim0Float32Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::Float32>({ 4, 3, 2, 5 }, 0);
 }
 
-TEST_CASE("CreateConcatDim0Float16Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim0Float16Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::Float16>({ 4, 3, 2, 5 }, 0);
 }
 
-TEST_CASE("CreateConcatDim0Uint8Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim0Uint8Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::QAsymmU8>({ 4, 3, 2, 5 }, 0);
 }
 
-TEST_CASE("CreateConcatDim0Uint16Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim0Uint16Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::QSymmS16>({ 4, 3, 2, 5 }, 0);
 }
 
-TEST_CASE("CreateConcatDim1Float32Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim1Float32Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::Float32>({ 2, 6, 2, 5 }, 1);
 }
 
-TEST_CASE("CreateConcatDim1Uint8Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim1Uint8Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::QAsymmU8>({ 2, 6, 2, 5 }, 1);
 }
 
-TEST_CASE("CreateConcatDim2Float32Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim2Float32Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::Float32>({ 2, 3, 4, 5 }, 2);
 }
 
-TEST_CASE("CreateConcatDim2Uint8Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim2Uint8Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::QAsymmU8>({ 2, 3, 4, 5 }, 2);
 }
 
-TEST_CASE("CreateConcatDim3Float32Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim3Float32Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::Float32>({ 2, 3, 2, 10 }, 3);
 }
 
-TEST_CASE("CreateConcatDim3Uint8Workload")
+BOOST_AUTO_TEST_CASE(CreateConcatDim3Uint8Workload)
 {
     RefCreateConcatWorkloadTest<RefConcatWorkload, armnn::DataType::QAsymmU8>({ 2, 3, 2, 10 }, 3);
 }
@@ -1077,25 +1057,25 @@ static void RefCreateConstantWorkloadTest(const armnn::TensorShape& outputShape)
     // Check output is as expected
     auto queueDescriptor = workload->GetData();
     auto outputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((outputHandle->GetTensorInfo() == TensorInfo(outputShape, DataType)));
+    BOOST_TEST((outputHandle->GetTensorInfo() == TensorInfo(outputShape, DataType)));
 }
 
-TEST_CASE("CreateConstantUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateConstantUint8Workload)
 {
     RefCreateConstantWorkloadTest<RefConstantWorkload, armnn::DataType::QAsymmU8>({ 2, 3, 2, 10 });
 }
 
-TEST_CASE("CreateConstantInt16Workload")
+BOOST_AUTO_TEST_CASE(CreateConstantInt16Workload)
 {
     RefCreateConstantWorkloadTest<RefConstantWorkload, armnn::DataType::QSymmS16>({ 2, 3, 2, 10 });
 }
 
-TEST_CASE("CreateConstantFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateConstantFloat32Workload)
 {
     RefCreateConstantWorkloadTest<RefConstantWorkload, armnn::DataType::Float32>({ 2, 3, 2, 10 });
 }
 
-TEST_CASE("CreateConstantSigned32Workload")
+BOOST_AUTO_TEST_CASE(CreateConstantSigned32Workload)
 {
     RefCreateConstantWorkloadTest<RefConstantWorkload, armnn::DataType::Signed32>({ 2, 3, 2, 10 });
 }
@@ -1117,53 +1097,53 @@ static void RefCreatePreluWorkloadTest(const armnn::TensorShape& inputShape,
     // Check output is as expected
     auto queueDescriptor = workload->GetData();
     auto outputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((outputHandle->GetTensorInfo() == TensorInfo(outputShape, dataType)));
+    BOOST_TEST((outputHandle->GetTensorInfo() == TensorInfo(outputShape, dataType)));
 }
 
-TEST_CASE("CreatePreluFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreatePreluFloat32Workload)
 {
     RefCreatePreluWorkloadTest({ 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 }, armnn::DataType::Float32);
 }
 
-TEST_CASE("CreatePreluFloat16Workload")
+BOOST_AUTO_TEST_CASE(CreatePreluFloat16Workload)
 {
     RefCreatePreluWorkloadTest({ 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 }, armnn::DataType::Float16);
 }
 
-TEST_CASE("CreatePreluUint8Workload")
+BOOST_AUTO_TEST_CASE(CreatePreluUint8Workload)
 {
     RefCreatePreluWorkloadTest({ 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 }, armnn::DataType::QAsymmU8);
 }
 
-TEST_CASE("CreatePreluInt16Workload")
+BOOST_AUTO_TEST_CASE(CreatePreluInt16Workload)
 {
     RefCreatePreluWorkloadTest({ 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 }, armnn::DataType::QSymmS16);
 }
 
-TEST_CASE("CreatePreluFloat32NoBroadcastWorkload")
+BOOST_AUTO_TEST_CASE(CreatePreluFloat32NoBroadcastWorkload)
 {
-    CHECK_THROWS_AS(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
+    BOOST_CHECK_THROW(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
                                                  armnn::DataType::Float32),
                       armnn::InvalidArgumentException);
 }
 
-TEST_CASE("CreatePreluFloat16NoBroadcastWorkload")
+BOOST_AUTO_TEST_CASE(CreatePreluFloat16NoBroadcastWorkload)
 {
-    CHECK_THROWS_AS(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
+    BOOST_CHECK_THROW(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
                                                  armnn::DataType::Float16),
                       armnn::InvalidArgumentException);
 }
 
-TEST_CASE("CreatePreluUint8NoBroadcastWorkload")
+BOOST_AUTO_TEST_CASE(CreatePreluUint8NoBroadcastWorkload)
 {
-    CHECK_THROWS_AS(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
+    BOOST_CHECK_THROW(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
                                                  armnn::DataType::QAsymmU8),
                       armnn::InvalidArgumentException);
 }
 
-TEST_CASE("CreatePreluInt16NoBroadcastWorkload")
+BOOST_AUTO_TEST_CASE(CreatePreluInt16NoBroadcastWorkload)
 {
-    CHECK_THROWS_AS(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
+    BOOST_CHECK_THROW(RefCreatePreluWorkloadTest({ 1, 4, 7, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 },
                                                  armnn::DataType::QSymmS16),
                       armnn::InvalidArgumentException);
 }
@@ -1181,22 +1161,22 @@ static void RefCreateSpaceToDepthWorkloadTest()
                      TensorInfo({ 1, 1, 1, 4 }, DataType));
 }
 
-TEST_CASE("CreateSpaceToDepthWorkloadFloat32")
+BOOST_AUTO_TEST_CASE(CreateSpaceToDepthWorkloadFloat32)
 {
     RefCreateSpaceToDepthWorkloadTest<RefSpaceToDepthWorkload, armnn::DataType::Float32>();
 }
 
-TEST_CASE("CreateSpaceToDepthWorkloadFloat16")
+BOOST_AUTO_TEST_CASE(CreateSpaceToDepthWorkloadFloat16)
 {
     RefCreateSpaceToDepthWorkloadTest<RefSpaceToDepthWorkload, armnn::DataType::Float16>();
 }
 
-TEST_CASE("CreateSpaceToDepthWorkloadQASymm8")
+BOOST_AUTO_TEST_CASE(CreateSpaceToDepthWorkloadQASymm8)
 {
     RefCreateSpaceToDepthWorkloadTest<RefSpaceToDepthWorkload, armnn::DataType::QAsymmU8>();
 }
 
-TEST_CASE("CreateSpaceToDepthWorkloadQSymm16")
+BOOST_AUTO_TEST_CASE(CreateSpaceToDepthWorkloadQSymm16)
 {
     RefCreateSpaceToDepthWorkloadTest<RefSpaceToDepthWorkload, armnn::DataType::QSymmS16>();
 }
@@ -1221,23 +1201,23 @@ static void RefCreateStackWorkloadTest(const armnn::TensorShape& inputShape,
     for (unsigned int i = 0; i < numInputs; ++i)
     {
         auto inputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[i]);
-        CHECK((inputHandle->GetTensorInfo() == TensorInfo(inputShape, DataType)));
+        BOOST_TEST((inputHandle->GetTensorInfo() == TensorInfo(inputShape, DataType)));
     }
     auto outputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((outputHandle->GetTensorInfo() == TensorInfo(outputShape, DataType)));
+    BOOST_TEST((outputHandle->GetTensorInfo() == TensorInfo(outputShape, DataType)));
 }
 
-TEST_CASE("CreateStackFloat32Workload")
+BOOST_AUTO_TEST_CASE(CreateStackFloat32Workload)
 {
     RefCreateStackWorkloadTest<armnn::DataType::Float32>({ 3, 4, 5 }, { 3, 4, 2, 5 }, 2, 2);
 }
 
-TEST_CASE("CreateStackUint8Workload")
+BOOST_AUTO_TEST_CASE(CreateStackUint8Workload)
 {
     RefCreateStackWorkloadTest<armnn::DataType::QAsymmU8>({ 3, 4, 5 }, { 3, 4, 2, 5 }, 2, 2);
 }
 
-TEST_CASE("CreateStackUint16Workload")
+BOOST_AUTO_TEST_CASE(CreateStackUint16Workload)
 {
     RefCreateStackWorkloadTest<armnn::DataType::QSymmS16>({ 3, 4, 5 }, { 3, 4, 2, 5 }, 2, 2);
 }
@@ -1261,57 +1241,14 @@ static void RefCreateQLstmWorkloadTest()
     auto cellStateOutHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[1]);
     auto outputHandle = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[2]);
 
-    CHECK((inputHandle->GetTensorInfo() == inputInfo));
-    CHECK((cellStateOutHandle->GetTensorInfo() == cellStateInfo));
-    CHECK((outputHandle->GetTensorInfo() == outputInfo));
+    BOOST_TEST((inputHandle->GetTensorInfo() == inputInfo));
+    BOOST_TEST((cellStateOutHandle->GetTensorInfo() == cellStateInfo));
+    BOOST_TEST((outputHandle->GetTensorInfo() == outputInfo));
 }
 
-TEST_CASE("CreateQLstmWorkload")
+BOOST_AUTO_TEST_CASE(CreateQLstmWorkload)
 {
     RefCreateQLstmWorkloadTest<RefQLstmWorkload>();
 }
 
-template <armnn::DataType DataType>
-static void RefCreateActivationWorkloadReplaceFunctionsTest()
-{
-    Graph graph;
-    RefWorkloadFactory factory = GetFactory();
-    // input and output are created as armnn::TensorInfo tensorInfo({1, 1}, DataType)
-    auto workloadPtr = CreateActivationWorkloadTest<RefActivationWorkload, DataType>(factory, graph);
-
-    // new input and output tensor handlers are created and then replace in the workload
-    shared_ptr<RefMemoryManager> memoryManager = make_shared<RefMemoryManager>();
-    const RefTensorHandleFactory tensorHandleFactory(memoryManager);
-    TensorInfo inputInfo({2 , 2}, armnn::DataType::Float16);
-    TensorInfo outputInfo({2 , 2}, armnn::DataType::Float16);
-    unique_ptr<ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputInfo);
-    unique_ptr<ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputInfo);
-    unsigned int slot = 0;
-    workloadPtr->ReplaceInputTensorHandle(inputHandle.get(), slot);
-    workloadPtr->ReplaceOutputTensorHandle(outputHandle.get(), slot);
-
-    // Check if the tensor handlers inside the workload are the same as ones we replace with
-    auto queueDescriptor = workloadPtr->GetData();
-    auto inputHandleTest  = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Inputs[0]);
-    auto outputHandleTest = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor.m_Outputs[0]);
-    CHECK((inputHandleTest->GetTensorInfo() == inputInfo));
-    CHECK((outputHandleTest->GetTensorInfo() == outputInfo));
-    CHECK(inputHandle.get() == inputHandleTest);
-    CHECK(outputHandle.get() == outputHandleTest);
-    inputHandle->Allocate();
-    CHECK(inputHandle->Map() == inputHandleTest->Map());
-    outputHandle->Allocate();
-    CHECK(outputHandle->Map() == outputHandleTest->Map());
-}
-
-TEST_CASE("ReplaceFunctionsfromFloat32toFloat16ActivationWorkload")
-{
-    RefCreateActivationWorkloadReplaceFunctionsTest<armnn::DataType::Float32>();
-}
-
-TEST_CASE("ReplaceFunctionsfromUint8toFloat16ActivationWorkload")
-{
-    RefCreateActivationWorkloadReplaceFunctionsTest<armnn::DataType::QAsymmU8>();
-}
-
-}
+BOOST_AUTO_TEST_SUITE_END()

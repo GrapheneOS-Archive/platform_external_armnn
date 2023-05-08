@@ -1,5 +1,5 @@
 #
-# Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
+# Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
@@ -10,8 +10,6 @@ list(APPEND armnnRefBackendWorkloads_sources
     ArgMinMax.cpp
     ArgMinMax.hpp
     BaseIterator.hpp
-    BatchMatMulImpl.cpp
-    BatchMatMulImpl.hpp
     BatchNormImpl.cpp
     BatchNormImpl.hpp
     BatchToSpaceNd.cpp
@@ -20,8 +18,6 @@ list(APPEND armnnRefBackendWorkloads_sources
     Broadcast.hpp
     ConvImpl.cpp
     ConvImpl.hpp
-    Conv3dImpl.cpp
-    Conv3dImpl.hpp
     Debug.cpp
     Debug.hpp
     Decoders.hpp
@@ -43,59 +39,46 @@ list(APPEND armnnRefBackendWorkloads_sources
     Gather.hpp
     InstanceNorm.cpp
     InstanceNorm.hpp
-    Log.hpp
     LogSoftmax.cpp
     LogSoftmax.hpp
-    Lstm.cpp
-    Lstm.hpp
     LstmUtils.hpp
     LstmUtils.cpp
     Maximum.hpp
+    Mean.cpp
+    Mean.hpp
     Concatenate.hpp
     Concatenate.cpp
     Minimum.hpp
-    MirrorPad.cpp
-    MirrorPad.hpp
     Pad.cpp
     Pad.hpp
     Pooling2d.cpp
     Pooling2d.hpp
-    Pooling3d.cpp
-    Pooling3d.hpp
     PreluImpl.cpp
     PreluImpl.hpp
-    Reduce.cpp
-    Reduce.hpp
     RefActivationWorkload.cpp
     RefActivationWorkload.hpp
     RefArgMinMaxWorkload.cpp
     RefArgMinMaxWorkload.hpp
-    RefBaseWorkload.hpp
-    RefBatchMatMulWorkload.cpp
-    RefBatchMatMulWorkload.hpp
     RefBatchNormalizationWorkload.cpp
     RefBatchNormalizationWorkload.hpp
     RefBatchToSpaceNdWorkload.cpp
     RefBatchToSpaceNdWorkload.hpp
-    RefCastWorkload.cpp
-    RefCastWorkload.hpp
-    RefChannelShuffleWorkload.cpp
-    RefChannelShuffleWorkload.hpp
-    RefShapeWorkload.hpp
     RefComparisonWorkload.cpp
     RefComparisonWorkload.hpp
     RefConcatWorkload.cpp
     RefConcatWorkload.hpp
     RefConstantWorkload.cpp
     RefConstantWorkload.hpp
+    RefConvertBf16ToFp32Workload.cpp
+    RefConvertBf16ToFp32Workload.hpp
     RefConvertFp16ToFp32Workload.cpp
     RefConvertFp16ToFp32Workload.hpp
+    RefConvertFp32ToBf16Workload.cpp
+    RefConvertFp32ToBf16Workload.hpp
     RefConvertFp32ToFp16Workload.cpp
     RefConvertFp32ToFp16Workload.hpp
     RefConvolution2dWorkload.cpp
     RefConvolution2dWorkload.hpp
-    RefConvolution3dWorkload.cpp
-    RefConvolution3dWorkload.hpp
     RefElementwiseWorkload.cpp
     RefElementwiseWorkload.hpp
     RefDebugWorkload.cpp
@@ -108,8 +91,6 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefDequantizeWorkload.hpp
     RefDetectionPostProcessWorkload.cpp
     RefDetectionPostProcessWorkload.hpp
-    RefElementwiseBinaryWorkload.cpp
-    RefElementwiseBinaryWorkload.hpp
     RefElementwiseUnaryWorkload.cpp
     RefElementwiseUnaryWorkload.hpp
     RefFakeQuantizationFloat32Workload.cpp
@@ -120,8 +101,6 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefFloorWorkload.hpp
     RefFullyConnectedWorkload.cpp
     RefFullyConnectedWorkload.hpp
-    RefGatherNdWorkload.cpp
-    RefGatherNdWorkload.hpp
     RefGatherWorkload.cpp
     RefGatherWorkload.hpp
     RefInstanceNormalizationWorkload.cpp
@@ -146,8 +125,6 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefPermuteWorkload.hpp
     RefPooling2dWorkload.cpp
     RefPooling2dWorkload.hpp
-    RefPooling3dWorkload.cpp
-    RefPooling3dWorkload.hpp
     RefPreluWorkload.cpp
     RefPreluWorkload.hpp
     RefQuantizeWorkload.cpp
@@ -155,13 +132,12 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefQLstmWorkload.cpp
     RefQLstmWorkload.hpp
     RefRankWorkload.hpp
-    RefReduceWorkload.cpp
-    RefReduceWorkload.hpp
     RefReshapeWorkload.cpp
     RefReshapeWorkload.hpp
+    RefResizeBilinearWorkload.cpp
+    RefResizeBilinearWorkload.hpp
     RefResizeWorkload.cpp
     RefResizeWorkload.hpp
-    RefShapeWorkload.hpp
     RefSliceWorkload.cpp
     RefSliceWorkload.hpp
     RefSoftmaxWorkload.cpp
@@ -180,14 +156,11 @@ list(APPEND armnnRefBackendWorkloads_sources
     RefTransposeConvolution2dWorkload.hpp
     RefTransposeWorkload.cpp
     RefTransposeWorkload.hpp
-    RefUnidirectionalSequenceLstmWorkload.cpp
-    RefUnidirectionalSequenceLstmWorkload.hpp
     RefWorkloads.hpp
     RefWorkloadUtils.hpp
     Resize.cpp
     Resize.hpp
     Rsqrt.hpp
-    Sin.hpp
     Slice.cpp
     Slice.hpp
     Softmax.cpp
@@ -216,4 +189,3 @@ target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/backends)
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/src/profiling)
 target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/common/include)
-target_include_directories(armnnRefBackendWorkloads PRIVATE ${PROJECT_SOURCE_DIR}/profiling/client/include)

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -48,14 +48,8 @@ arm_compute::Status NeonStridedSliceWorkloadValidate(const TensorInfo& input,
 
 NeonStridedSliceWorkload::NeonStridedSliceWorkload(const StridedSliceQueueDescriptor& descriptor,
                                                    const WorkloadInfo& info)
-        : NeonBaseWorkload<StridedSliceQueueDescriptor>(descriptor, info)
+        : BaseWorkload<StridedSliceQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonStridedSliceWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonStridedSliceWorkload", 1, 1);
 
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -93,7 +87,7 @@ NeonStridedSliceWorkload::NeonStridedSliceWorkload(const StridedSliceQueueDescri
 
 void NeonStridedSliceWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonStridedSliceWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonStridedSliceWorkload_Execute");
     m_Layer->run();
 }
 

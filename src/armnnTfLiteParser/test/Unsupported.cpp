@@ -1,73 +1,67 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
-#include <armnn/StrategyBase.hpp>
+#include <armnn/LayerVisitorBase.hpp>
 #include <armnn/utility/Assert.hpp>
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
 #include <layers/StandInLayer.hpp>
 
+#include <boost/test/unit_test.hpp>
+
 #include <sstream>
+#include <string>
 #include <vector>
 
-TEST_SUITE("TensorflowLiteParser_Unsupported")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 using namespace armnn;
 
-class StandInLayerVerifier : public StrategyBase<NoThrowStrategy>
+class StandInLayerVerifier : public LayerVisitorBase<VisitorThrowingPolicy>
 {
 public:
     StandInLayerVerifier(const std::vector<TensorInfo>& inputInfos,
                          const std::vector<TensorInfo>& outputInfos)
-        : m_InputInfos(inputInfos)
+        : LayerVisitorBase<VisitorThrowingPolicy>()
+        , m_InputInfos(inputInfos)
         , m_OutputInfos(outputInfos) {}
 
-    void ExecuteStrategy(const armnn::IConnectableLayer* layer,
-                         const armnn::BaseDescriptor& descriptor,
-                         const std::vector<armnn::ConstTensor>& constants,
-                         const char* name,
-                         const armnn::LayerBindingId id = 0) override
+    void VisitInputLayer(const IConnectableLayer*, LayerBindingId, const char*) override {}
+
+    void VisitOutputLayer(const IConnectableLayer*, LayerBindingId, const char*) override {}
+
+    void VisitStandInLayer(const IConnectableLayer* layer,
+                           const StandInDescriptor& descriptor,
+                           const char*) override
     {
-        armnn::IgnoreUnused(descriptor, constants, id);
-        switch (layer->GetType())
+        unsigned int numInputs = armnn::numeric_cast<unsigned int>(m_InputInfos.size());
+        BOOST_CHECK(descriptor.m_NumInputs    == numInputs);
+        BOOST_CHECK(layer->GetNumInputSlots() == numInputs);
+
+        unsigned int numOutputs = armnn::numeric_cast<unsigned int>(m_OutputInfos.size());
+        BOOST_CHECK(descriptor.m_NumOutputs    == numOutputs);
+        BOOST_CHECK(layer->GetNumOutputSlots() == numOutputs);
+
+        const StandInLayer* standInLayer = PolymorphicDowncast<const StandInLayer*>(layer);
+        for (unsigned int i = 0u; i < numInputs; ++i)
         {
-            case armnn::LayerType::StandIn:
-            {
-                auto standInDescriptor = static_cast<const armnn::StandInDescriptor&>(descriptor);
-                unsigned int numInputs = armnn::numeric_cast<unsigned int>(m_InputInfos.size());
-                        CHECK(standInDescriptor.m_NumInputs    == numInputs);
-                        CHECK(layer->GetNumInputSlots() == numInputs);
+            const OutputSlot* connectedSlot = standInLayer->GetInputSlot(i).GetConnectedOutputSlot();
+            BOOST_CHECK(connectedSlot != nullptr);
 
-                unsigned int numOutputs = armnn::numeric_cast<unsigned int>(m_OutputInfos.size());
-                        CHECK(standInDescriptor.m_NumOutputs    == numOutputs);
-                        CHECK(layer->GetNumOutputSlots() == numOutputs);
+            const TensorInfo& inputInfo = connectedSlot->GetTensorInfo();
+            BOOST_CHECK(inputInfo == m_InputInfos[i]);
+        }
 
-                const StandInLayer* standInLayer = PolymorphicDowncast<const StandInLayer*>(layer);
-                for (unsigned int i = 0u; i < numInputs; ++i)
-                {
-                    const OutputSlot* connectedSlot = standInLayer->GetInputSlot(i).GetConnectedOutputSlot();
-                            CHECK(connectedSlot != nullptr);
-
-                    const TensorInfo& inputInfo = connectedSlot->GetTensorInfo();
-                            CHECK(inputInfo == m_InputInfos[i]);
-                }
-
-                for (unsigned int i = 0u; i < numOutputs; ++i)
-                {
-                    const TensorInfo& outputInfo = layer->GetOutputSlot(i).GetTensorInfo();
-                            CHECK(outputInfo == m_OutputInfos[i]);
-                }
-                break;
-            }
-            default:
-            {
-                m_DefaultStrategy.Apply(GetLayerTypeAsCString(layer->GetType()));
-            }
+        for (unsigned int i = 0u; i < numOutputs; ++i)
+        {
+            const TensorInfo& outputInfo = layer->GetOutputSlot(i).GetTensorInfo();
+            BOOST_CHECK(outputInfo == m_OutputInfos[i]);
         }
     }
 
@@ -174,7 +168,7 @@ public:
     void RunTest()
     {
         INetworkPtr network = m_Parser->CreateNetworkFromBinary(m_GraphBinary);
-        network->ExecuteStrategy(m_StandInLayerVerifier);
+        network->Accept(m_StandInLayerVerifier);
     }
 
 private:
@@ -243,14 +237,14 @@ public:
                              { TensorInfo({ 3, 3 }, DataType::Float32) }) {}
 };
 
-TEST_CASE_FIXTURE(DummyCustom1Input1OutputFixture, "UnsupportedCustomOperator1Input1Output")
+BOOST_FIXTURE_TEST_CASE(UnsupportedCustomOperator1Input1Output, DummyCustom1Input1OutputFixture)
 {
     RunTest();
 }
 
-TEST_CASE_FIXTURE(DummyCustom2Inputs1OutputFixture, "UnsupportedCustomOperator2Inputs1Output")
+BOOST_FIXTURE_TEST_CASE(UnsupportedCustomOperator2Inputs1Output, DummyCustom2Inputs1OutputFixture)
 {
     RunTest();
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

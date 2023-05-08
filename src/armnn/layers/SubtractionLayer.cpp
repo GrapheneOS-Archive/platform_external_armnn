@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> SubtractionLayer::CreateWorkload(const IWorkloadFacto
     SubtractionQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Subtraction, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateSubtraction(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SubtractionLayer* SubtractionLayer::Clone(Graph& graph) const
@@ -32,9 +32,9 @@ SubtractionLayer* SubtractionLayer::Clone(Graph& graph) const
     return CloneBase<SubtractionLayer>(graph, GetName());
 }
 
-void SubtractionLayer::ExecuteStrategy(IStrategy& strategy) const
+void SubtractionLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitSubtractionLayer(this, GetName());
 }
 
 } // namespace armnn

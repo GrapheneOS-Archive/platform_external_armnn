@@ -15,14 +15,8 @@ namespace armnn
 using namespace armcomputetensorutils;
 
 NeonQLstmWorkload::NeonQLstmWorkload(const QLstmQueueDescriptor& descriptor, const WorkloadInfo& info)
-        : NeonBaseWorkload<QLstmQueueDescriptor>(descriptor, info)
+        : BaseWorkload<QLstmQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonQLstmWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     arm_compute::LSTMParams<arm_compute::ITensor> qLstmParams;
 
     // Mandatory params
@@ -236,7 +230,6 @@ NeonQLstmWorkload::NeonQLstmWorkload(const QLstmQueueDescriptor& descriptor, con
 
 void NeonQLstmWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonQuantizedLstmWorkload_Execute", this->GetGuid());
     m_QLstmLayer.run();
 }
 

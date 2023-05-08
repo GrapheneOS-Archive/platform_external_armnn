@@ -2,7 +2,6 @@
 //
 // Copyright (c) 2012 - 2016, Victor Zverovich
 // All rights reserved.
-// SPDX-License-Identifier: MIT
 //
 // For the license information refer to format.h.
 

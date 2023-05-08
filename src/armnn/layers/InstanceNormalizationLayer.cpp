@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> InstanceNormalizationLayer::CreateWorkload(const IWor
     InstanceNormalizationQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::InstanceNormalization, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateInstanceNormalization(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 InstanceNormalizationLayer* InstanceNormalizationLayer::Clone(Graph& graph) const
@@ -46,9 +46,9 @@ void InstanceNormalizationLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "InstanceNormalizationLayer");
 }
 
-void InstanceNormalizationLayer::ExecuteStrategy(IStrategy& strategy) const
+void InstanceNormalizationLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitInstanceNormalizationLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

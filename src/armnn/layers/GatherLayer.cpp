@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> GatherLayer::CreateWorkload(const armnn::IWorkloadFac
     GatherQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Gather, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateGather(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 GatherLayer* GatherLayer::Clone(Graph& graph) const
@@ -31,16 +31,16 @@ GatherLayer* GatherLayer::Clone(Graph& graph) const
     return CloneBase<GatherLayer>(graph, m_Param, GetName());
 }
 
-std::vector<TensorShape> GatherLayer::InferOutputShapes(const std::vector<TensorShape>& inputShapes) const
+void GatherLayer::ValidateTensorShapesFromInputs()
 {
-    ARMNN_ASSERT(inputShapes.size() == 2);
-    const TensorShape& params = inputShapes[0];
-    const TensorShape& indices = inputShapes[1];
+    VerifyLayerConnections(2, CHECK_LOCATION());
 
-    if (indices.GetDimensionality() == Dimensionality::Scalar && indices.GetNumDimensions() == 1)
-    {
-         return std::vector<TensorShape>({ TensorShape(Dimensionality::Scalar)});
-    }
+    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
+
+    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
+
+    const TensorInfo& params = GetInputSlot(0).GetConnection()->GetTensorInfo();
+    const TensorInfo& indices = GetInputSlot(1).GetConnection()->GetTensorInfo();
 
     const unsigned int paramsDim = params.GetNumDimensions();
     const unsigned int indicesDim = indices.GetNumDimensions();
@@ -57,41 +57,25 @@ std::vector<TensorShape> GatherLayer::InferOutputShapes(const std::vector<Tensor
 
     for (unsigned int i = 0; i < axis; ++i)
     {
-        dimSizes.push_back(params[i]);
+        dimSizes.push_back(params.GetShape()[i]);
     }
     for (unsigned int i = axis; i < indicesDim + axis; ++i)
     {
-        dimSizes.push_back(indices[i - axis]);
+        dimSizes.push_back(indices.GetShape()[i - axis]);
     }
     for (unsigned int i = 1 + axis; i < paramsDim; ++i)
     {
-        dimSizes.push_back(params[i]);
+        dimSizes.push_back(params.GetShape()[i]);
     }
 
-    return std::vector<TensorShape>({ TensorShape({outputDim, dimSizes.data()})});
+    const TensorShape& inferredShape = TensorShape(outputDim, dimSizes.data());
+
+    ValidateAndCopyShape(outputShape, inferredShape, m_ShapeInferenceMethod, "GatherLayer");
 }
 
-void GatherLayer::ValidateTensorShapesFromInputs()
+void GatherLayer::Accept(ILayerVisitor& visitor) const
 {
-    VerifyLayerConnections(2, CHECK_LOCATION());
-
-    const TensorShape& outputShape = GetOutputSlot(0).GetTensorInfo().GetShape();
-
-    VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
-
-    std::vector<TensorShape> inferredShapes = InferOutputShapes(
-            {GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-             GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape()});
-    ARMNN_ASSERT(inferredShapes.size() == 1);
-    ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified ||
-                 inferredShapes[0].GetDimensionality() == Dimensionality::Scalar);
-
-    ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "GatherLayer");
-}
-
-void GatherLayer::ExecuteStrategy(IStrategy& strategy) const
-{
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitGatherLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

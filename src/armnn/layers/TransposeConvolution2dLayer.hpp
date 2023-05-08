@@ -9,16 +9,16 @@
 namespace armnn
 {
 
-class ScopedTensorHandle;
+class ScopedCpuTensorHandle;
 
 /// This layer represents a 2D transpose convolution operation.
 class TransposeConvolution2dLayer : public LayerWithParameters<TransposeConvolution2dDescriptor>
 {
 public:
     /// A unique pointer to store weight values.
-    std::shared_ptr<ConstTensorHandle> m_Weight;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Weight;
     /// A unique pointer to store bias values.
-    std::shared_ptr<ConstTensorHandle> m_Bias;
+    std::unique_ptr<ScopedCpuTensorHandle> m_Bias;
 
     /// Makes a workload for the TransposeConvolution2d type.
     /// @param [in] graph The graph where this layer can be found.
@@ -40,8 +40,7 @@ public:
     /// @return A vector of the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-
-    void ExecuteStrategy(IStrategy& strategy) const override;
+    void Accept(ILayerVisitor& visitor) const override;
 
 protected:
     /// Constructor to create a TransposeConvolution2dLayer.
@@ -54,7 +53,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    ImmutableConstantTensors GetConstantTensorsByRef() const override;
+    ConstantTensors GetConstantTensorsByRef() override;
 };
 
 } // namespace armnn

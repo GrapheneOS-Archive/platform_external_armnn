@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/utility/IgnoreUnused.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -37,9 +37,9 @@ void OutputLayer::ValidateTensorShapesFromInputs()
                                                "OutputLayer: Input slot must be connected.");
 }
 
-void OutputLayer::ExecuteStrategy(IStrategy& strategy) const
+void OutputLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName(), GetBindingId());
+    visitor.VisitOutputLayer(this, GetBindingId(), GetName());
 }
 
 } // namespace armnn

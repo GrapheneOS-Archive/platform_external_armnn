@@ -3,17 +3,16 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <TestUtils.hpp>
+#include "../TestUtils.hpp"
 
 #include <Optimizer.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("Optimizer")
-{
+BOOST_AUTO_TEST_SUITE(Optimizer)
 using namespace armnn::optimizations;
 
-TEST_CASE("InsertDebugOptimizationTest")
+BOOST_AUTO_TEST_CASE(InsertDebugOptimizationTest)
 {
     armnn::Graph graph;
 
@@ -32,15 +31,15 @@ TEST_CASE("InsertDebugOptimizationTest")
     input->GetOutputSlot().Connect(floor->GetInputSlot(0));
     floor->GetOutputSlot().Connect(output->GetInputSlot(0));
 
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::FloorLayer>, &IsLayerOfType<armnn::OutputLayer>));
 
     // Run the optimizer
     armnn::Optimizer::Pass(graph, armnn::MakeOptimizations(InsertDebugLayer()));
 
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::DebugLayer>, &IsLayerOfType<armnn::FloorLayer>,
                              &IsLayerOfType<armnn::DebugLayer>, &IsLayerOfType<armnn::OutputLayer>));
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

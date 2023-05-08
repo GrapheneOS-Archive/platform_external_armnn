@@ -33,14 +33,8 @@ arm_compute::Status NeonLogSoftmaxWorkloadValidate(const TensorInfo& input,
 NeonLogSoftmaxWorkload::NeonLogSoftmaxWorkload(const LogSoftmaxQueueDescriptor& descriptor,
                                                const WorkloadInfo& info,
                                                std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager)
-    : NeonBaseWorkload<LogSoftmaxQueueDescriptor>(descriptor, info)
+    : BaseWorkload<LogSoftmaxQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonLogSoftmaxWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonLogSoftmaxWorkload", 1, 1);
 
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -54,7 +48,7 @@ NeonLogSoftmaxWorkload::NeonLogSoftmaxWorkload(const LogSoftmaxQueueDescriptor& 
 
 void NeonLogSoftmaxWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonLogSoftmaxWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonLogSoftmaxWorkload_Execute");
     m_LogSoftmaxLayer->run();
 }
 
