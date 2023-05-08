@@ -12,11 +12,11 @@
 
 #include <armnn/INetwork.hpp>
 
-#include <armnnTestUtils/DataLayoutUtils.hpp>
+#include <backendsCommon/test/DataLayoutUtils.hpp>
 
-#include <TestUtils.hpp>
+#include <test/TestUtils.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 namespace
 {
@@ -36,7 +36,7 @@ armnn::INetworkPtr CreateInstanceNormalizationNetwork(const armnn::TensorShape& 
     // Builds up the structure of the network.
     INetworkPtr net(INetwork::Create());
 
-    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset, true);
+    TensorInfo inputTensorInfo(inputShape, DataType, qScale, qOffset);
 
     InstanceNormalizationDescriptor instanceNormalizationDesc;
     instanceNormalizationDesc.m_Gamma = gamma;
@@ -82,7 +82,7 @@ void InstanceNormalizationEndToEnd(const std::vector<armnn::BackendId>& backends
                                                                             beta,
                                                                             eps);
 
-    CHECK(net);
+    BOOST_TEST_CHECKPOINT("Create a network");
 
     std::map<int, std::vector<float>> inputTensorData = { { 0, inputData } };
     std::map<int, std::vector<float>> expectedOutputTensorData = { { 0, expectedOutputData } };
@@ -104,7 +104,7 @@ void InstanceNormalizationNhwcEndToEndTest1(const std::vector<armnn::BackendId>&
     const float gamma     = 1.0f;
 
     TensorShape inputShape{2, 2, 2, 2};
-    TensorInfo inputTensorInfo(inputShape, DataType::Float32, 0.0f, 0, true);
+    TensorInfo inputTensorInfo(inputShape, DataType::Float32);
 
     TensorShape outputShape{2, 2, 2, 2};
     TensorInfo outputTensorInfo(outputShape, DataType::Float32);
@@ -174,7 +174,7 @@ void InstanceNormalizationNchwEndToEndTest1(const std::vector<armnn::BackendId>&
     const float gamma     = 1.0f;
 
     TensorShape inputShape{2, 2, 2, 2};
-    TensorInfo inputTensorInfo(inputShape, DataType::Float32, 0.0f, 0, true);
+    TensorInfo inputTensorInfo(inputShape, DataType::Float32);
 
     TensorShape outputShape{2, 2, 2, 2};
     TensorInfo outputTensorInfo(outputShape, DataType::Float32);
@@ -248,7 +248,7 @@ void InstanceNormalizationNhwcEndToEndTest2(const std::vector<armnn::BackendId>&
     TensorShape outputShape{2, 2, 2, 2};
 
     TensorInfo outputTensorInfo(outputShape, DataType::Float32);
-    TensorInfo inputTensorInfo(inputShape, DataType::Float32, 0.0f, 0, true);
+    TensorInfo inputTensorInfo(inputShape, DataType::Float32);
 
     std::vector<float> inputData = std::vector<float>(
     {
@@ -319,7 +319,7 @@ void InstanceNormalizationNchwEndToEndTest2(const std::vector<armnn::BackendId>&
     TensorShape outputShape{2, 2, 2, 2};
 
     TensorInfo outputTensorInfo(outputShape, DataType::Float32);
-    TensorInfo inputTensorInfo(inputShape, DataType::Float32, 0.0f, 0, true);
+    TensorInfo inputTensorInfo(inputShape, DataType::Float32);
 
     std::vector<float> inputData = std::vector<float>(
         {

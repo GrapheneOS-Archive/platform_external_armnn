@@ -2,7 +2,7 @@
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <armnn/Optional.hpp>
 #include <string>
@@ -24,46 +24,46 @@ void PassStringRefWithDefault(armnn::Optional<std::string&> value = armnn::Empty
 
 } // namespace <anonymous>
 
-TEST_SUITE("OptionalTests")
-{
-TEST_CASE("SimpleStringTests")
+BOOST_AUTO_TEST_SUITE(OptionalTests)
+
+BOOST_AUTO_TEST_CASE(SimpleStringTests)
 {
     armnn::Optional<std::string> optionalString;
-    CHECK(static_cast<bool>(optionalString) == false);
-    CHECK(optionalString.has_value() == false);
-    CHECK((optionalString == armnn::Optional<std::string>()));
+    BOOST_TEST(static_cast<bool>(optionalString) == false);
+    BOOST_TEST(optionalString.has_value() == false);
+    BOOST_TEST((optionalString == armnn::Optional<std::string>()));
 
     optionalString = std::string("Hello World");
-    CHECK(static_cast<bool>(optionalString) == true);
-    CHECK(optionalString.has_value() == true);
-    CHECK(optionalString.value() == "Hello World");
-    CHECK((optionalString == armnn::Optional<std::string>("Hello World")));
+    BOOST_TEST(static_cast<bool>(optionalString) == true);
+    BOOST_TEST(optionalString.has_value() == true);
+    BOOST_TEST(optionalString.value() == "Hello World");
+    BOOST_TEST((optionalString == armnn::Optional<std::string>("Hello World")));
 
     armnn::Optional<std::string> otherString;
     otherString = optionalString;
-    CHECK(static_cast<bool>(otherString) == true);
-    CHECK(otherString.value() == "Hello World");
+    BOOST_TEST(static_cast<bool>(otherString) == true);
+    BOOST_TEST(otherString.value() == "Hello World");
 
     optionalString.reset();
-    CHECK(static_cast<bool>(optionalString) == false);
-    CHECK(optionalString.has_value() == false);
+    BOOST_TEST(static_cast<bool>(optionalString) == false);
+    BOOST_TEST(optionalString.has_value() == false);
 
     const std::string stringValue("Hello World");
     armnn::Optional<std::string> optionalString2(stringValue);
-    CHECK(static_cast<bool>(optionalString2) == true);
-    CHECK(optionalString2.has_value() == true);
-    CHECK(optionalString2.value() == "Hello World");
+    BOOST_TEST(static_cast<bool>(optionalString2) == true);
+    BOOST_TEST(optionalString2.has_value() == true);
+    BOOST_TEST(optionalString2.value() == "Hello World");
 
     armnn::Optional<std::string> optionalString3(std::move(optionalString2));
-    CHECK(static_cast<bool>(optionalString3) == true);
-    CHECK(optionalString3.has_value() == true);
-    CHECK(optionalString3.value() == "Hello World");
+    BOOST_TEST(static_cast<bool>(optionalString3) == true);
+    BOOST_TEST(optionalString3.has_value() == true);
+    BOOST_TEST(optionalString3.value() == "Hello World");
 }
 
-TEST_CASE("StringRefTests")
+BOOST_AUTO_TEST_CASE(StringRefTests)
 {
     armnn::Optional<std::string&> optionalStringRef{armnn::EmptyOptional()};
-    CHECK(optionalStringRef.has_value() == false);
+    BOOST_TEST(optionalStringRef.has_value() == false);
 
     PassStringRef(optionalStringRef);
     PassStringRefWithDefault();
@@ -74,51 +74,51 @@ TEST_CASE("StringRefTests")
 
     std::string& helloWorldRef = helloWorld;
     armnn::Optional<std::string&> optionalHelloRef = helloWorldRef;
-    CHECK(optionalHelloRef.has_value() == true);
-    CHECK(optionalHelloRef.value() == "Hello World");
+    BOOST_TEST(optionalHelloRef.has_value() == true);
+    BOOST_TEST(optionalHelloRef.value() == "Hello World");
 
     armnn::Optional<std::string&> optionalHelloRef2 = helloWorld;
-    CHECK(optionalHelloRef2.has_value() == true);
-    CHECK(optionalHelloRef2.value() == "Hello World");
+    BOOST_TEST(optionalHelloRef2.has_value() == true);
+    BOOST_TEST(optionalHelloRef2.value() == "Hello World");
 
     armnn::Optional<std::string&> optionalHelloRef3{helloWorldRef};
-    CHECK(optionalHelloRef3.has_value() == true);
-    CHECK(optionalHelloRef3.value() == "Hello World");
+    BOOST_TEST(optionalHelloRef3.has_value() == true);
+    BOOST_TEST(optionalHelloRef3.value() == "Hello World");
 
     armnn::Optional<std::string&> optionalHelloRef4{helloWorld};
-    CHECK(optionalHelloRef4.has_value() == true);
-    CHECK(optionalHelloRef4.value() == "Hello World");
+    BOOST_TEST(optionalHelloRef4.has_value() == true);
+    BOOST_TEST(optionalHelloRef4.value() == "Hello World");
 
     // modify through the optional reference
     optionalHelloRef4.value().assign("Long Other String");
-    CHECK(helloWorld == "Long Other String");
-    CHECK(optionalHelloRef.value() == "Long Other String");
-    CHECK(optionalHelloRef2.value() == "Long Other String");
-    CHECK(optionalHelloRef3.value() == "Long Other String");
+    BOOST_TEST(helloWorld == "Long Other String");
+    BOOST_TEST(optionalHelloRef.value() == "Long Other String");
+    BOOST_TEST(optionalHelloRef2.value() == "Long Other String");
+    BOOST_TEST(optionalHelloRef3.value() == "Long Other String");
 }
 
-TEST_CASE("SimpleIntTests")
+BOOST_AUTO_TEST_CASE(SimpleIntTests)
 {
     const int intValue = 123;
 
     armnn::Optional<int> optionalInt;
-    CHECK(static_cast<bool>(optionalInt) == false);
-    CHECK(optionalInt.has_value() == false);
-    CHECK((optionalInt == armnn::Optional<int>()));
+    BOOST_TEST(static_cast<bool>(optionalInt) == false);
+    BOOST_TEST(optionalInt.has_value() == false);
+    BOOST_TEST((optionalInt == armnn::Optional<int>()));
 
     optionalInt = intValue;
-    CHECK(static_cast<bool>(optionalInt) == true);
-    CHECK(optionalInt.has_value() == true);
-    CHECK(optionalInt.value() == intValue);
-    CHECK((optionalInt == armnn::Optional<int>(intValue)));
+    BOOST_TEST(static_cast<bool>(optionalInt) == true);
+    BOOST_TEST(optionalInt.has_value() == true);
+    BOOST_TEST(optionalInt.value() == intValue);
+    BOOST_TEST((optionalInt == armnn::Optional<int>(intValue)));
 
     armnn::Optional<int> otherOptionalInt;
     otherOptionalInt = optionalInt;
-    CHECK(static_cast<bool>(otherOptionalInt) == true);
-    CHECK(otherOptionalInt.value() == intValue);
+    BOOST_TEST(static_cast<bool>(otherOptionalInt) == true);
+    BOOST_TEST(otherOptionalInt.value() == intValue);
 }
 
-TEST_CASE("ObjectConstructedInPlaceTests")
+BOOST_AUTO_TEST_CASE(ObjectConstructedInPlaceTests)
 {
     struct SimpleObject
     {
@@ -145,15 +145,15 @@ TEST_CASE("ObjectConstructedInPlaceTests")
 
     // Use MakeOptional
     armnn::Optional<SimpleObject> optionalObject1 = armnn::MakeOptional<SimpleObject>(objectName, objectValue);
-    CHECK(static_cast<bool>(optionalObject1) == true);
-    CHECK(optionalObject1.has_value() == true);
-    CHECK((optionalObject1.value() == referenceObject));
+    BOOST_CHECK(static_cast<bool>(optionalObject1) == true);
+    BOOST_CHECK(optionalObject1.has_value() == true);
+    BOOST_CHECK(optionalObject1.value() == referenceObject);
 
     // Call in-place constructor directly
     armnn::Optional<SimpleObject> optionalObject2(CONSTRUCT_IN_PLACE, objectName, objectValue);
-    CHECK(static_cast<bool>(optionalObject1) == true);
-    CHECK(optionalObject1.has_value() == true);
-    CHECK((optionalObject1.value() == referenceObject));
+    BOOST_CHECK(static_cast<bool>(optionalObject1) == true);
+    BOOST_CHECK(optionalObject1.has_value() == true);
+    BOOST_CHECK(optionalObject1.value() == referenceObject);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

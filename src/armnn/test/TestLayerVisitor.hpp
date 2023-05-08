@@ -4,14 +4,13 @@
 //
 #pragma once
 
-#include <armnn/StrategyBase.hpp>
+#include <armnn/LayerVisitorBase.hpp>
 #include <armnn/Descriptors.hpp>
-#include <armnn/backends/TensorHandle.hpp>
 
 namespace armnn
 {
-// Abstract base class with do nothing implementations for all layers
-class TestLayerVisitor : public StrategyBase<NoThrowStrategy>
+// Abstract base class with do nothing implementations for all layer visit methods
+class TestLayerVisitor : public LayerVisitorBase<VisitorNoThrowPolicy>
 {
 protected:
     virtual ~TestLayerVisitor() {}
@@ -20,17 +19,7 @@ protected:
 
     void CheckLayerPointer(const IConnectableLayer* layer);
 
-    void CheckConstTensors(const ConstTensor& expected,
-                           const ConstTensor& actual);
-    void CheckConstTensors(const ConstTensor& expected,
-                           const ConstTensorHandle& actual);
-
-    void CheckConstTensorPtrs(const std::string& name,
-                              const ConstTensor* expected,
-                              const ConstTensor* actual);
-    void CheckConstTensorPtrs(const std::string& name,
-                              const ConstTensor* expected,
-                              const std::shared_ptr<ConstTensorHandle> actual);
+    void CheckConstTensors(const ConstTensor& expected, const ConstTensor& actual);
 
     void CheckOptionalConstTensors(const Optional<ConstTensor>& expected, const Optional<ConstTensor>& actual);
 

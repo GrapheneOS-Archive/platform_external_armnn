@@ -1,16 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
 #include "../TfLiteParser.hpp"
 #include <sstream>
 
-using armnnTfLiteParser::TfLiteParserImpl;
+using armnnTfLiteParser::TfLiteParser;
 
-TEST_SUITE("TensorflowLiteParser_GetBuffer")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct GetBufferFixture : public ParserFlatbuffersFixture
 {
     explicit GetBufferFixture()
@@ -87,42 +88,39 @@ struct GetBufferFixture : public ParserFlatbuffersFixture
         ReadStringToBinary();
     }
 
-    void CheckBufferContents(const TfLiteParserImpl::ModelPtr& model,
+    void CheckBufferContents(const TfLiteParser::ModelPtr& model,
                              std::vector<int32_t> bufferValues, size_t bufferIndex)
     {
         for(long unsigned int i=0; i<bufferValues.size(); i++)
         {
-            CHECK_EQ(TfLiteParserImpl::GetBuffer(model, bufferIndex)->data[i], bufferValues[i]);
+            BOOST_CHECK_EQUAL(TfLiteParser::GetBuffer(model, bufferIndex)->data[i], bufferValues[i]);
         }
     }
 };
 
-TEST_CASE_FIXTURE(GetBufferFixture, "GetBufferCheckContents")
+BOOST_FIXTURE_TEST_CASE(GetBufferCheckContents, GetBufferFixture)
 {
     //Check contents of buffer are correct
-    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
-                                                                             m_GraphBinary.size());
+    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
     std::vector<int32_t> bufferValues = {2,1,0,6,2,1,4,1,2};
     CheckBufferContents(model, bufferValues, 2);
 }
 
-TEST_CASE_FIXTURE(GetBufferFixture, "GetBufferCheckEmpty")
+BOOST_FIXTURE_TEST_CASE(GetBufferCheckEmpty, GetBufferFixture)
 {
     //Check if test fixture buffers are empty or not
-    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
-                                                                             m_GraphBinary.size());
-    CHECK(TfLiteParserImpl::GetBuffer(model, 0)->data.empty());
-    CHECK(TfLiteParserImpl::GetBuffer(model, 1)->data.empty());
-    CHECK(!TfLiteParserImpl::GetBuffer(model, 2)->data.empty());
-    CHECK(TfLiteParserImpl::GetBuffer(model, 3)->data.empty());
+    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    BOOST_CHECK(TfLiteParser::GetBuffer(model, 0)->data.empty());
+    BOOST_CHECK(TfLiteParser::GetBuffer(model, 1)->data.empty());
+    BOOST_CHECK(!TfLiteParser::GetBuffer(model, 2)->data.empty());
+    BOOST_CHECK(TfLiteParser::GetBuffer(model, 3)->data.empty());
 }
 
-TEST_CASE_FIXTURE(GetBufferFixture, "GetBufferCheckParseException")
+BOOST_FIXTURE_TEST_CASE(GetBufferCheckParseException, GetBufferFixture)
 {
     //Check if armnn::ParseException thrown when invalid buffer index used
-    TfLiteParserImpl::ModelPtr model = TfLiteParserImpl::LoadModelFromBinary(m_GraphBinary.data(),
-                                                                             m_GraphBinary.size());
-    CHECK_THROWS_AS(TfLiteParserImpl::GetBuffer(model, 4), armnn::Exception);
+    TfLiteParser::ModelPtr model = TfLiteParser::LoadModelFromBinary(m_GraphBinary.data(), m_GraphBinary.size());
+    BOOST_CHECK_THROW(TfLiteParser::GetBuffer(model, 4), armnn::Exception);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

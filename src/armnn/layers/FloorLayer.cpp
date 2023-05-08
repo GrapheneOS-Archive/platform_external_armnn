@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> FloorLayer::CreateWorkload(const IWorkloadFactory& fa
     FloorQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Floor, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateFloor(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 FloorLayer* FloorLayer::Clone(Graph& graph) const
@@ -45,9 +45,9 @@ void FloorLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "FloorLayer");
 }
 
-void FloorLayer::ExecuteStrategy(IStrategy& strategy) const
+void FloorLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitFloorLayer(this, GetName());
 }
 
 } // namespace armnn

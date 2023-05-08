@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "armnnOnnxParser/IOnnxParser.hpp"
 #include  "ParserPrototxtFixture.hpp"
 
-TEST_SUITE("OnnxParser_Pooling")
-{
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
 struct PoolingMainFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
 {
     PoolingMainFixture(const std::string& dataType, const std::string& op)
@@ -109,7 +110,7 @@ struct MaxPoolInvalidFixture : PoolingMainFixture
     MaxPoolInvalidFixture() : PoolingMainFixture("10", "\"MaxPool\"") { }
 };
 
-TEST_CASE_FIXTURE(MaxPoolValidFixture, "ValidMaxPoolTest")
+BOOST_FIXTURE_TEST_CASE(ValidMaxPoolTest, MaxPoolValidFixture)
 {
     RunTest<4>({{"Input", {1.0f, 2.0f, 3.0f, -4.0f}}}, {{"Output", {3.0f}}});
 }
@@ -216,12 +217,12 @@ struct PoolingWithPadFixture : public armnnUtils::ParserPrototxtFixture<armnnOnn
     }
 };
 
-TEST_CASE_FIXTURE(AvgPoolValidFixture, "AveragePoolValid")
+BOOST_FIXTURE_TEST_CASE(AveragePoolValid, AvgPoolValidFixture)
 {
     RunTest<4>({{"Input", {1.0f, 2.0f, 3.0f, -4.0f}}}, {{"Output", {0.5}}});
 }
 
-TEST_CASE_FIXTURE(PoolingWithPadFixture, "ValidAvgWithPadTest")
+BOOST_FIXTURE_TEST_CASE(ValidAvgWithPadTest, PoolingWithPadFixture)
 {
     RunTest<4>({{"Input", {1.0f, 2.0f, 3.0f, -4.0f}}}, {{"Output", {1.0/8.0}}});
 }
@@ -296,14 +297,14 @@ struct GlobalAvgFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxPars
     }
 };
 
-TEST_CASE_FIXTURE(GlobalAvgFixture, "GlobalAvgTest")
+BOOST_FIXTURE_TEST_CASE(GlobalAvgTest, GlobalAvgFixture)
 {
     RunTest<4>({{"Input", {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0}}}, {{"Output", {10/4.0, 26/4.0}}});
 }
 
-TEST_CASE_FIXTURE(MaxPoolInvalidFixture, "IncorrectDataTypeMaxPool")
+BOOST_FIXTURE_TEST_CASE(IncorrectDataTypeMaxPool, MaxPoolInvalidFixture)
 {
-   CHECK_THROWS_AS(Setup(), armnn::ParseException);
+   BOOST_CHECK_THROW(Setup(), armnn::ParseException);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

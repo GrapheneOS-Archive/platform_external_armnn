@@ -1,11 +1,11 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/NEON/functions/NEDetectionPostProcessLayer.h>
@@ -20,9 +20,9 @@ arm_compute::Status NeonDetectionPostProcessValidate(const TensorInfo& boxEncodi
                                                      const TensorInfo& detectionClasses,
                                                      const TensorInfo& detectionScores,
                                                      const TensorInfo& numDetections,
-                                                     const DetectionPostProcessDescriptor &descriptor);
+                                                     const DetectionPostProcessDescriptor &desc);
 
-class NeonDetectionPostProcessWorkload : public NeonBaseWorkload<DetectionPostProcessQueueDescriptor>
+class NeonDetectionPostProcessWorkload : public BaseWorkload<DetectionPostProcessQueueDescriptor>
 {
 public:
     NeonDetectionPostProcessWorkload(

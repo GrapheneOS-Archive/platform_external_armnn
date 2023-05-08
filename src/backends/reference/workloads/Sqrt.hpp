@@ -9,12 +9,9 @@
 
 namespace armnn
 {
-template<typename T>
-struct sqrt
+    template<typename T>
+struct sqrt : public std::unary_function<T, T>
     {
-        typedef T result_type;
-        typedef T argument_type;
-
         T
         operator () (const T&  inputData) const
         {

@@ -4,13 +4,11 @@
 //
 #pragma once
 
-#include <common/include/ProfilingGuid.hpp>
 #include "ProfilingEvent.hpp"
-#include "ProfilingDetails.hpp"
+
+#include <armnn/utility/IgnoreUnused.hpp>
 #include "armnn/IProfiler.hpp"
 
-#include <armnn/Optional.hpp>
-#include <armnn/utility/IgnoreUnused.hpp>
 #include "WallClockTimer.hpp"
 
 #include <chrono>
@@ -26,58 +24,41 @@ namespace armnn
 // Simple single-threaded profiler.
 // Tracks events reported by BeginEvent()/EndEvent() and outputs detailed information and stats when
 // Profiler::AnalyzeEventsAndWriteResults() is called.
-class ProfilerImpl
+class Profiler final : public IProfiler
 {
 public:
-    ProfilerImpl();
-    ~ProfilerImpl();
+    Profiler();
+    ~Profiler();
     using InstrumentPtr = std::unique_ptr<Instrument>;
 
     // Marks the beginning of a user-defined event.
     // No attempt will be made to copy the name string: it must be known at compile time.
-    Event* BeginEvent(armnn::IProfiler* profiler,
-                      const BackendId& backendId,
-                      const std::string& name,
-                      std::vector<InstrumentPtr>&& instruments,
-                      const Optional<arm::pipe::ProfilingGuid>& guid);
-
-    template<typename DescriptorType>
-    void AddLayerDetails(const std::string& label,
-                         const DescriptorType& desc,
-                         const WorkloadInfo& infos,
-                         const arm::pipe::ProfilingGuid guid)
-    {
-        m_ProfilingDetails->AddDetailsToString(label, desc, infos, guid);
-    }
+    Event* BeginEvent(const BackendId& backendId, const std::string& name, std::vector<InstrumentPtr>&& instruments);
 
     // Marks the end of a user-defined event.
     void EndEvent(Event* event);
 
     // Enables/disables profiling.
-    void EnableProfiling(bool enableProfiling);
+    void EnableProfiling(bool enableProfiling) override;
 
     // Checks if profiling is enabled.
-    bool IsProfilingEnabled();
-
-    // Enables outputting the layer descriptors and infos to stdout
-    void EnableNetworkDetailsToStdOut(ProfilingDetailsMethod detailsMethod);
+    bool IsProfilingEnabled() override;
 
     // Increments the event tag, allowing grouping of events in a user-defined manner (e.g. per inference).
     void UpdateEventTag();
 
     // Analyzes the tracked events and writes the results to the given output stream.
     // Please refer to the configuration variables in Profiling.cpp to customize the information written.
-    void AnalyzeEventsAndWriteResults(std::ostream& outStream) const;
+    void AnalyzeEventsAndWriteResults(std::ostream& outStream) const override;
 
     // Print stats for events in JSON Format to the given output stream.
-    void Print(std::ostream& outStream) const;
+    void Print(std::ostream& outStream) const override;
 
     // Gets the color to render an event with, based on which device it denotes.
     uint32_t GetEventColor(const BackendId& backendId) const;
 
+private:
     using EventPtr = std::unique_ptr<Event>;
-    using DescPtr = std::unique_ptr<ProfilingDetails>;
-
     struct Marker
     {
         std::size_t m_Id;
@@ -95,15 +76,16 @@ public:
     void AnalyzeEventSequenceAndWriteResults(EventIterType first, EventIterType last, std::ostream& outStream) const;
 
     std::map<std::string, ProfilingEventStats> CalculateProfilingEventStats() const;
-    void PopulateParent(std::vector<const Event*>& outEvents, int& outBaseLevel, std::string parentName) const;
+    void PopulateInferences(std::vector<const Event*>& outInferences, int& outBaseLevel) const;
     void PopulateDescendants(std::map<const Event*, std::vector<const Event*>>& outDescendantsMap) const;
 
     std::stack<Event*> m_Parents;
     std::vector<EventPtr> m_EventSequence;
-    DescPtr m_ProfilingDetails = std::make_unique<ProfilingDetails>();
     bool m_ProfilingEnabled;
-    ProfilingDetailsMethod m_DetailsToStdOutMethod;
 
+private:
+    // Friend functions for unit testing, see ProfilerTests.cpp.
+    friend size_t GetProfilerEventSequenceSize(armnn::Profiler* profiler);
 };
 
 // Singleton profiler manager.
@@ -112,10 +94,10 @@ class ProfilerManager
 {
 public:
     // Register the given profiler as a thread local pointer.
-    void RegisterProfiler(IProfiler* profiler);
+    void RegisterProfiler(Profiler* profiler);
 
     // Gets the thread local pointer to the profiler.
-    IProfiler* GetProfiler();
+    Profiler* GetProfiler();
 
     // Accesses the singleton.
     static ProfilerManager& GetInstance();
@@ -133,10 +115,7 @@ public:
     using InstrumentPtr = std::unique_ptr<Instrument>;
 
     template<typename... Args>
-    ScopedProfilingEvent(const BackendId& backendId,
-                         const Optional<arm::pipe::ProfilingGuid>& guid,
-                         const std::string& name,
-                         Args&& ... args)
+    ScopedProfilingEvent(const BackendId& backendId, const std::string& name, Args&&... args)
         : m_Event(nullptr)
         , m_Profiler(ProfilerManager::GetInstance().GetProfiler())
     {
@@ -145,7 +124,7 @@ public:
             std::vector<InstrumentPtr> instruments(0);
             instruments.reserve(sizeof...(args)); //One allocation
             ConstructNextInVector(instruments, std::forward<Args>(args)...);
-            m_Event = m_Profiler->BeginEvent(backendId, name, std::move(instruments), guid);
+            m_Event = m_Profiler->BeginEvent(backendId, name, std::move(instruments));
         }
     }
 
@@ -153,7 +132,7 @@ public:
     {
         if (m_Profiler && m_Event)
         {
-            m_Profiler->pProfilerImpl->EndEvent(m_Event);
+            m_Profiler->EndEvent(m_Event);
         }
     }
 
@@ -172,40 +151,16 @@ private:
     }
 
     Event* m_Event;       ///< Event to track
-    IProfiler* m_Profiler; ///< Profiler used
+    Profiler* m_Profiler; ///< Profiler used
 };
-
-// Helper to easily add operator details during profiling.
-template<typename DescriptorType>
-inline void ProfilingUpdateDescriptions(const std::string& name,
-                                        const DescriptorType& desc,
-                                        const WorkloadInfo& infos,
-                                        const arm::pipe::ProfilingGuid guid)
-{
-    IProfiler* profiler(ProfilerManager::GetInstance().GetProfiler()); ///< Profiler used
-    if (profiler && profiler->IsProfilingEnabled())
-    {
-        profiler->AddLayerDetails(name, desc, infos, guid);
-    }
-}
-
-template<typename DescriptorType>
-void IProfiler::AddLayerDetails(const std::string& name,
-                                const DescriptorType& desc,
-                                const WorkloadInfo& infos,
-                                const arm::pipe::ProfilingGuid guid)
-{
-    return pProfilerImpl->AddLayerDetails(name, desc, infos, guid);
-}
 
 } // namespace armnn
 
-// Event Definitions for profiling
-#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, guid, /*name,*/ ...) \
-    armnn::ScopedProfilingEvent e_ ## lineNumber(backendId, guid, /*name,*/ __VA_ARGS__);
+#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, /*name,*/ ...) \
+    armnn::ScopedProfilingEvent e_ ## lineNumber(backendId, /*name,*/ __VA_ARGS__);
 
-#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(lineNumber, backendId, guid, /*name,*/ ...) \
-    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, guid, /*name,*/ __VA_ARGS__)
+#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(lineNumber, backendId, /*name,*/ ...) \
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC_INNER(lineNumber, backendId, /*name,*/ __VA_ARGS__)
 
 // The event name must be known at compile time i.e. if you are going to use this version of the macro
 // in code the first argument you supply after the backendId must be the name.
@@ -214,15 +169,8 @@ void IProfiler::AddLayerDetails(const std::string& name,
 //       legal and unique variable name (so long as you don't use the macro twice on the same line).
 //       The concat preprocessing operator (##) very unhelpfully will not expand macros see
 //       https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html for the gory details.
-#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, guid, /*name,*/ ...) \
-    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(__LINE__,backendId, guid, /*name,*/ __VA_ARGS__)
+#define ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, /*name,*/ ...) \
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS_UNIQUE_LOC(__LINE__,backendId, /*name,*/ __VA_ARGS__)
 
 #define ARMNN_SCOPED_PROFILING_EVENT(backendId, name) \
-    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, armnn::EmptyOptional(), name, armnn::WallClockTimer())
-
-#define ARMNN_SCOPED_PROFILING_EVENT_GUID(backendId, name, guid) \
-    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, guid, name, armnn::WallClockTimer())
-
-// Workload Description definitons for profiling
-#define ARMNN_REPORT_PROFILING_WORKLOAD_DESC(name, desc, infos, guid) \
-    armnn::ProfilingUpdateDescriptions(name, desc, infos, guid);
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(backendId, name, armnn::WallClockTimer())

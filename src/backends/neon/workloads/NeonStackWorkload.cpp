@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "NeonStackWorkload.hpp"
@@ -8,7 +8,7 @@
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 namespace armnn
@@ -47,14 +47,8 @@ arm_compute::Status NeonStackWorkloadValidate(const std::vector<const TensorInfo
 }
 
 NeonStackWorkload::NeonStackWorkload(const StackQueueDescriptor& descriptor, const WorkloadInfo& info)
-: NeonBaseWorkload<StackQueueDescriptor>(descriptor, info)
+: BaseWorkload<StackQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonStackWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     std::vector<arm_compute::ITensor*> aclInputs;
     for (auto input : m_Data.m_Inputs)
     {
@@ -73,7 +67,7 @@ void NeonStackWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonStackWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonStackWorkload_Execute");
         m_Layer->run();
     }
 }

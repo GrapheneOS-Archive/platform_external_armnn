@@ -3,15 +3,17 @@
 // SPDX-License-Identifier: MIT
 //
 
+
 #include "ClTensorHandleFactory.hpp"
 #include "ClTensorHandle.hpp"
 
 #include <armnn/utility/NumericCast.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
+#include <arm_compute/runtime/CL/CLTensor.h>
 #include <arm_compute/core/Coordinates.h>
 #include <arm_compute/runtime/CL/CLSubTensor.h>
-#include <arm_compute/runtime/CL/CLTensor.h>
+
 
 namespace armnn
 {
@@ -33,7 +35,8 @@ std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateSubTensorHandle(ITen
         coords.set(i, armnn::numeric_cast<int>(subTensorOrigin[revertedIndex]));
     }
 
-    const arm_compute::TensorShape parentShape = armcomputetensorutils::BuildArmComputeTensorShape(parent.GetShape());
+    const arm_compute::TensorShape parentShape = armcomputetensorutils::BuildArmComputeTensorShape(
+            parent.GetShape());
 
     // In order for ACL to support subtensors the concat axis cannot be on x or y and the values of x and y
     // must match the parent shapes
@@ -51,7 +54,8 @@ std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateSubTensorHandle(ITen
         return nullptr;
     }
 
-    return std::make_unique<ClSubTensorHandle>(PolymorphicDowncast<IClTensorHandle*>(&parent), shape, coords);
+    return std::make_unique<ClSubTensorHandle>(
+            PolymorphicDowncast<IClTensorHandle *>(&parent), shape, coords);
 }
 
 std::unique_ptr<ITensorHandle> ClTensorHandleFactory::CreateTensorHandle(const TensorInfo& tensorInfo) const
@@ -108,12 +112,12 @@ bool ClTensorHandleFactory::SupportsSubTensors() const
 
 MemorySourceFlags ClTensorHandleFactory::GetExportFlags() const
 {
-    return MemorySourceFlags(MemorySource::Undefined);
+    return m_ExportFlags;
 }
 
 MemorySourceFlags ClTensorHandleFactory::GetImportFlags() const
 {
-    return MemorySourceFlags(MemorySource::Undefined);
+    return m_ImportFlags;
 }
 
-}    // namespace armnn
+} // namespace armnn

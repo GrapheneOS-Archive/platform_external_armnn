@@ -7,7 +7,6 @@
 
 #include <ostream>
 #include <cmath>
-#include <cstring>
 #include <stdint.h>
 
 namespace armnn
@@ -86,10 +85,8 @@ public:
     float ToFloat32() const
     {
         const uint32_t u32 = static_cast<uint32_t>(m_Value << 16u);
-        float f32;
-        static_assert(sizeof u32 == sizeof f32, "");
-        std::memcpy(&f32, &u32, sizeof u32);
-        return f32;
+        const float* f32 = reinterpret_cast<const float*>(&u32);
+        return *f32;
     }
 
     uint16_t Val() const

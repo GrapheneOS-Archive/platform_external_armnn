@@ -3,19 +3,18 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <TestUtils.hpp>
+#include "../TestUtils.hpp"
 
 #include <Optimizer.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 using namespace armnn;
 
-TEST_SUITE("Optimizer")
-{
+BOOST_AUTO_TEST_SUITE(Optimizer)
 using namespace armnn::optimizations;
 
-TEST_CASE("TransposeAsReshapeTest")
+BOOST_AUTO_TEST_CASE(TransposeAsReshapeTest)
 {
     armnn::Graph graph;
 
@@ -37,7 +36,7 @@ TEST_CASE("TransposeAsReshapeTest")
             ->GetOutputHandler()
             .SetTensorInfo(infoOut);
 
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>,
                              &IsLayerOfType<armnn::TransposeLayer>, &IsLayerOfType<armnn::OutputLayer>));
 
     armnn::Optimizer::Pass(graph, armnn::MakeOptimizations(TransposeAsReshape()));
@@ -51,11 +50,11 @@ TEST_CASE("TransposeAsReshapeTest")
                (reshapeLayer->GetOutputHandler().GetTensorInfo().GetShape() == infoOut.GetShape());
     };
 
-    CHECK(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>, checkReshape,
+    BOOST_TEST(CheckSequence(graph.cbegin(), graph.cend(), &IsLayerOfType<armnn::InputLayer>, checkReshape,
                              &IsLayerOfType<armnn::OutputLayer>));
 
     std::list<std::string> testRelatedLayers = { transposeLayerName };
-    CHECK(CheckRelatedLayers<armnn::ReshapeLayer>(graph, testRelatedLayers));
+    BOOST_TEST(CheckRelatedLayers<armnn::ReshapeLayer>(graph, testRelatedLayers));
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

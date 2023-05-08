@@ -5,14 +5,14 @@
 
 #pragma once
 
-#include <client/include/ILocalPacketHandler.hpp>
+#include <armnn/profiling/ILocalPacketHandler.hpp>
 
 #include <common/include/Packet.hpp>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
 
 class PrintPacketHeaderHandler : public ILocalPacketHandler
@@ -22,6 +22,6 @@ class PrintPacketHeaderHandler : public ILocalPacketHandler
     virtual void HandlePacket(const arm::pipe::Packet& packet);
 };
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/core/Types.h>
@@ -20,7 +20,7 @@ arm_compute::Status NeonMultiplicationWorkloadValidate(const TensorInfo& input0,
                                                        const TensorInfo& output,
                                                        const ActivationDescriptor* activationDescriptor = nullptr);
 
-class NeonMultiplicationWorkload : public NeonBaseWorkload<MultiplicationQueueDescriptor>
+class NeonMultiplicationWorkload : public BaseWorkload<MultiplicationQueueDescriptor>
 {
 public:
     NeonMultiplicationWorkload(const MultiplicationQueueDescriptor& descriptor, const WorkloadInfo& info);

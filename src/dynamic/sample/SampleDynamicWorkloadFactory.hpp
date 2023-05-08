@@ -7,7 +7,7 @@
 #include "SampleMemoryManager.hpp"
 
 #include <armnn/Optional.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace sdb // sample dynamic backend
 {

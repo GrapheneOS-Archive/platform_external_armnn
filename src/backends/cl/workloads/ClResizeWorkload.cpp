@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <cl/ClTensorHandle.hpp>
 
@@ -46,17 +46,9 @@ arm_compute::Status ClResizeWorkloadValidate(const TensorInfo& input,
                                                                        descriptor.m_AlignCorners));
 }
 
-ClResizeWorkload::ClResizeWorkload(const ResizeQueueDescriptor& descriptor,
-                                   const WorkloadInfo& info,
-                                   const arm_compute::CLCompileContext& clCompileContext)
-  : ClBaseWorkload<ResizeQueueDescriptor>(descriptor, info)
+ClResizeWorkload::ClResizeWorkload(const ResizeQueueDescriptor& descriptor, const WorkloadInfo& info) :
+    BaseWorkload<ResizeQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClResizeWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("ClResizeWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -73,24 +65,20 @@ ClResizeWorkload::ClResizeWorkload(const ResizeQueueDescriptor& descriptor,
                                                  ? arm_compute::SamplingPolicy::CENTER
                                                  : arm_compute::SamplingPolicy::TOP_LEFT;
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClResizeWorkload_configure");
-        m_ResizeLayer.configure(clCompileContext,
-                                &input,
-                                &output,
-                                arm_compute::ScaleKernelInfo(aclInterpolationPolicy,
-                                                             arm_compute::BorderMode::REPLICATE,
-                                                             arm_compute::PixelValue(0.f),
-                                                             samplingPolicy,
-                                                             true,
-                                                             descriptor.m_Parameters.m_AlignCorners));
-    }
+    m_ResizeLayer.configure(&input,
+                            &output,
+                            arm_compute::ScaleKernelInfo(aclInterpolationPolicy,
+                                                         arm_compute::BorderMode::REPLICATE,
+                                                         arm_compute::PixelValue(0.f),
+                                                         samplingPolicy,
+                                                         true,
+                                                         descriptor.m_Parameters.m_AlignCorners));
 
 };
 
 void ClResizeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClResizeWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClResizeWorkload_Execute");
     RunClFunction(m_ResizeLayer, CHECK_LOCATION());
 }
 

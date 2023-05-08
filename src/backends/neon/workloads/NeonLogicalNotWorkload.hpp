@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/NEON/functions/NELogical.h>
@@ -15,7 +15,7 @@ namespace armnn
 
 arm_compute::Status NeonLogicalNotWorkloadValidate(const TensorInfo& input, const TensorInfo& output);
 
-class NeonLogicalNotWorkload : public NeonBaseWorkload<ElementwiseUnaryQueueDescriptor>
+class NeonLogicalNotWorkload : public BaseWorkload<ElementwiseUnaryQueueDescriptor>
 {
 public:
     NeonLogicalNotWorkload(const ElementwiseUnaryQueueDescriptor& descriptor, const WorkloadInfo& info);

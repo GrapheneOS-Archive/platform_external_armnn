@@ -4,10 +4,10 @@
 //
 #pragma once
 
-#include <CreateWorkload.hpp>
-#include <armnnTestUtils/PredicateResult.hpp>
+#include <test/CreateWorkload.hpp>
+
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/MemCopyWorkload.hpp>
+#include <backendsCommon/MemCopyWorkload.hpp>
 #include <reference/RefWorkloadFactory.hpp>
 #include <reference/RefTensorHandle.hpp>
 
@@ -19,8 +19,6 @@
 #include <neon/NeonTensorHandle.hpp>
 #endif
 
-#include <doctest/doctest.h>
-
 using namespace armnn;
 
 namespace
@@ -29,8 +27,8 @@ namespace
 using namespace std;
 
 template<typename IComputeTensorHandle>
-PredicateResult CompareTensorHandleShape(IComputeTensorHandle* tensorHandle,
-                                         std::initializer_list<unsigned int> expectedDimensions)
+boost::test_tools::predicate_result CompareTensorHandleShape(IComputeTensorHandle*               tensorHandle,
+                                                             std::initializer_list<unsigned int> expectedDimensions)
 {
     arm_compute::ITensorInfo* info = tensorHandle->GetTensor().info();
 
@@ -38,8 +36,8 @@ PredicateResult CompareTensorHandleShape(IComputeTensorHandle* tensorHandle,
     auto numExpectedDims = expectedDimensions.size();
     if (infoNumDims != numExpectedDims)
     {
-        PredicateResult res(false);
-        res.Message() << "Different number of dimensions [" << info->num_dimensions()
+        boost::test_tools::predicate_result res(false);
+        res.message() << "Different number of dimensions [" << info->num_dimensions()
                       << "!=" << expectedDimensions.size() << "]";
         return res;
     }
@@ -50,8 +48,8 @@ PredicateResult CompareTensorHandleShape(IComputeTensorHandle* tensorHandle,
     {
         if (info->dimension(i) != expectedDimension)
         {
-            PredicateResult res(false);
-            res.Message() << "For dimension " << i <<
+            boost::test_tools::predicate_result res(false);
+            res.message() << "For dimension " << i <<
                              " expected size " << expectedDimension <<
                              " got " << info->dimension(i);
             return res;
@@ -60,7 +58,7 @@ PredicateResult CompareTensorHandleShape(IComputeTensorHandle* tensorHandle,
         i--;
     }
 
-    return PredicateResult(true);
+    return true;
 }
 
 template<typename IComputeTensorHandle>
@@ -94,23 +92,21 @@ void CreateMemCopyWorkloads(IWorkloadFactory& factory)
     auto workload2 = MakeAndCheckWorkload<CopyMemGenericWorkload>(*layer2, refFactory);
 
     MemCopyQueueDescriptor queueDescriptor1 = workload1->GetData();
-    CHECK(queueDescriptor1.m_Inputs.size() == 1);
-    CHECK(queueDescriptor1.m_Outputs.size() == 1);
+    BOOST_TEST(queueDescriptor1.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor1.m_Outputs.size() == 1);
     auto inputHandle1  = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor1.m_Inputs[0]);
     auto outputHandle1 = PolymorphicDowncast<IComputeTensorHandle*>(queueDescriptor1.m_Outputs[0]);
-    CHECK((inputHandle1->GetTensorInfo() == TensorInfo({2, 3}, DataType::Float32)));
-    auto result = CompareTensorHandleShape<IComputeTensorHandle>(outputHandle1, {2, 3});
-    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
+    BOOST_TEST((inputHandle1->GetTensorInfo() == TensorInfo({2, 3}, DataType::Float32)));
+    BOOST_TEST(CompareTensorHandleShape<IComputeTensorHandle>(outputHandle1, {2, 3}));
 
 
     MemCopyQueueDescriptor queueDescriptor2 = workload2->GetData();
-    CHECK(queueDescriptor2.m_Inputs.size() == 1);
-    CHECK(queueDescriptor2.m_Outputs.size() == 1);
+    BOOST_TEST(queueDescriptor2.m_Inputs.size() == 1);
+    BOOST_TEST(queueDescriptor2.m_Outputs.size() == 1);
     auto inputHandle2  = PolymorphicDowncast<IComputeTensorHandle*>(queueDescriptor2.m_Inputs[0]);
     auto outputHandle2 = PolymorphicDowncast<RefTensorHandle*>(queueDescriptor2.m_Outputs[0]);
-    result = CompareTensorHandleShape<IComputeTensorHandle>(inputHandle2, {2, 3});
-    CHECK_MESSAGE(result.m_Result, result.m_Message.str());
-    CHECK((outputHandle2->GetTensorInfo() == TensorInfo({2, 3}, DataType::Float32)));
+    BOOST_TEST(CompareTensorHandleShape<IComputeTensorHandle>(inputHandle2, {2, 3}));
+    BOOST_TEST((outputHandle2->GetTensorInfo() == TensorInfo({2, 3}, DataType::Float32)));
 }
 
 } //namespace

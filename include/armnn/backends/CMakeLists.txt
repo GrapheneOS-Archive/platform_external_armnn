@@ -4,12 +4,11 @@
 #
 
 list(APPEND armnnBackendsAPI_sources
-     TensorHandleFwd.hpp
+     CpuTensorHandleFwd.hpp
      DynamicBackend.hpp
      IBackendInternal.hpp
      IBackendContext.hpp
      IMemoryManager.hpp
-     IMemoryOptimizerStrategy.hpp
      ITensorHandle.hpp
      ITensorHandleFactory.hpp
      IWorkload.hpp

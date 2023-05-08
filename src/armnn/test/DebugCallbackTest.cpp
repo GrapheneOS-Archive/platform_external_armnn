@@ -1,5 +1,5 @@
 //
-// Copyright © 2017, 2023 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,10 +9,10 @@
 #include <armnn/Types.hpp>
 #include <Runtime.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-TEST_SUITE("DebugCallback")
-{
+BOOST_AUTO_TEST_SUITE(DebugCallback)
+
 namespace
 {
 
@@ -39,7 +39,7 @@ INetworkPtr CreateSimpleNetwork()
     return net;
 }
 
-TEST_CASE("RuntimeRegisterDebugCallback")
+BOOST_AUTO_TEST_CASE(RuntimeRegisterDebugCallback)
 {
     INetworkPtr net = CreateSimpleNetwork();
 
@@ -47,12 +47,12 @@ TEST_CASE("RuntimeRegisterDebugCallback")
     IRuntimePtr runtime(IRuntime::Create(options));
 
     // Optimize the network with debug option
-    OptimizerOptionsOpaque optimizerOptions(false, true);
+    OptimizerOptions optimizerOptions(false, true);
     std::vector<BackendId> backends = { "CpuRef" };
     IOptimizedNetworkPtr optNet = Optimize(*net, backends, runtime->GetDeviceSpec(), optimizerOptions);
 
     NetworkId netId;
-    CHECK(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
+    BOOST_TEST(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
 
     // Set up callback function
     int callCount = 0;
@@ -60,7 +60,7 @@ TEST_CASE("RuntimeRegisterDebugCallback")
     std::vector<unsigned int> slotIndexes;
     auto mockCallback = [&](LayerGuid guid, unsigned int slotIndex, ITensorHandle* tensor)
     {
-        armnn::IgnoreUnused(guid);
+        IgnoreUnused(guid);
         slotIndexes.push_back(slotIndex);
         tensorShapes.push_back(tensor->GetShape());
         callCount++;
@@ -71,11 +71,9 @@ TEST_CASE("RuntimeRegisterDebugCallback")
     std::vector<float> inputData({-2, -1, 0, 1, 2});
     std::vector<float> outputData(5);
 
-    TensorInfo inputTensorInfo = runtime->GetInputTensorInfo(netId, 0);
-    inputTensorInfo.SetConstant(true);
     InputTensors inputTensors
     {
-        {0, ConstTensor(inputTensorInfo, inputData.data())}
+        {0, ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData.data())}
     };
     OutputTensors outputTensors
     {
@@ -85,17 +83,17 @@ TEST_CASE("RuntimeRegisterDebugCallback")
     runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
     // Check that the callback was called twice
-    CHECK(callCount == 2);
+    BOOST_TEST(callCount == 2);
 
     // Check that tensor handles passed to callback have correct shapes
     const std::vector<TensorShape> expectedShapes({TensorShape({1, 1, 1, 5}), TensorShape({1, 1, 1, 5})});
-    CHECK(tensorShapes == expectedShapes);
+    BOOST_TEST(tensorShapes == expectedShapes);
 
     // Check that slot indexes passed to callback are correct
     const std::vector<unsigned int> expectedSlotIndexes({0, 0});
-    CHECK(slotIndexes == expectedSlotIndexes);
+    BOOST_TEST(slotIndexes == expectedSlotIndexes);
 }
 
 } // anonymous namespace
 
-}
+BOOST_AUTO_TEST_SUITE_END()

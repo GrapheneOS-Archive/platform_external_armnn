@@ -6,7 +6,6 @@
 #include "NeonBackend.hpp"
 
 #include <armnn/BackendRegistry.hpp>
-#include <armnn/Utils.hpp>
 
 namespace
 {
@@ -19,16 +18,7 @@ static BackendRegistry::StaticRegistryInitializer g_RegisterHelper
     NeonBackend::GetIdStatic(),
     []()
     {
-        // Check if device supports Neon.
-        if (NeonDetected())
-        {
-            return IBackendInternalUniquePtr(new NeonBackend);
-        }
-
-        // If device does not support Neon throw exception so the Backend is not added to supportedBackends
-        ARMNN_LOG(info) << "Neon support not found on device, could not register CpuAcc Backend.";
-        throw armnn::BackendUnavailableException(
-                "Neon support not found on device, could not register CpuAcc Backend.\n");
+        return IBackendInternalUniquePtr(new NeonBackend);
     }
 };
 

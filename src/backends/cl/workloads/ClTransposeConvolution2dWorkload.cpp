@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -14,7 +14,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLDeconvolutionLayer.h>
 
@@ -56,28 +56,10 @@ arm_compute::Status ClTransposeConvolution2dWorkloadValidate(const TensorInfo& i
 ClTransposeConvolution2dWorkload::ClTransposeConvolution2dWorkload(
     const TransposeConvolution2dQueueDescriptor& descriptor,
     const WorkloadInfo& info,
-    std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager,
-    const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<TransposeConvolution2dQueueDescriptor>(descriptor, info)
-    , m_Layer(memoryManager)
+    std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager) :
+    BaseWorkload<TransposeConvolution2dQueueDescriptor>(descriptor, info),
+    m_Layer(memoryManager)
 {
-    // Add details for profiling output
-    WorkloadInfo detailsInfo;
-
-    detailsInfo.m_InputTensorInfos = info.m_InputTensorInfos;
-    detailsInfo.m_OutputTensorInfos = info.m_OutputTensorInfos;
-    detailsInfo.m_WeightsTensorInfo = armnn::Optional<armnn::TensorInfo>(descriptor.m_Weight->GetTensorInfo());
-    if (descriptor.m_Parameters.m_BiasEnabled)
-    {
-        detailsInfo.m_BiasTensorInfo = armnn::Optional<armnn::TensorInfo>(descriptor.m_Bias->GetTensorInfo());
-    }
-
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClTransposeConvolution2dWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         detailsInfo,
-                                         this->GetGuid());
-
     const TensorInfo& weightInfo = m_Data.m_Weight->GetTensorInfo();
 
     m_WeightsTensor = std::make_unique<arm_compute::CLTensor>();
@@ -100,11 +82,7 @@ ClTransposeConvolution2dWorkload::ClTransposeConvolution2dWorkload(
     output.info()->set_data_layout(aclDataLayout);
 
     arm_compute::PadStrideInfo padStrideInfo = BuildArmComputePadStrideInfo(m_Data.m_Parameters);
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClTransposeConvolution2dWorkload_configure");
-        m_Layer.configure(clCompileContext, &input, m_WeightsTensor.get(), m_BiasesTensor.get(), &output,
-                          padStrideInfo);
-    }
+    m_Layer.configure(&input, m_WeightsTensor.get(), m_BiasesTensor.get(), &output, padStrideInfo);
 
     InitializeArmComputeClTensorData(*m_WeightsTensor, m_Data.m_Weight);
     if (m_BiasesTensor)
@@ -119,7 +97,7 @@ ClTransposeConvolution2dWorkload::ClTransposeConvolution2dWorkload(
 
 void ClTransposeConvolution2dWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClTransposeConvolution2dWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClTransposeConvolution2dWorkload_Execute");
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

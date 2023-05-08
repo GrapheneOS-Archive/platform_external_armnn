@@ -6,6 +6,7 @@
 
 #include <armnn/BackendId.hpp>
 #include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 #include "JsonPrinter.hpp"
 
@@ -79,7 +80,7 @@ std::vector<Measurement> FindKernelMeasurements(const Event* event)
     return measurements;
 }
 
-std::map<std::string, ProfilerImpl::ProfilingEventStats> ProfilerImpl::CalculateProfilingEventStats() const
+std::map<std::string, Profiler::ProfilingEventStats> Profiler::CalculateProfilingEventStats() const
 {
     std::map<std::string, ProfilingEventStats> nameToStatsMap;
 
@@ -110,7 +111,7 @@ const Event* GetEventPtr(const Event* ptr) { return ptr;}
 const Event* GetEventPtr(const std::unique_ptr<Event>& ptr) {return ptr.get(); }
 
 template<typename ItertType>
-void ProfilerImpl::AnalyzeEventSequenceAndWriteResults(ItertType first, ItertType last, std::ostream& outStream) const
+void Profiler::AnalyzeEventSequenceAndWriteResults(ItertType first, ItertType last, std::ostream& outStream) const
 {
     // Outputs event sequence, if needed.
     if (g_WriteProfilingEventSequence)
@@ -155,15 +156,14 @@ void ProfilerImpl::AnalyzeEventSequenceAndWriteResults(ItertType first, ItertTyp
         const double avgMs = eventStats.m_TotalMs / double(eventStats.m_Count);
 
         outStream << "\t" << std::setw(50) << eventLabel << " " << std::setw(9) << avgMs << " "
-                  << std::setw(9) << eventStats.m_MinMs << " " << std::setw(9) << eventStats.m_MaxMs << " "
-                  << std::setw(9) << eventStats.m_TotalMs << " " << std::setw(9) << eventStats.m_Count << std::endl;
+            << std::setw(9) << eventStats.m_MinMs << " " << std::setw(9) << eventStats.m_MaxMs << " "
+            << std::setw(9) << eventStats.m_TotalMs << " " << std::setw(9) << eventStats.m_Count << std::endl;
     }
     outStream << std::endl;
 }
 
-ProfilerImpl::ProfilerImpl()
-    : m_ProfilingEnabled(false),
-      m_DetailsToStdOutMethod(ProfilingDetailsMethod::Undefined)
+Profiler::Profiler()
+    : m_ProfilingEnabled(false)
 {
     m_EventSequence.reserve(g_ProfilingEventCountHint);
 
@@ -173,7 +173,7 @@ ProfilerImpl::ProfilerImpl()
 #endif
 }
 
-ProfilerImpl::~ProfilerImpl()
+Profiler::~Profiler()
 {
     if (m_ProfilingEnabled)
     {
@@ -187,34 +187,22 @@ ProfilerImpl::~ProfilerImpl()
     ProfilerManager::GetInstance().RegisterProfiler(nullptr);
 }
 
-bool ProfilerImpl::IsProfilingEnabled()
+bool Profiler::IsProfilingEnabled()
 {
     return m_ProfilingEnabled;
 }
 
-void ProfilerImpl::EnableProfiling(bool enableProfiling)
+void Profiler::EnableProfiling(bool enableProfiling)
 {
     m_ProfilingEnabled = enableProfiling;
 }
 
-void ProfilerImpl::EnableNetworkDetailsToStdOut(ProfilingDetailsMethod details)
-{
-    m_DetailsToStdOutMethod = details;
-}
-
-Event* ProfilerImpl::BeginEvent(armnn::IProfiler* profiler,
-                                const BackendId& backendId,
-                                const std::string& label,
-                                std::vector<InstrumentPtr>&& instruments,
-                                const Optional<arm::pipe::ProfilingGuid>& guid)
+Event* Profiler::BeginEvent(const BackendId& backendId,
+                            const std::string& label,
+                            std::vector<InstrumentPtr>&& instruments)
 {
     Event* parent = m_Parents.empty() ? nullptr : m_Parents.top();
-    m_EventSequence.push_back(std::make_unique<Event>(label,
-                                                      profiler,
-                                                      parent,
-                                                      backendId,
-                                                      std::move(instruments),
-                                                      guid));
+    m_EventSequence.push_back(std::make_unique<Event>(label, this, parent, backendId, std::move(instruments)));
     Event* event = m_EventSequence.back().get();
     event->Start();
 
@@ -226,7 +214,7 @@ Event* ProfilerImpl::BeginEvent(armnn::IProfiler* profiler,
     return event;
 }
 
-void ProfilerImpl::EndEvent(Event* event)
+void Profiler::EndEvent(Event* event)
 {
     event->Stop();
 
@@ -245,7 +233,7 @@ void ProfilerImpl::EndEvent(Event* event)
 
 int CalcLevel(const Event* eventPtr)
 {
-    int level = 0;
+    int level=0;
     while (eventPtr != nullptr)
     {
         eventPtr = eventPtr->GetParentEvent();
@@ -254,21 +242,21 @@ int CalcLevel(const Event* eventPtr)
     return level;
 }
 
-void ProfilerImpl::PopulateParent(std::vector<const Event*>& outEvents, int& outBaseLevel, std::string parentName) const
+void Profiler::PopulateInferences(std::vector<const Event*>& outInferences, int& outBaseLevel) const
 {
-    outEvents.reserve(m_EventSequence.size());
+    outInferences.reserve(m_EventSequence.size());
     for (const auto& event : m_EventSequence)
     {
         const Event* eventPtrRaw = event.get();
-        if (eventPtrRaw->GetName() == parentName)
+        if (eventPtrRaw->GetName() == "EnqueueWorkload")
         {
             outBaseLevel = (outBaseLevel == -1) ? CalcLevel(eventPtrRaw) : outBaseLevel;
-            outEvents.push_back(eventPtrRaw);
+            outInferences.push_back(eventPtrRaw);
         }
     }
 }
 
-void ProfilerImpl::PopulateDescendants(std::map<const Event*, std::vector<const Event*>>& outDescendantsMap) const
+void Profiler::PopulateDescendants(std::map<const Event*, std::vector<const Event*>>& outDescendantsMap) const
 {
     for (const auto& event : m_EventSequence)
     {
@@ -283,7 +271,7 @@ void ProfilerImpl::PopulateDescendants(std::map<const Event*, std::vector<const 
         auto it = outDescendantsMap.find(parent);
         if (it == outDescendantsMap.end())
         {
-            outDescendantsMap.emplace(parent, std::vector<const Event*>({ eventPtrRaw }));
+            outDescendantsMap.emplace(parent, std::vector<const Event*>({eventPtrRaw}));
         }
         else
         {
@@ -292,13 +280,6 @@ void ProfilerImpl::PopulateDescendants(std::map<const Event*, std::vector<const 
     }
 }
 
-void ConfigureDetailsObject(JsonChildObject& detailsObject,
-                            std::string layerDetailsStr)
-{
-    detailsObject.SetType(JsonObjectType::ExecObjectDesc);
-    detailsObject.SetAndParseDetails(layerDetailsStr);
-
-}
 
 void ExtractJsonObjects(unsigned int inferenceIndex,
                         const Event* parentEvent,
@@ -306,52 +287,24 @@ void ExtractJsonObjects(unsigned int inferenceIndex,
                         std::map<const Event*, std::vector<const Event*>> descendantsMap)
 {
     ARMNN_ASSERT(parentEvent);
-
-    // If profiling GUID is entered, process it
-    if (parentEvent->GetProfilingGuid().has_value())
-    {
-        arm::pipe::ProfilingGuid profilingGuid;
-        profilingGuid = parentEvent->GetProfilingGuid().value();
-        parentObject.SetGuid(profilingGuid);
-    }
     std::vector<Measurement> instrumentMeasurements = parentEvent->GetMeasurements();
-    unsigned int childIdx = 0;
-    unsigned int numSkippedKernels = 0;
-    if (inferenceIndex > 0)
-    {
-        for (auto &i: parentEvent->GetInstruments())
-        {
-            if (i->HasKernelMeasurements())
-            {
-                numSkippedKernels = static_cast<unsigned int>(parentObject.m_Children.size() -
-                                                               instrumentMeasurements.size());
-                childIdx = numSkippedKernels;
-            }
-        }
-    }
-
-    for (size_t measurementIndex = 0; measurementIndex < instrumentMeasurements.size(); ++measurementIndex, ++childIdx)
+    unsigned int childIdx=0;
+    for(size_t measurementIndex = 0; measurementIndex < instrumentMeasurements.size(); ++measurementIndex, ++childIdx)
     {
         if (inferenceIndex == 0)
         {
             // Only add kernel measurement once, in case of multiple inferences
-            JsonChildObject measurementObject{ instrumentMeasurements[measurementIndex].m_Name };
+            JsonChildObject measurementObject{instrumentMeasurements[measurementIndex].m_Name};
             measurementObject.SetUnit(instrumentMeasurements[measurementIndex].m_Unit);
             measurementObject.SetType(JsonObjectType::Measurement);
 
             ARMNN_ASSERT(parentObject.NumChildren() == childIdx);
             parentObject.AddChild(measurementObject);
         }
-        else
-        {
-            if (numSkippedKernels > 0)
-            {
-                parentObject.GetChild(--numSkippedKernels).AddMeasurement(0.0);
-            }
-        }
 
         parentObject.GetChild(childIdx).AddMeasurement(instrumentMeasurements[measurementIndex].m_Value);
     }
+
 
     auto childEventsIt = descendantsMap.find(parentEvent);
     if (childEventsIt != descendantsMap.end())
@@ -361,24 +314,20 @@ void ExtractJsonObjects(unsigned int inferenceIndex,
             if (inferenceIndex == 0)
             {
                 // Only add second level once, in case of multiple inferences
-                JsonChildObject childObject{ childEvent->GetName() };
+                JsonChildObject childObject{childEvent->GetName()};
                 childObject.SetType(JsonObjectType::Event);
                 parentObject.AddChild(childObject);
             }
 
-            // It's possible that childIdx can overrun the parents' child vector. Check before we try to process a
-            // non-existent child.
-            if (childIdx < parentObject.NumChildren())
-            {
-                // Recursively process children.
-                ExtractJsonObjects(inferenceIndex, childEvent, parentObject.GetChild(childIdx), descendantsMap);
-                childIdx++;
-            }
+            // Recursively process children. In reality this won't be very deep recursion. ~4-6 levels deep.
+            ExtractJsonObjects(inferenceIndex, childEvent, parentObject.GetChild(childIdx), descendantsMap);
+
+            childIdx++;
         }
     }
 }
 
-void ProfilerImpl::Print(std::ostream& outStream) const
+void Profiler::Print(std::ostream& outStream) const
 {
     // Makes sure timestamps are output with 6 decimals, and save old settings.
     std::streamsize oldPrecision = outStream.precision();
@@ -387,40 +336,19 @@ void ProfilerImpl::Print(std::ostream& outStream) const
     outStream.setf(std::ios::fixed);
     JsonPrinter printer(outStream);
 
-    // First find all the parent Events and print out duration measurements.
+    // First find all the "inference" Events and print out duration measurements.
     int baseLevel = -1;
-
-    std::vector<const Event*> optimizations;
-    PopulateParent(optimizations, baseLevel, "Optimizer");
-
-    std::vector<const Event*> loadedNetworks;
-    PopulateParent(loadedNetworks, baseLevel, "LoadedNetwork");
-
     std::vector<const Event*> inferences;
-    PopulateParent(inferences, baseLevel, "EnqueueWorkload");
+    PopulateInferences(inferences, baseLevel);
 
     // Second map out descendants hierarchy
     std::map<const Event*, std::vector<const Event*>> descendantsMap;
     PopulateDescendants(descendantsMap);
 
-    // Extract json objects for each parent event type
-    JsonChildObject optimizeObject{ "optimize_measurements" };
-
-    for (unsigned int optimizeIndex = 0; optimizeIndex < optimizations.size(); ++optimizeIndex)
-    {
-        auto optimization = optimizations[optimizeIndex];
-        ExtractJsonObjects(optimizeIndex, optimization, optimizeObject, descendantsMap);
-    }
-
-    JsonChildObject loadedNetworkObject{ "loaded_network_measurements" };
-
-    for (unsigned int loadedNetworkIndex = 0; loadedNetworkIndex < loadedNetworks.size(); ++loadedNetworkIndex)
-    {
-        auto loadedNetwork = loadedNetworks[loadedNetworkIndex];
-        ExtractJsonObjects(loadedNetworkIndex, loadedNetwork, loadedNetworkObject, descendantsMap);
-    }
-
-    JsonChildObject inferenceObject{ "inference_measurements" };
+    JsonChildObject inferenceObject{"inference_measurements"};
+    JsonChildObject layerObject{"layer_measurements"};
+    std::vector<JsonChildObject> workloadObjects;
+    std::map<unsigned int, std::vector<JsonChildObject>> workloadToKernelObjects;
 
     for (unsigned int inferenceIndex = 0; inferenceIndex < inferences.size(); ++inferenceIndex)
     {
@@ -431,36 +359,12 @@ void ProfilerImpl::Print(std::ostream& outStream) const
     printer.PrintHeader();
     printer.PrintArmNNHeader();
 
-    if (m_ProfilingDetails.get()->DetailsExist() &&
-        (m_DetailsToStdOutMethod == ProfilingDetailsMethod::DetailsOnly
-         || m_DetailsToStdOutMethod == ProfilingDetailsMethod::DetailsWithEvents))
-    {
-        JsonChildObject detailsObject{ "layer_details" };
-        if (m_DetailsToStdOutMethod == ProfilingDetailsMethod::DetailsOnly)
-        {
-            detailsObject.EnableDetailsOnly();
-        }
-        detailsObject.SetType(JsonObjectType::ExecObjectDesc);
-        detailsObject.SetAndParseDetails(m_ProfilingDetails.get()->GetProfilingDetails());
-
-        size_t id = 0;
-        printer.PrintJsonChildObject(detailsObject, id);
-    }
-
     // print inference object, also prints child layer and kernel measurements
-    size_t id = 0;
-    if (m_DetailsToStdOutMethod != ProfilingDetailsMethod::DetailsOnly)
-    {
-        printer.PrintJsonChildObject(optimizeObject, id);
-        printer.PrintSeparator();
-        printer.PrintNewLine();
-        printer.PrintJsonChildObject(loadedNetworkObject, id);
-        printer.PrintSeparator();
-        printer.PrintNewLine();
-        printer.PrintJsonChildObject(inferenceObject, id);
-        printer.PrintNewLine();
-    }
+    size_t id=0;
+    printer.PrintJsonChildObject(inferenceObject, id);
+
     // end of ArmNN
+    printer.PrintNewLine();
     printer.PrintFooter();
 
     // end of main JSON object
@@ -471,14 +375,9 @@ void ProfilerImpl::Print(std::ostream& outStream) const
     // Restores previous precision settings.
     outStream.flags(oldFlags);
     outStream.precision(oldPrecision);
-
-    if (m_DetailsToStdOutMethod == ProfilingDetailsMethod::DetailsOnly)
-    {
-        exit(0);
-    }
 }
 
-void ProfilerImpl::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
+void Profiler::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
 {
     // Stack should be empty now.
     const bool saneMarkerSequence = m_Parents.empty();
@@ -488,9 +387,9 @@ void ProfilerImpl::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
     if (!saneMarkerSequence)
     {
         outStream << "Cannot write profiling stats. "
-                     "Unexpected errors were found when analyzing the sequence of logged events, "
-                     "which may lead to plainly wrong stats. The profiling system may contain implementation "
-                     "issues or could have been used in an unsafe manner." << std::endl;
+            "Unexpected errors were found when analyzing the sequence of logged events, which may lead to plainly "
+            "wrong stats. The profiling system may contain implementation issues or could have been used in an "
+            "unsafe manner." << std::endl;
         return;
     }
 
@@ -510,14 +409,15 @@ void ProfilerImpl::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
 
         int baseLevel = -1;
         std::vector<const Event*> inferences;
-        PopulateParent(inferences, baseLevel, "EnqueueWorkload");
+        PopulateInferences(inferences, baseLevel);
 
         // Second map out descendants hierarchy
         std::map<const Event*, std::vector<const Event*>> descendantsMap;
         PopulateDescendants(descendantsMap);
 
-        std::function<void(const Event*, std::vector<const Event*>&)>
-            FindDescendantEvents = [&](const Event* eventPtr, std::vector<const Event*>& sequence)
+        std::function<void (const Event*, std::vector<const Event*>&)>
+            FindDescendantEvents = [&](const Event* eventPtr,
+                std::vector<const Event*>& sequence)
             {
                 sequence.push_back(eventPtr);
 
@@ -532,9 +432,9 @@ void ProfilerImpl::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
                     return;
                 }
 
-                if (!(children->second.empty()))
+                for (const Event* child : children->second)
                 {
-                    return FindDescendantEvents(children->second[0], sequence);
+                    return FindDescendantEvents(child, sequence);
                 }
             };
 
@@ -560,35 +460,28 @@ void ProfilerImpl::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
     }
 }
 
-std::uint32_t ProfilerImpl::GetEventColor(const BackendId& backendId) const
+std::uint32_t Profiler::GetEventColor(const BackendId& backendId) const
 {
     static BackendId cpuRef("CpuRef");
     static BackendId cpuAcc("CpuAcc");
     static BackendId gpuAcc("GpuAcc");
-    if (backendId == cpuRef)
-    {
-        // Cyan
-        return 0xffff001b;
-    }
-    else if (backendId == cpuAcc)
-    {
-        // Green
-        return 0x00ff001b;
-    }
-    else if (backendId == gpuAcc)
-    {
-        // Purple
-        return 0xff007f1b;
-    }
-    else
-    {
-        // Dark gray
-        return 0x5555551b;
+    if (backendId == cpuRef) {
+            // Cyan
+            return 0xffff001b;
+    } else if (backendId == cpuAcc) {
+            // Green
+            return 0x00ff001b;
+    } else if (backendId == gpuAcc) {
+            // Purple
+            return 0xff007f1b;
+    } else {
+            // Dark gray
+            return 0x5555551b;
     }
 }
 
 // The thread_local pointer to the profiler instance.
-thread_local IProfiler* tl_Profiler = nullptr;
+thread_local Profiler* tl_Profiler = nullptr;
 
 ProfilerManager& ProfilerManager::GetInstance()
 {
@@ -597,51 +490,14 @@ ProfilerManager& ProfilerManager::GetInstance()
     return s_ProfilerManager;
 }
 
-void ProfilerManager::RegisterProfiler(IProfiler* profiler)
+void ProfilerManager::RegisterProfiler(Profiler* profiler)
 {
     tl_Profiler = profiler;
 }
 
-IProfiler* ProfilerManager::GetProfiler()
+Profiler* ProfilerManager::GetProfiler()
 {
     return tl_Profiler;
 }
-
-void IProfiler::EnableProfiling(bool enableProfiling)
-{
-    pProfilerImpl->EnableProfiling(enableProfiling);
-}
-
-void IProfiler::EnableNetworkDetailsToStdOut(ProfilingDetailsMethod detailsMethod)
-{
-    pProfilerImpl->EnableNetworkDetailsToStdOut(detailsMethod);
-}
-
-bool IProfiler::IsProfilingEnabled()
-{
-    return pProfilerImpl->IsProfilingEnabled();
-}
-
-void IProfiler::AnalyzeEventsAndWriteResults(std::ostream& outStream) const
-{
-    pProfilerImpl->AnalyzeEventsAndWriteResults(outStream);
-}
-
-void IProfiler::Print(std::ostream& outStream) const
-{
-    pProfilerImpl->Print(outStream);
-}
-
-Event* IProfiler::BeginEvent(const BackendId& backendId,
-                             const std::string& label,
-                             std::vector<InstrumentPtr>&& instruments,
-                             const Optional<arm::pipe::ProfilingGuid>& guid)
-{
-    return pProfilerImpl->BeginEvent(this, backendId, label, std::move(instruments), guid);
-}
-
-IProfiler::~IProfiler() = default;
-IProfiler::IProfiler() : pProfilerImpl(new ProfilerImpl())
-{};
 
 } // namespace armnn

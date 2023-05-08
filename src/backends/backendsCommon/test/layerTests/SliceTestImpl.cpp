@@ -5,14 +5,14 @@
 
 #include "SliceTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -39,9 +39,12 @@ LayerTestResult<T, NumDims> SliceTestImpl(
         outputInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset);
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(expectedOutputData, qScale, qOffset);
-    std::vector<T> actualOutput(outputInfo.GetNumElements());
+    boost::multi_array<T, NumDims> input =
+        MakeTensor<T, NumDims>(inputInfo, armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset));
+
+    LayerTestResult<T, NumDims> result(outputInfo);
+    result.outputExpected =
+        MakeTensor<T, NumDims>(outputInfo, armnnUtils::QuantizedVector<T>(expectedOutputData, qScale, qOffset));
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = workloadFactory.CreateTensorHandle(inputInfo);
@@ -52,9 +55,7 @@ LayerTestResult<T, NumDims> SliceTestImpl(
     AddInputToWorkload(descriptor, info, inputInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Slice,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateSlice(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
@@ -63,12 +64,9 @@ LayerTestResult<T, NumDims> SliceTestImpl(
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(result.output.data(), outputHandle.get());
 
-    return LayerTestResult<T, NumDims>(actualOutput,
-                                       expectedOutput,
-                                       outputHandle->GetShape(),
-                                       outputInfo.GetShape());
+    return result;
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>

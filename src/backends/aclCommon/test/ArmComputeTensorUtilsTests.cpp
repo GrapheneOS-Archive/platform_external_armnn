@@ -5,13 +5,13 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 using namespace armnn::armcomputetensorutils;
 
-TEST_SUITE("ArmComputeTensorUtils")
-{
-TEST_CASE("BuildArmComputeTensorInfoTest")
+BOOST_AUTO_TEST_SUITE(ArmComputeTensorUtils)
+
+BOOST_AUTO_TEST_CASE(BuildArmComputeTensorInfoTest)
 {
 
     const armnn::TensorShape tensorShape = { 1, 2, 3, 4 };
@@ -26,21 +26,21 @@ TEST_CASE("BuildArmComputeTensorInfoTest")
     const arm_compute::TensorInfo aclTensorInfo0 = BuildArmComputeTensorInfo(tensorInfo0);
 
     const arm_compute::TensorShape& aclTensorShape = aclTensorInfo0.tensor_shape();
-    CHECK(aclTensorShape.num_dimensions() == tensorShape.GetNumDimensions());
+    BOOST_CHECK(aclTensorShape.num_dimensions() == tensorShape.GetNumDimensions());
     for(unsigned int i = 0u; i < tensorShape.GetNumDimensions(); ++i)
     {
         // NOTE: arm_compute tensor dimensions are stored in the opposite order
-        CHECK(aclTensorShape[i] == tensorShape[tensorShape.GetNumDimensions() - i - 1]);
+        BOOST_CHECK(aclTensorShape[i] == tensorShape[tensorShape.GetNumDimensions() - i - 1]);
     }
 
-    CHECK(aclTensorInfo0.data_type() == arm_compute::DataType::QASYMM8);
-    CHECK(aclTensorInfo0.quantization_info().scale()[0] == quantScale);
+    BOOST_CHECK(aclTensorInfo0.data_type() == arm_compute::DataType::QASYMM8);
+    BOOST_CHECK(aclTensorInfo0.quantization_info().scale()[0] == quantScale);
 
     // Tensor info with per-axis quantization
     const armnn::TensorInfo tensorInfo1(tensorShape, dataType, quantScales, 0);
     const arm_compute::TensorInfo aclTensorInfo1 = BuildArmComputeTensorInfo(tensorInfo1);
 
-    CHECK(aclTensorInfo1.quantization_info().scale() == quantScales);
+    BOOST_CHECK(aclTensorInfo1.quantization_info().scale() == quantScales);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -5,51 +5,49 @@
 #include "TestInputOutputLayerVisitor.hpp"
 #include "Network.hpp"
 
-#include <doctest/doctest.h>
-
 namespace armnn
 {
 
-TEST_SUITE("TestInputOutputLayerVisitor")
-{
-TEST_CASE("CheckInputLayerVisitorBindingIdAndName")
+BOOST_AUTO_TEST_SUITE(TestInputOutputLayerVisitor)
+
+BOOST_AUTO_TEST_CASE(CheckInputLayerVisitorBindingIdAndName)
 {
     const char* layerName = "InputLayer";
     TestInputLayerVisitor visitor(1, layerName);
-    NetworkImpl net;
+    Network net;
 
     IConnectableLayer *const layer = net.AddInputLayer(1, layerName);
-    layer->ExecuteStrategy(visitor);
+    layer->Accept(visitor);
 }
 
-TEST_CASE("CheckInputLayerVisitorBindingIdAndNameNull")
+BOOST_AUTO_TEST_CASE(CheckInputLayerVisitorBindingIdAndNameNull)
 {
     TestInputLayerVisitor visitor(1);
-    NetworkImpl net;
+    Network net;
 
     IConnectableLayer *const layer = net.AddInputLayer(1);
-    layer->ExecuteStrategy(visitor);
+    layer->Accept(visitor);
 }
 
-TEST_CASE("CheckOutputLayerVisitorBindingIdAndName")
+BOOST_AUTO_TEST_CASE(CheckOutputLayerVisitorBindingIdAndName)
 {
     const char* layerName = "OutputLayer";
     TestOutputLayerVisitor visitor(1, layerName);
-    NetworkImpl net;
+    Network net;
 
     IConnectableLayer *const layer = net.AddOutputLayer(1, layerName);
-    layer->ExecuteStrategy(visitor);
+    layer->Accept(visitor);
 }
 
-TEST_CASE("CheckOutputLayerVisitorBindingIdAndNameNull")
+BOOST_AUTO_TEST_CASE(CheckOutputLayerVisitorBindingIdAndNameNull)
 {
     TestOutputLayerVisitor visitor(1);
-    NetworkImpl net;
+    Network net;
 
     IConnectableLayer *const layer = net.AddOutputLayer(1);
-    layer->ExecuteStrategy(visitor);
+    layer->Accept(visitor);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()
 
 } //namespace armnn

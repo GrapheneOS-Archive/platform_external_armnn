@@ -6,8 +6,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -22,7 +22,7 @@ std::unique_ptr<IWorkload> DequantizeLayer::CreateWorkload(
     DequantizeQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Dequantize, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateDequantize(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 DequantizeLayer* DequantizeLayer::Clone(Graph& graph) const
@@ -46,9 +46,9 @@ void DequantizeLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "DequantizeLayer");
 }
 
-void DequantizeLayer::ExecuteStrategy(IStrategy& strategy) const
+void DequantizeLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitDequantizeLayer(this, GetName());
 }
 
 } // namespace armnn

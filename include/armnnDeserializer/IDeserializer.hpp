@@ -32,24 +32,23 @@ public:
     static void Destroy(IDeserializer* parser);
 
     /// Create an input network from binary file contents
-    armnn::INetworkPtr CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent);
+    virtual armnn::INetworkPtr CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent) = 0;
 
     /// Create an input network from a binary input stream
-    armnn::INetworkPtr CreateNetworkFromBinary(std::istream& binaryContent);
+    virtual armnn::INetworkPtr CreateNetworkFromBinary(std::istream& binaryContent) = 0;
 
     /// Retrieve binding info (layer id and tensor info) for the network input identified by
     /// the given layer name and layers id
-    BindingPointInfo GetNetworkInputBindingInfo(unsigned int layerId, const std::string& name) const;
+    virtual BindingPointInfo GetNetworkInputBindingInfo(unsigned int layerId,
+                                                        const std::string& name) const = 0;
 
     /// Retrieve binding info (layer id and tensor info) for the network output identified by
     /// the given layer name and layers id
-    BindingPointInfo GetNetworkOutputBindingInfo(unsigned int layerId, const std::string& name) const;
+    virtual BindingPointInfo GetNetworkOutputBindingInfo(unsigned int layerId,
+                                                         const std::string& name) const = 0;
 
-private:
-    IDeserializer();
-    ~IDeserializer();
+protected:
+    virtual ~IDeserializer() {};
 
-    class DeserializerImpl;
-    std::unique_ptr<DeserializerImpl> pDeserializerImpl;
 };
 } //namespace armnnDeserializer

@@ -4,12 +4,17 @@
 //
 #pragma once
 
+#include "QuantizeHelper.hpp"
+
+
 #include <armnnUtils/Permute.hpp>
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
-#include <CommonTestUtils.hpp>
+#include <backendsCommon/test/CommonTestUtils.hpp>
+
+#include <boost/test/unit_test.hpp>
 
 #include <map>
 #include <vector>
@@ -54,7 +59,7 @@ void ResizeEndToEnd(const std::vector<armnn::BackendId>& backends,
     const float   qScale  = IsQuantizedType<T>() ? 0.25f : 1.0f;
     const int32_t qOffset = IsQuantizedType<T>() ? 50    : 0;
 
-    TensorInfo inputInfo(inputShape, ArmnnType, qScale, qOffset, true);
+    TensorInfo inputInfo(inputShape, ArmnnType, qScale, qOffset);
     TensorInfo outputInfo(outputShape, ArmnnType, qScale, qOffset);
 
     std::vector<float> inputData =

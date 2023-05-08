@@ -48,7 +48,7 @@ std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const 
     }
     else
     {
-        return std::make_unique<RefTensorHandle>(tensorInfo);
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_ImportFlags);
     }
 }
 
@@ -63,7 +63,7 @@ std::unique_ptr<ITensorHandle> RefTensorHandleFactory::CreateTensorHandle(const 
     }
     else
     {
-        return std::make_unique<RefTensorHandle>(tensorInfo);
+        return std::make_unique<RefTensorHandle>(tensorInfo, m_ImportFlags);
     }
 }
 

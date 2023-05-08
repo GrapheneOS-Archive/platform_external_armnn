@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
+#include <iostream>
 
-TEST_SUITE("Deserializer_Rsqrt")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct RsqrtFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit RsqrtFixture(const std::string & inputShape,
@@ -101,7 +103,7 @@ struct Rsqrt2dFixture : RsqrtFixture
                                     "Float32") {}
 };
 
-TEST_CASE_FIXTURE(Rsqrt2dFixture, "Rsqrt2d")
+BOOST_FIXTURE_TEST_CASE(Rsqrt2d, Rsqrt2dFixture)
 {
   RunTest<2, armnn::DataType::Float32>(
       0,
@@ -112,4 +114,4 @@ TEST_CASE_FIXTURE(Rsqrt2dFixture, "Rsqrt2d")
 }
 
 
-}
+BOOST_AUTO_TEST_SUITE_END()

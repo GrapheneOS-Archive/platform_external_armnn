@@ -1,14 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
-#include <numeric>
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_L2Normalization")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct L2NormalizationFixture : public ParserFlatbuffersFixture
 {
     explicit L2NormalizationFixture(const std::string & inputOutputShape)
@@ -79,7 +82,7 @@ struct L2NormalizationFixture4D : L2NormalizationFixture
     L2NormalizationFixture4D() : L2NormalizationFixture("[ 1, 1, 4, 3 ]") {}
 };
 
-TEST_CASE_FIXTURE(L2NormalizationFixture4D, "ParseL2Normalization4D")
+BOOST_FIXTURE_TEST_CASE(ParseL2Normalization4D, L2NormalizationFixture4D)
 {
   RunTest<4, armnn::DataType::Float32>(
       0,
@@ -110,7 +113,7 @@ struct L2NormalizationSimpleFixture4D : L2NormalizationFixture
     L2NormalizationSimpleFixture4D() : L2NormalizationFixture("[ 1, 1, 1, 4 ]") {}
 };
 
-TEST_CASE_FIXTURE(L2NormalizationSimpleFixture4D, "ParseL2NormalizationEps4D")
+BOOST_FIXTURE_TEST_CASE(ParseL2NormalizationEps4D, L2NormalizationSimpleFixture4D)
 {
       RunTest<4, armnn::DataType::Float32>(
       0,
@@ -122,4 +125,4 @@ TEST_CASE_FIXTURE(L2NormalizationSimpleFixture4D, "ParseL2NormalizationEps4D")
                           0.00000004f / CalcL2Norm({ 0.00000001f, 0.00000002f, 0.00000003f, 0.00000004f }) }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

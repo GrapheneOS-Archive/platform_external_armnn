@@ -9,9 +9,9 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 namespace armnn
 {
@@ -25,7 +25,7 @@ std::unique_ptr<IWorkload> PreluLayer::CreateWorkload(const IWorkloadFactory& fa
     PreluQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Prelu, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreatePrelu(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 PreluLayer* PreluLayer::Clone(Graph& graph) const
@@ -116,9 +116,9 @@ void PreluLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "PreluLayer");
 }
 
-void PreluLayer::ExecuteStrategy(IStrategy& strategy) const
+void PreluLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitPreluLayer(this, GetName());
 }
 
 } // namespace armnn

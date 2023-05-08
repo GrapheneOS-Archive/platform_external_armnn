@@ -7,8 +7,6 @@
 
 #include <backendsCommon/test/WorkloadFactoryHelper.hpp>
 
-#include <armnn/utility/PolymorphicDowncast.hpp>
-
 #include <reference/RefBackend.hpp>
 #include <reference/RefWorkloadFactory.hpp>
 #include "reference/RefTensorHandleFactory.hpp"
@@ -36,7 +34,7 @@ struct WorkloadFactoryHelper<armnn::RefWorkloadFactory>
             const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager = nullptr)
     {
 
-        return armnn::RefTensorHandleFactory(armnn::PolymorphicPointerDowncast<armnn::RefMemoryManager>(memoryManager));
+        return armnn::RefTensorHandleFactory(std::static_pointer_cast<armnn::RefMemoryManager>(memoryManager));
     }
 };
 

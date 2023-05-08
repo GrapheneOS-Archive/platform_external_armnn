@@ -27,8 +27,6 @@ public:
     /// @return A vector to the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-    void ExecuteStrategy(IStrategy& strategy) const override;
-
 protected:
     /// @param numInputSlots The number of input slots for the layer.
     /// @param numOutputSlots The number of output slots for the layer.
