@@ -1,11 +1,11 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClPreluWorkload.hpp"
 #include "ClWorkloadUtils.hpp"
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <cl/ClLayerSupport.hpp>
 #include <cl/ClTensorHandle.hpp>
@@ -27,9 +27,8 @@ arm_compute::Status ClPreluWorkloadValidate(const TensorInfo& input,
 }
 
 ClPreluWorkload::ClPreluWorkload(const PreluQueueDescriptor& descriptor,
-                                 const WorkloadInfo& info,
-                                 const arm_compute::CLCompileContext& clCompileContext)
-    : ClBaseWorkload<PreluQueueDescriptor>(descriptor, info)
+                                 const WorkloadInfo& info)
+    : BaseWorkload<PreluQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("ClPreluWorkload", 1, 1);
 
@@ -37,15 +36,12 @@ ClPreluWorkload::ClPreluWorkload(const PreluQueueDescriptor& descriptor,
     arm_compute::ICLTensor& alpha = static_cast<IClTensorHandle*>(m_Data.m_Inputs[1])->GetTensor();
     arm_compute::ICLTensor& output = static_cast<IClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClPreluWorkload_configure");
-        m_PreluLayer.configure(clCompileContext, &input, &alpha, &output);
-    }
+    m_PreluLayer.configure(&input, &alpha, &output);
 }
 
 void ClPreluWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClPreluWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_CL("ClPreluWorkload_Execute");
     RunClFunction(m_PreluLayer, CHECK_LOCATION());
 }
 

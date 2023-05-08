@@ -50,15 +50,10 @@ public:
 
     void SetData(std::unique_ptr<ITensorHandle> data) { m_TensorHandle = std::move(data); }
 
-    void SetAllocatedData();
-
-    void UseAllocatedData() { m_TensorHandle = m_AllocatedTensorHandle; }
-
     /// @brief Returns true if SetTensorInfo() has been called at least once on this.
     bool IsTensorInfoSet() const { return m_bTensorInfoSet; }
 private:
-    std::shared_ptr<ITensorHandle> m_TensorHandle;
-    std::shared_ptr<ITensorHandle> m_AllocatedTensorHandle;
+    std::unique_ptr<ITensorHandle> m_TensorHandle;
     TensorInfo m_TensorInfo;
     bool m_bTensorInfoSet = false;
 };

@@ -5,12 +5,10 @@
 
 #pragma once
 
-#include <armnn/backends/WorkloadData.hpp>
+#include <backendsCommon/WorkloadData.hpp>
 #include <armnn/Tensor.hpp>
 
 namespace armnn
 {
-void Concatenate(const ConcatQueueDescriptor &data,
-                 std::vector<ITensorHandle*> inputs,
-                 std::vector<ITensorHandle*> outputs);
+void Concatenate(const ConcatQueueDescriptor &data);
 } //namespace armnn

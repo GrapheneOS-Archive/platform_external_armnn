@@ -8,184 +8,184 @@
 #include <layers/ConvertFp16ToFp32Layer.hpp>
 #include <layers/ConvertFp32ToFp16Layer.hpp>
 #include <layers/MeanLayer.hpp>
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClWorkloadFactory.hpp>
 #include <cl/test/ClContextControlFixture.hpp>
 #include <backendsCommon/test/IsLayerSupportedTestImpl.hpp>
 #include <backendsCommon/test/LayerTests.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <string>
 
-TEST_SUITE("ClLayerSupport")
-{
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLayerSupportedFloat16Cl")
+BOOST_AUTO_TEST_SUITE(ClLayerSupport)
+
+BOOST_FIXTURE_TEST_CASE(IsLayerSupportedFloat16Cl, ClContextControlFixture)
 {
     armnn::ClWorkloadFactory factory =
         ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
     IsLayerSupportedTests<armnn::ClWorkloadFactory, armnn::DataType::Float16>(&factory);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLayerSupportedFloat32Cl")
+BOOST_FIXTURE_TEST_CASE(IsLayerSupportedFloat32Cl, ClContextControlFixture)
 {
     armnn::ClWorkloadFactory factory =
         ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
     IsLayerSupportedTests<armnn::ClWorkloadFactory, armnn::DataType::Float32>(&factory);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLayerSupportedQAsymmU8Cl")
+BOOST_FIXTURE_TEST_CASE(IsLayerSupportedQAsymmU8Cl, ClContextControlFixture)
 {
     armnn::ClWorkloadFactory factory =
         ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
     IsLayerSupportedTests<armnn::ClWorkloadFactory, armnn::DataType::QAsymmU8>(&factory);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLayerSupportedQAsymmS8Cl")
+BOOST_FIXTURE_TEST_CASE(IsLayerSupportedQAsymmS8Cl, ClContextControlFixture)
 {
     armnn::ClWorkloadFactory factory =
         ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
     IsLayerSupportedTests<armnn::ClWorkloadFactory, armnn::DataType::QAsymmS8>(&factory);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLayerSupportedQSymmS8Cl")
+BOOST_FIXTURE_TEST_CASE(IsLayerSupportedQSymmS8Cl, ClContextControlFixture)
 {
     armnn::ClWorkloadFactory factory =
         ClWorkloadFactoryHelper::GetFactory(ClWorkloadFactoryHelper::GetMemoryManager());
     IsLayerSupportedTests<armnn::ClWorkloadFactory, armnn::DataType::QSymmS8>(&factory);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp16ToFp32SupportedCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp16ToFp32SupportedCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp16ToFp32Layer,
       armnn::DataType::Float16, armnn::DataType::Float32>(reasonIfUnsupported);
 
-    CHECK(result);
+    BOOST_CHECK(result);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp16ToFp32SupportedFp32InputCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp16ToFp32SupportedFp32InputCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp16ToFp32Layer,
       armnn::DataType::Float32, armnn::DataType::Float32>(reasonIfUnsupported);
 
-    CHECK(!result);
-    CHECK_EQ(reasonIfUnsupported, "Input should be Float16");
+    BOOST_CHECK(!result);
+    BOOST_CHECK_EQUAL(reasonIfUnsupported, "Input should be Float16");
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp16ToFp32SupportedFp16OutputCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp16ToFp32SupportedFp16OutputCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp16ToFp32Layer,
       armnn::DataType::Float16, armnn::DataType::Float16>(reasonIfUnsupported);
 
-    CHECK(!result);
-    CHECK_EQ(reasonIfUnsupported, "Output should be Float32");
+    BOOST_CHECK(!result);
+    BOOST_CHECK_EQUAL(reasonIfUnsupported, "Output should be Float32");
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp32ToFp16SupportedCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp32ToFp16SupportedCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp32ToFp16Layer,
       armnn::DataType::Float32, armnn::DataType::Float16>(reasonIfUnsupported);
 
-    CHECK(result);
+    BOOST_CHECK(result);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp32ToFp16SupportedFp16InputCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp32ToFp16SupportedFp16InputCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp32ToFp16Layer,
       armnn::DataType::Float16, armnn::DataType::Float16>(reasonIfUnsupported);
 
-    CHECK(!result);
-    CHECK_EQ(reasonIfUnsupported, "Input should be Float32");
+    BOOST_CHECK(!result);
+    BOOST_CHECK_EQUAL(reasonIfUnsupported, "Input should be Float32");
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsConvertFp32ToFp16SupportedFp32OutputCl")
+BOOST_FIXTURE_TEST_CASE(IsConvertFp32ToFp16SupportedFp32OutputCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConvertLayerSupportedTests<armnn::ClWorkloadFactory, armnn::ConvertFp32ToFp16Layer,
       armnn::DataType::Float32, armnn::DataType::Float32>(reasonIfUnsupported);
 
-    CHECK(!result);
-    CHECK_EQ(reasonIfUnsupported, "Output should be Float16");
+    BOOST_CHECK(!result);
+    BOOST_CHECK_EQUAL(reasonIfUnsupported, "Output should be Float16");
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLogicalBinarySupportedCl")
+BOOST_FIXTURE_TEST_CASE(IsLogicalBinarySupportedCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsLogicalBinaryLayerSupportedTests<armnn::ClWorkloadFactory,
       armnn::DataType::Boolean, armnn::DataType::Boolean>(reasonIfUnsupported);
 
-    CHECK(result);
+    BOOST_CHECK(result);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsLogicalBinaryBroadcastSupportedCl")
+BOOST_FIXTURE_TEST_CASE(IsLogicalBinaryBroadcastSupportedCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsLogicalBinaryLayerBroadcastSupportedTests<armnn::ClWorkloadFactory,
       armnn::DataType::Boolean, armnn::DataType::Boolean>(reasonIfUnsupported);
 
-    CHECK(result);
+    BOOST_CHECK(result);
 }
 
-TEST_CASE_FIXTURE(ClContextControlFixture, "IsMeanSupportedCl")
+BOOST_FIXTURE_TEST_CASE(IsMeanSupportedCl, ClContextControlFixture)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsMeanLayerSupportedTests<armnn::ClWorkloadFactory,
       armnn::DataType::Float32, armnn::DataType::Float32>(reasonIfUnsupported);
 
-    CHECK(result);
+    BOOST_CHECK(result);
 }
 
-TEST_CASE("IsConstantSupportedCl")
+BOOST_AUTO_TEST_CASE(IsConstantSupportedCl)
 {
     std::string reasonIfUnsupported;
 
     bool result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::Float16>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::Float32>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::QAsymmU8>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::Boolean>(reasonIfUnsupported);
-    CHECK(!result);
+    BOOST_CHECK(!result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::QSymmS16>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::QSymmS8>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::QAsymmS8>(reasonIfUnsupported);
-    CHECK(result);
+    BOOST_CHECK(result);
 
     result = IsConstantLayerSupportedTests<armnn::ClWorkloadFactory,
             armnn::DataType::BFloat16>(reasonIfUnsupported);
-    CHECK(!result);
+    BOOST_CHECK(!result);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

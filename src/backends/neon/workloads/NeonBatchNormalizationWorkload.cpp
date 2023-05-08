@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -12,7 +12,7 @@
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h>
 
@@ -58,14 +58,8 @@ arm_compute::Status NeonBatchNormalizationValidate(const TensorInfo& input,
 
 NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
     const BatchNormalizationQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : NeonBaseWorkload<BatchNormalizationQueueDescriptor>(descriptor, info)
+    : BaseWorkload<BatchNormalizationQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonBatchNormalizationWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonBatchNormalizationWorkload", 1, 1);
 
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -113,7 +107,7 @@ NeonBatchNormalizationWorkload::NeonBatchNormalizationWorkload(
 
 void NeonBatchNormalizationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonBatchNormalizationWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonBatchNormalizationWorkload_Execute");
     m_Layer->run();
 }
 

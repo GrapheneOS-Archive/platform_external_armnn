@@ -1,111 +1,92 @@
 //
-// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include <backendsCommon/test/EndToEndTestImpl.hpp>
 
 #include <backendsCommon/test/ActivationEndToEndTestImpl.hpp>
-#include <backendsCommon/test/AdditionEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ArgMinMaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/BatchToSpaceNdEndToEndTestImpl.hpp>
-#include <backendsCommon/test/BatchMatMulEndToEndTestImpl.hpp>
-#include <backendsCommon/test/ChannelShuffleEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ComparisonEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ConcatEndToEndTestImpl.hpp>
-#include <backendsCommon/test/Convolution2dEndToEndTestImpl.hpp>
-#include <backendsCommon/test/Convolution3dEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DepthToSpaceEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DequantizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/DetectionPostProcessEndToEndTestImpl.hpp>
-#include <backendsCommon/test/ElementwiseBinaryEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ElementwiseUnaryEndToEndTestImpl.hpp>
 #include <backendsCommon/test/FillEndToEndTestImpl.hpp>
-#include <backendsCommon/test/FullyConnectedEndToEndTestImpl.hpp>
 #include <backendsCommon/test/GatherEndToEndTestImpl.hpp>
-#include <backendsCommon/test/GatherNdEndToEndTestImpl.hpp>
 #include <backendsCommon/test/InstanceNormalizationEndToEndTestImpl.hpp>
 #include <backendsCommon/test/LogSoftmaxEndToEndTestImpl.hpp>
 #include <backendsCommon/test/PreluEndToEndTestImpl.hpp>
 #include <backendsCommon/test/QLstmEndToEndTestImpl.hpp>
 #include <backendsCommon/test/RankEndToEndTestImpl.hpp>
-#include <backendsCommon/test/ReduceEndToEndTestImpl.hpp>
-#include <backendsCommon/test/ReshapeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/ResizeEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SpaceToDepthEndToEndTestImpl.hpp>
 #include <backendsCommon/test/SplitterEndToEndTestImpl.hpp>
-#include <backendsCommon/test/StridedSliceAsyncEndToEndTest.hpp>
 #include <backendsCommon/test/TransposeConvolution2dEndToEndTestImpl.hpp>
-#include <backendsCommon/test/TransposeEndToEndTestImpl.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
+#include <boost/test/execution_monitor.hpp>
 
-TEST_SUITE("RefEndToEnd")
-{
+BOOST_AUTO_TEST_SUITE(RefEndToEnd)
+
 std::vector<armnn::BackendId> defaultBackends = {armnn::Compute::CpuRef};
 
-// ElementwiseUnary
 // Abs
-TEST_CASE("RefAbsEndToEndTestFloat32")
+BOOST_AUTO_TEST_CASE(RefAbsEndToEndTestFloat32)
 {
+    std::vector<float> expectedOutput =
+    {
+        1.f, 1.f, 1.f, 1.f, 5.f, 5.f, 5.f, 5.f,
+        3.f, 3.f, 3.f, 3.f, 4.f, 4.f, 4.f, 4.f
+    };
+
     ElementwiseUnarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends,
-                                                             UnaryOperation::Abs);
+                                                             UnaryOperation::Abs,
+                                                             expectedOutput);
 }
 
-TEST_CASE("RefAbsEndToEndTestUint8")
+BOOST_AUTO_TEST_CASE(RefAbsEndToEndTestUint8)
 {
+    // Note the expected output will be implicitly quantized by the below test function
+    std::vector<float> expectedOutput =
+    {
+        1.f, 1.f, 1.f, 1.f, 5.f, 5.f, 5.f, 5.f,
+        3.f, 3.f, 3.f, 3.f, 4.f, 4.f, 4.f, 4.f
+    };
+
     ElementwiseUnarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends,
-                                                              UnaryOperation::Abs);
+                                                                     UnaryOperation::Abs,
+                                                                     expectedOutput);
 }
 
-TEST_CASE("RefAbsEndToEndTestInt16")
+BOOST_AUTO_TEST_CASE(RefAbsEndToEndTestInt16)
 {
+    // Note the expected output will be implicitly quantized by the below test function
+    std::vector<float> expectedOutput =
+    {
+        1.f, 1.f, 1.f, 1.f, 5.f, 5.f, 5.f, 5.f,
+        3.f, 3.f, 3.f, 3.f, 4.f, 4.f, 4.f, 4.f
+    };
+
     ElementwiseUnarySimpleEndToEnd<armnn::DataType::QSymmS16>(defaultBackends,
-                                                              UnaryOperation::Abs);
-}
-
-// Rsqrt
-TEST_CASE("RefRsqrtEndToEndTestFloat32")
-{
-    ElementwiseUnarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends,
-                                                             UnaryOperation::Rsqrt);
-}
-
-TEST_CASE("RefRsqrtEndToEndTestUint8")
-{
-    ElementwiseUnarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends,
-                                                              UnaryOperation::Rsqrt);
-}
-
-TEST_CASE("RefRsqrtEndToEndTestInt16")
-{
-    ElementwiseUnarySimpleEndToEnd<armnn::DataType::QSymmS16>(defaultBackends,
-                                                              UnaryOperation::Rsqrt);
-}
-
-// Addition
-TEST_CASE("RefAdditionEndtoEndFloat32")
-{
-    AdditionEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefAdditionEndtoEndUint8")
-{
-    AdditionEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
+                                                                     UnaryOperation::Abs,
+                                                                     expectedOutput);
 }
 
 // Constant
-TEST_CASE("ConstantUsage_Ref_Float32")
+BOOST_AUTO_TEST_CASE(ConstantUsage_Ref_Float32)
 {
-    CHECK(ConstantUsageFloat32Test(defaultBackends));
+    BOOST_TEST(ConstantUsageFloat32Test(defaultBackends));
 }
 
-TEST_CASE("ConstantUsage_Ref_Uint8")
+BOOST_AUTO_TEST_CASE(ConstantUsage_Ref_Uint8)
 {
-    CHECK(ConstantUsageUint8Test(defaultBackends));
+    BOOST_TEST(ConstantUsageUint8Test(defaultBackends));
 }
 
-TEST_CASE("Unsigned8")
+BOOST_AUTO_TEST_CASE(Unsigned8)
 {
     using namespace armnn;
 
@@ -140,7 +121,7 @@ TEST_CASE("Unsigned8")
     // Loads it into the runtime.
     NetworkId netId;
     auto error = runtime->LoadNetwork(netId, std::move(optNet));
-    CHECK(error == Status::Success);
+    BOOST_TEST(error == Status::Success);
 
     // Creates structures for input & output.
     std::vector<uint8_t> inputData
@@ -149,11 +130,9 @@ TEST_CASE("Unsigned8")
     };
     std::vector<uint8_t> outputData(5);
 
-    TensorInfo inputTensorInfo2 = runtime->GetInputTensorInfo(netId, 0);
-    inputTensorInfo2.SetConstant(true);
     armnn::InputTensors inputTensors
     {
-        {0, armnn::ConstTensor(inputTensorInfo2, inputData.data())}
+        {0, armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData.data())}
     };
     armnn::OutputTensors outputTensors
     {
@@ -164,14 +143,14 @@ TEST_CASE("Unsigned8")
     runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
     // Checks the results.
-    CHECK(outputData[0] == 0);
-    CHECK(outputData[1] == 0);
-    CHECK(outputData[2] == 0);
-    CHECK(outputData[3] == 255); // softmax has been saturated.
-    CHECK(outputData[4] == 0);
+    BOOST_TEST(outputData[0] == 0);
+    BOOST_TEST(outputData[1] == 0);
+    BOOST_TEST(outputData[2] == 0);
+    BOOST_TEST(outputData[3] == 255); // softmax has been saturated.
+    BOOST_TEST(outputData[4] == 0);
 }
 
-TEST_CASE("TrivialAdd")
+BOOST_AUTO_TEST_CASE(TrivialAdd)
 {
     // This test was designed to match "AddTwo" in android nn/runtime/test/TestTrivialModel.cpp.
 
@@ -186,7 +165,7 @@ TEST_CASE("TrivialAdd")
 
     IConnectableLayer* input1 = net->AddInputLayer(0);
     IConnectableLayer* input2 = net->AddInputLayer(1);
-    IConnectableLayer* add    = net->AddElementwiseBinaryLayer(ElementwiseBinaryDescriptor(BinaryOperation::Add));
+    IConnectableLayer* add    = net->AddAdditionLayer();
     IConnectableLayer* output = net->AddOutputLayer(0);
 
     input1->GetOutputSlot(0).Connect(add->GetInputSlot(0));
@@ -217,12 +196,10 @@ TEST_CASE("TrivialAdd")
     };
     std::vector<float> outputData(12);
 
-    TensorInfo inputTensorInfo = runtime->GetInputTensorInfo(netId, 0);
-    inputTensorInfo.SetConstant(true);
     InputTensors inputTensors
     {
-        {0,armnn::ConstTensor(inputTensorInfo, input1Data.data())},
-        {1,armnn::ConstTensor(inputTensorInfo, input2Data.data())}
+        {0,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), input1Data.data())},
+        {1,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), input2Data.data())}
     };
     OutputTensors outputTensors
     {
@@ -233,21 +210,21 @@ TEST_CASE("TrivialAdd")
     runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
     // Checks the results
-    CHECK(outputData[0] == 101);
-    CHECK(outputData[1] == 202);
-    CHECK(outputData[2] == 303);
-    CHECK(outputData[3] == 404);
-    CHECK(outputData[4] == 505);
-    CHECK(outputData[5] == 606);
-    CHECK(outputData[6] == 707);
-    CHECK(outputData[7] == 808);
-    CHECK(outputData[8] == 909);
-    CHECK(outputData[9] == 1010);
-    CHECK(outputData[10] == 1111);
-    CHECK(outputData[11] == 1212);
+    BOOST_TEST(outputData[0] == 101);
+    BOOST_TEST(outputData[1] == 202);
+    BOOST_TEST(outputData[2] == 303);
+    BOOST_TEST(outputData[3] == 404);
+    BOOST_TEST(outputData[4] == 505);
+    BOOST_TEST(outputData[5] == 606);
+    BOOST_TEST(outputData[6] == 707);
+    BOOST_TEST(outputData[7] == 808);
+    BOOST_TEST(outputData[8] == 909);
+    BOOST_TEST(outputData[9] == 1010);
+    BOOST_TEST(outputData[10] == 1111);
+    BOOST_TEST(outputData[11] == 1212);
 }
 
-TEST_CASE("MultipleOutputs")
+BOOST_AUTO_TEST_CASE(MultipleOutputs)
 {
     using namespace armnn;
 
@@ -313,11 +290,9 @@ TEST_CASE("MultipleOutputs")
     std::vector<float> output2Data(inputData.size());
     std::vector<float> output3Data(inputData.size());
 
-    TensorInfo inputTensorInfo = runtime->GetInputTensorInfo(netId, 0);
-    inputTensorInfo.SetConstant(true);
     InputTensors inputTensors
     {
-        {0,armnn::ConstTensor(inputTensorInfo, inputData.data())}
+        {0,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), inputData.data())}
     };
     OutputTensors outputTensors
     {
@@ -330,12 +305,12 @@ TEST_CASE("MultipleOutputs")
     runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
     // Checks the results.
-    CHECK(output1Data == std::vector<float>({ 1.f, 1.f, 1.f, 1.f, 1.f, 0.f, -1.f, -1.f, 1.f, 1.f })); // ReLu1
-    CHECK(output2Data == std::vector<float>({ 3.f, 5.f, 2.f, 3.f, 6.f, 0.f, 0.f, 0.f, 3.f, 3.f })); // ReLu6
-    CHECK(output3Data == std::vector<float>({ 3.f, 5.f, 2.f, 3.f, 5.f, 2.f, 2.f, 2.f, 3.f, 3.f })); // [2, 5]
+    BOOST_TEST(output1Data == std::vector<float>({ 1.f, 1.f, 1.f, 1.f, 1.f, 0.f, -1.f, -1.f, 1.f, 1.f })); // ReLu1
+    BOOST_TEST(output2Data == std::vector<float>({ 3.f, 5.f, 2.f, 3.f, 6.f, 0.f, 0.f, 0.f, 3.f, 3.f })); // ReLu6
+    BOOST_TEST(output3Data == std::vector<float>({ 3.f, 5.f, 2.f, 3.f, 5.f, 2.f, 2.f, 2.f, 3.f, 3.f })); // [2, 5]
 }
 
-TEST_CASE("TrivialMin")
+BOOST_AUTO_TEST_CASE(TrivialMin)
 {
     using namespace armnn;
 
@@ -348,7 +323,7 @@ TEST_CASE("TrivialMin")
 
     IConnectableLayer* input1 = net->AddInputLayer(0);
     IConnectableLayer* input2 = net->AddInputLayer(1);
-    IConnectableLayer* min    = net->AddElementwiseBinaryLayer(ElementwiseBinaryDescriptor(BinaryOperation::Minimum));
+    IConnectableLayer* min    = net->AddMinimumLayer();
     IConnectableLayer* output = net->AddOutputLayer(0);
 
     input1->GetOutputSlot(0).Connect(min->GetInputSlot(0));
@@ -379,12 +354,10 @@ TEST_CASE("TrivialMin")
         };
     std::vector<float> outputData(4);
 
-    TensorInfo inputTensorInfo = runtime->GetInputTensorInfo(netId, 0);
-    inputTensorInfo.SetConstant(true);
     InputTensors inputTensors
         {
-            {0,armnn::ConstTensor(inputTensorInfo, input1Data.data())},
-            {1,armnn::ConstTensor(inputTensorInfo, input2Data.data())}
+            {0,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), input1Data.data())},
+            {1,armnn::ConstTensor(runtime->GetInputTensorInfo(netId, 0), input2Data.data())}
         };
     OutputTensors outputTensors
         {
@@ -395,13 +368,13 @@ TEST_CASE("TrivialMin")
     runtime->EnqueueWorkload(netId, inputTensors, outputTensors);
 
     // Checks the results
-    CHECK(outputData[0] == 1);
-    CHECK(outputData[1] == 1);
-    CHECK(outputData[2] == 3);
-    CHECK(outputData[3] == 2);
+    BOOST_TEST(outputData[0] == 1);
+    BOOST_TEST(outputData[1] == 1);
+    BOOST_TEST(outputData[2] == 3);
+    BOOST_TEST(outputData[3] == 2);
 }
 
-TEST_CASE("RefEqualSimpleEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefEqualSimpleEndToEndTest)
 {
     const std::vector<uint8_t> expectedOutput({ 1, 1, 1, 1,  0, 0, 0, 0,
                                                 0, 0, 0, 0,  1, 1, 1, 1 });
@@ -411,7 +384,7 @@ TEST_CASE("RefEqualSimpleEndToEndTest")
                                                        expectedOutput);
 }
 
-TEST_CASE("RefGreaterSimpleEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefGreaterSimpleEndToEndTest)
 {
     const std::vector<uint8_t> expectedOutput({ 0, 0, 0, 0,  1, 1, 1, 1,
                                                 0, 0, 0, 0,  0, 0, 0, 0 });
@@ -421,7 +394,7 @@ TEST_CASE("RefGreaterSimpleEndToEndTest")
                                                        expectedOutput);
 }
 
-TEST_CASE("RefEqualSimpleEndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefEqualSimpleEndToEndUint8Test)
 {
     const std::vector<uint8_t> expectedOutput({ 1, 1, 1, 1,  0, 0, 0, 0,
                                                 0, 0, 0, 0,  1, 1, 1, 1 });
@@ -431,7 +404,7 @@ TEST_CASE("RefEqualSimpleEndToEndUint8Test")
                                                                expectedOutput);
 }
 
-TEST_CASE("RefGreaterSimpleEndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefGreaterSimpleEndToEndUint8Test)
 {
     const std::vector<uint8_t> expectedOutput({ 0, 0, 0, 0,  1, 1, 1, 1,
                                                 0, 0, 0, 0,  0, 0, 0, 0 });
@@ -441,7 +414,7 @@ TEST_CASE("RefGreaterSimpleEndToEndUint8Test")
                                                                expectedOutput);
 }
 
-TEST_CASE("RefEqualBroadcastEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefEqualBroadcastEndToEndTest)
 {
     const std::vector<uint8_t> expectedOutput({ 1, 0, 1, 1, 0, 0,
                                                 0, 0, 0, 0, 0, 0 });
@@ -451,7 +424,7 @@ TEST_CASE("RefEqualBroadcastEndToEndTest")
                                                           expectedOutput);
 }
 
-TEST_CASE("RefGreaterBroadcastEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefGreaterBroadcastEndToEndTest)
 {
     const std::vector<uint8_t> expectedOutput({ 0, 1, 0, 0, 0, 1,
                                                 1, 1, 1, 1, 1, 1 });
@@ -461,7 +434,7 @@ TEST_CASE("RefGreaterBroadcastEndToEndTest")
                                                           expectedOutput);
 }
 
-TEST_CASE("RefEqualBroadcastEndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefEqualBroadcastEndToEndUint8Test)
 {
     const std::vector<uint8_t > expectedOutput({ 1, 0, 1, 1, 0, 0,
                                                  0, 0, 0, 0, 0, 0 });
@@ -471,7 +444,7 @@ TEST_CASE("RefEqualBroadcastEndToEndUint8Test")
                                                                   expectedOutput);
 }
 
-TEST_CASE("RefGreaterBroadcastEndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefGreaterBroadcastEndToEndUint8Test)
 {
     const std::vector<uint8_t> expectedOutput({ 0, 1, 0, 0, 0, 1,
                                                 1, 1, 1, 1, 1, 1 });
@@ -481,369 +454,244 @@ TEST_CASE("RefGreaterBroadcastEndToEndUint8Test")
                                                                   expectedOutput);
 }
 
-TEST_CASE("RefBatchMatMulEndToEndFloat32Test")
-{
-    BatchMatMulEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefBatchToSpaceNdEndToEndFloat32NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndFloat32NHWCTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndUint8NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndUint8NHWCTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndQSymm16NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndQSymm16NHWCTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndFloat32NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndFloat32NCHWTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndUint8NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndUint8NCHWTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndQSymm16NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndQSymm16NCHWTest)
 {
     BatchToSpaceNdEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexFloat32NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexFloat32NHWCTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexUint8NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexUint8NHWCTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexQSymm16NHWCTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexQSymm16NHWCTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexFloat32NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexFloat32NCHWTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexUint8NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexUint8NCHWTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefBatchToSpaceNdEndToEndComplexQSymm16NCHWTest")
+BOOST_AUTO_TEST_CASE(RefBatchToSpaceNdEndToEndComplexQSymm16NCHWTest)
 {
     BatchToSpaceNdComplexEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefChannelShuffleFloatTest")
-{
-    ChannelShuffleEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefChannelShuffleUint8Test")
-{
-    ChannelShuffleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
-}
-
-TEST_CASE("RefConcatEndToEndDim0Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim0Test)
 {
     ConcatDim0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim0Uint8Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim0Uint8Test)
 {
     ConcatDim0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim1Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim1Test)
 {
     ConcatDim1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim1Uint8Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim1Uint8Test)
 {
     ConcatDim1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim2Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim2Test)
 {
     ConcatDim2EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim2Uint8Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim2Uint8Test)
 {
     ConcatDim2EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim3Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim3Test)
 {
     ConcatDim3EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefConcatEndToEndDim3Uint8Test")
+BOOST_AUTO_TEST_CASE(RefConcatEndToEndDim3Uint8Test)
 {
     ConcatDim3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefConvolution2dFloat32Test")
-{
-    Convolution2dEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
-}
-
-TEST_CASE("RefConvolution2dNchwFloat32Test")
-{
-    Convolution2dEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
-}
-
-TEST_CASE("RefConvolution2dFloat16Test")
-{
-    Convolution2dEndToEnd<armnn::DataType::Float16>(defaultBackends, armnn::DataLayout::NHWC);
-}
-
-TEST_CASE("RefConvolution3dFloat32Test")
-{
-    Convolution3dEndToEnd<armnn::DataType::Float32, armnn::DataType::Float32>(defaultBackends,
-                                                                              armnn::DataLayout::NDHWC);
-}
-
-TEST_CASE("RefConvolution3dNcdhwFloat32Test")
-{
-    Convolution3dEndToEnd<armnn::DataType::Float32, armnn::DataType::Float32>(defaultBackends,
-                                                                              armnn::DataLayout::NCDHW);
-}
-
-TEST_CASE("RefConvolution3dFloat16Test")
-{
-    Convolution3dEndToEnd<armnn::DataType::Float16, armnn::DataType::Float16>(defaultBackends,
-                                                                              armnn::DataLayout::NDHWC);
-}
-
-TEST_CASE("RefConvolution3dUint8Test")
-{
-    Convolution3dEndToEnd<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(defaultBackends,
-                                                                                armnn::DataLayout::NDHWC);
-}
-
-TEST_CASE("RefConvolution3dInt8Test")
-{
-    Convolution3dEndToEnd<armnn::DataType::QAsymmS8, armnn::DataType::Signed32>(defaultBackends,
-                                                                                armnn::DataLayout::NDHWC);
-}
-
-TEST_CASE("RefEluEndToEndTestFloat32")
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestFloat32)
 {
     EluEndToEndTest<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefEluEndToEndTestFloat16")
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestFloat16)
 {
     EluEndToEndTest<armnn::DataType::Float16>(defaultBackends);
 }
 
-TEST_CASE("RefEluEndToEndTestQAsymmS8")
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestBFloat16)
+{
+    EluEndToEndTest<armnn::DataType::BFloat16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQAsymmS8)
 {
     EluEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
 }
 
-TEST_CASE("RefEluEndToEndTestQAsymmU8")
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQAsymmU8)
 {
     EluEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefEluEndToEndTestQSymmS16")
+BOOST_AUTO_TEST_CASE(RefEluEndToEndTestQSymmS16)
 {
     EluEndToEndTest<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefFillEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTest)
 {
     FillEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefFillEndToEndTestFloat16")
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestFloat16)
 {
     FillEndToEnd<armnn::DataType::Float16>(defaultBackends);
 }
 
-TEST_CASE("RefFillEndToEndTestInt32")
+BOOST_AUTO_TEST_CASE(RefFillEndToEndTestInt32)
 {
     FillEndToEnd<armnn::DataType::Signed32>(defaultBackends);
 }
 
-TEST_CASE("RefFullyConnectedEndToEndTestFloat32")
-{
-    FullyConnectedWithDynamicWeightsEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestNonConstantWeightsConstantBiasesFloat32")
-{
-    FullyConnectedWithDynamicOrConstantInputsEndToEnd<armnn::DataType::Float32>(defaultBackends, true, true);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestConstantWeightsNonConstantBiasesFloat32")
-{
-    FullyConnectedWithDynamicOrConstantInputsEndToEnd<armnn::DataType::Float32>(defaultBackends, true, false);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestConstantWeightsTensorInfoNotSet")
-{
-    FullyConnectedErrorChecking<armnn::DataType::Float32>(defaultBackends, false, true, true, true, false);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestWeightsNotConnectedExplicitCheck")
-{
-    FullyConnectedErrorChecking<armnn::DataType::Float32>(defaultBackends, true, true, false, true, true);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestBiasNotConnectedExplicitCheck")
-{
-    FullyConnectedErrorChecking<armnn::DataType::Float32>(defaultBackends, true, true, true, false, true);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestWeightsAndBiasNotConnected")
-{
-    FullyConnectedErrorChecking<armnn::DataType::Float32>(defaultBackends, false, true, false, false, true);
-}
-
-TEST_CASE("RefFullyConnectedEndToEndTestBiasDisabledConnectBias")
-{
-    FullyConnectedErrorChecking<armnn::DataType::Float32>(defaultBackends, true, false, false, true, true);
-}
-
-TEST_CASE("RefGatherFloatTest")
+BOOST_AUTO_TEST_CASE(RefGatherFloatTest)
 {
     GatherEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefGatherUint8Test")
+BOOST_AUTO_TEST_CASE(RefGatherUint8Test)
 {
     GatherEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefGatherInt16Test")
+BOOST_AUTO_TEST_CASE(RefGatherInt16Test)
 {
     GatherEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefGatherMultiDimFloatTest")
+BOOST_AUTO_TEST_CASE(RefGatherMultiDimFloatTest)
 {
     GatherMultiDimEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefGatherMultiDimUint8Test")
+BOOST_AUTO_TEST_CASE(RefGatherMultiDimUint8Test)
 {
     GatherMultiDimEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefGatherMultiDimInt16Test")
+BOOST_AUTO_TEST_CASE(RefGatherMultiDimInt16Test)
 {
     GatherMultiDimEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefGatherNdFloatTest")
-{
-    GatherNdEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefGatherNdUint8Test")
-{
-    GatherNdEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
-}
-
-TEST_CASE("RefGatherNdInt16Test")
-{
-    GatherNdEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
-}
-
-TEST_CASE("RefGatherNdMultiDimFloatTest")
-{
-    GatherNdMultiDimEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefGatherNdMultiDimUint8Test")
-{
-    GatherNdMultiDimEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
-}
-
-TEST_CASE("RefGatherNdMultiDimInt16Test")
-{
-    GatherNdMultiDimEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
-}
-
 // DepthToSpace
-TEST_CASE("DephtToSpaceEndToEndNchwFloat32")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNchwFloat32)
 {
     DepthToSpaceEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNchwFloat16")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNchwFloat16)
 {
     DepthToSpaceEndToEnd<armnn::DataType::Float16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNchwUint8")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNchwUint8)
 {
     DepthToSpaceEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNchwInt16")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNchwInt16)
 {
     DepthToSpaceEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNhwcFloat32")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNhwcFloat32)
 {
     DepthToSpaceEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNhwcFloat16")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNhwcFloat16)
 {
     DepthToSpaceEndToEnd<armnn::DataType::Float16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNhwcUint8")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNhwcUint8)
 {
     DepthToSpaceEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("DephtToSpaceEndToEndNhwcInt16")
+BOOST_AUTO_TEST_CASE(DephtToSpaceEndToEndNhwcInt16)
 {
     DepthToSpaceEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
 // Dequantize
-TEST_CASE("DequantizeEndToEndSimpleTest")
+BOOST_AUTO_TEST_CASE(DequantizeEndToEndSimpleTest)
 {
     DequantizeEndToEndSimple<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("DequantizeEndToEndOffsetTest")
+BOOST_AUTO_TEST_CASE(DequantizeEndToEndOffsetTest)
 {
     DequantizeEndToEndOffset<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("DequantizeEndToEndSimpleInt16Test")
+BOOST_AUTO_TEST_CASE(DequantizeEndToEndSimpleInt16Test)
 {
     DequantizeEndToEndSimple<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("DequantizeEndToEndOffsetInt16Test")
+BOOST_AUTO_TEST_CASE(DequantizeEndToEndOffsetInt16Test)
 {
     DequantizeEndToEndOffset<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefDetectionPostProcessRegularNmsTest")
+BOOST_AUTO_TEST_CASE(RefDetectionPostProcessRegularNmsTest)
 {
     std::vector<float> boxEncodings({
         0.0f, 0.0f, 0.0f, 0.0f,
@@ -880,7 +728,7 @@ inline void QuantizeData(uint8_t* quant, const float* dequant, const TensorInfo&
     }
 }
 
-TEST_CASE("RefDetectionPostProcessRegularNmsUint8Test")
+BOOST_AUTO_TEST_CASE(RefDetectionPostProcessRegularNmsUint8Test)
 {
     armnn::TensorInfo boxEncodingsInfo({ 1, 6, 4 }, armnn::DataType::Float32);
     armnn::TensorInfo scoresInfo({ 1, 6, 3 }, armnn::DataType::Float32);
@@ -929,7 +777,7 @@ TEST_CASE("RefDetectionPostProcessRegularNmsUint8Test")
                                                                              1.0f, 1, 0.01f, 0, 0.5f, 0);
 }
 
-TEST_CASE("RefDetectionPostProcessFastNmsTest")
+BOOST_AUTO_TEST_CASE(RefDetectionPostProcessFastNmsTest)
 {
     std::vector<float> boxEncodings({
         0.0f, 0.0f, 0.0f, 0.0f,
@@ -958,7 +806,7 @@ TEST_CASE("RefDetectionPostProcessFastNmsTest")
     DetectionPostProcessFastNmsEndToEnd<armnn::DataType::Float32>(defaultBackends, boxEncodings, scores, anchors);
 }
 
-TEST_CASE("RefDetectionPostProcessFastNmsUint8Test")
+BOOST_AUTO_TEST_CASE(RefDetectionPostProcessFastNmsUint8Test)
 {
     armnn::TensorInfo boxEncodingsInfo({ 1, 6, 4 }, armnn::DataType::Float32);
     armnn::TensorInfo scoresInfo({ 1, 6, 3 }, armnn::DataType::Float32);
@@ -1008,595 +856,480 @@ TEST_CASE("RefDetectionPostProcessFastNmsUint8Test")
 }
 
 // HardSwish
-TEST_CASE("RefHardSwishEndToEndTestFloat32")
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestFloat32)
 {
     HardSwishEndToEndTest<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefHardSwishEndToEndTestFloat16")
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestFloat16)
 {
     HardSwishEndToEndTest<armnn::DataType::Float16>(defaultBackends);
 }
 
-TEST_CASE("RefHardSwishEndToEndTestQAsymmS8")
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestBFloat16)
+{
+HardSwishEndToEndTest<armnn::DataType::BFloat16>(defaultBackends);
+}
+
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQAsymmS8)
 {
     HardSwishEndToEndTest<armnn::DataType::QAsymmS8>(defaultBackends);
 }
 
-TEST_CASE("RefHardSwishEndToEndTestQAsymmU8")
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQAsymmU8)
 {
     HardSwishEndToEndTest<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefHardSwishEndToEndTestQSymmS16")
+BOOST_AUTO_TEST_CASE(RefHardSwishEndToEndTestQSymmS16)
 {
     HardSwishEndToEndTest<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
 // LogSoftmax
-TEST_CASE("RefLogSoftmaxEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefLogSoftmaxEndToEndTest)
 {
     LogSoftmaxEndToEndTest(defaultBackends);
 }
 
-TEST_CASE("RefPreluEndToEndTestFloat32")
+BOOST_AUTO_TEST_CASE(RefPreluEndToEndTestFloat32)
 {
     PreluEndToEndNegativeTest<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefPreluEndToEndTestUint8")
+BOOST_AUTO_TEST_CASE(RefPreluEndToEndTestUint8)
 {
     PreluEndToEndPositiveTest<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefPreluEndToEndTestQSymm16")
+BOOST_AUTO_TEST_CASE(RefPreluEndToEndTestQSymm16)
 {
     PreluEndToEndPositiveTest<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefSpaceToDepthNhwcEndToEndTest1")
+BOOST_AUTO_TEST_CASE(RefSpaceToDepthNhwcEndToEndTest1)
 {
     SpaceToDepthNhwcEndToEndTest1(defaultBackends);
 }
 
-TEST_CASE("RefSpaceToDepthNchwEndToEndTest1")
+BOOST_AUTO_TEST_CASE(RefSpaceToDepthNchwEndToEndTest1)
 {
     SpaceToDepthNchwEndToEndTest1(defaultBackends);
+
 }
 
-TEST_CASE("RefSpaceToDepthNhwcEndToEndTest2")
+BOOST_AUTO_TEST_CASE(RefSpaceToDepthNhwcEndToEndTest2)
 {
     SpaceToDepthNhwcEndToEndTest2(defaultBackends);
 }
 
-TEST_CASE("RefSpaceToDepthNchwEndToEndTest2")
+BOOST_AUTO_TEST_CASE(RefSpaceToDepthNchwEndToEndTest2)
 {
     SpaceToDepthNchwEndToEndTest2(defaultBackends);
 }
 
-TEST_CASE("RefSplitter1dEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter1dEndToEndTest)
 {
     Splitter1dEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter1dEndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter1dEndToEndUint8Test)
 {
     Splitter1dEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter2dDim0EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter2dDim0EndToEndTest)
 {
     Splitter2dDim0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter2dDim1EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter2dDim1EndToEndTest)
 {
     Splitter2dDim1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter2dDim0EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter2dDim0EndToEndUint8Test)
 {
     Splitter2dDim0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter2dDim1EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter2dDim1EndToEndUint8Test)
 {
     Splitter2dDim1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim0EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim0EndToEndTest)
 {
     Splitter3dDim0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim1EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim1EndToEndTest)
 {
     Splitter3dDim1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim2EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim2EndToEndTest)
 {
     Splitter3dDim2EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim0EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim0EndToEndUint8Test)
 {
     Splitter3dDim0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim1EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim1EndToEndUint8Test)
 {
     Splitter3dDim1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter3dDim2EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter3dDim2EndToEndUint8Test)
 {
     Splitter3dDim2EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim0EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim0EndToEndTest)
 {
     Splitter4dDim0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim1EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim1EndToEndTest)
 {
     Splitter4dDim1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim2EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim2EndToEndTest)
 {
     Splitter4dDim2EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim3EndToEndTest")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim3EndToEndTest)
 {
     Splitter4dDim3EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim0EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim0EndToEndUint8Test)
 {
     Splitter4dDim0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim1EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim1EndToEndUint8Test)
 {
     Splitter4dDim1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim2EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim2EndToEndUint8Test)
 {
     Splitter4dDim2EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefSplitter4dDim3EndToEndUint8Test")
+BOOST_AUTO_TEST_CASE(RefSplitter4dDim3EndToEndUint8Test)
 {
     Splitter4dDim3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
 // TransposeConvolution2d
-TEST_CASE("RefTransposeConvolution2dEndToEndFloatNchwTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndFloatNchwTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::Float32, armnn::DataType::Float32>(
         defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefTransposeConvolution2dEndToEndUint8NchwTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndUint8NchwTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
         defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefTransposeConvolution2dEndToEndInt16NchwTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndInt16NchwTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
         defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefTransposeConvolution2dEndToEndFloatNhwcTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndFloatNhwcTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::Float32, armnn::DataType::Float32>(
         defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefTransposeConvolution2dEndToEndUint8NhwcTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndUint8NhwcTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::QAsymmU8, armnn::DataType::Signed32>(
         defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefTransposeConvolution2dEndToEndInt16NhwcTest")
+BOOST_AUTO_TEST_CASE(RefTransposeConvolution2dEndToEndInt16NhwcTest)
 {
     TransposeConvolution2dEndToEnd<armnn::DataType::QSymmS16, armnn::DataType::Signed32>(
         defaultBackends, armnn::DataLayout::NHWC);
-}
-
-// Transpose
-TEST_CASE("RefTransposeEndToEndTest")
-{
-    TransposeEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
 // Resize Bilinear
-TEST_CASE("RefResizeBilinearEndToEndFloatNchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndFloatNchwTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeBilinearEndToEndUint8NchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndUint8NchwTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeBilinearEndToEndInt16NchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndInt16NchwTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeBilinearEndToEndFloatNhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndFloatNhwcTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefResizeBilinearEndToEndUint8NhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndUint8NhwcTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefResizeBilinearEndToEndInt16NhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeBilinearEndToEndInt16NhwcTest)
 {
     ResizeBilinearEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
 // Resize NearestNeighbor
-TEST_CASE("RefResizeNearestNeighborEndToEndFloatNchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndFloatNchwTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeNearestNeighborEndToEndUint8NchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndUint8NchwTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeNearestNeighborEndToEndInt16NchwTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndInt16NchwTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NCHW);
 }
 
-TEST_CASE("RefResizeNearestNeighborEndToEndFloatNhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndFloatNhwcTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::Float32>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefResizeNearestNeighborEndToEndUint8NhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndUint8NhwcTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
-TEST_CASE("RefResizeNearestNeighborEndToEndInt16NhwcTest")
+BOOST_AUTO_TEST_CASE(RefResizeNearestNeighborEndToEndInt16NhwcTest)
 {
     ResizeNearestNeighborEndToEnd<armnn::DataType::QSymmS16>(defaultBackends, armnn::DataLayout::NHWC);
 }
 
 // InstanceNormalization
-TEST_CASE("RefInstanceNormalizationNhwcEndToEndTest1")
+BOOST_AUTO_TEST_CASE(RefInstanceNormalizationNhwcEndToEndTest1)
 {
     InstanceNormalizationNhwcEndToEndTest1(defaultBackends);
 }
 
-TEST_CASE("RefInstanceNormalizationNchwEndToEndTest1")
+BOOST_AUTO_TEST_CASE(RefInstanceNormalizationNchwEndToEndTest1)
 {
     InstanceNormalizationNchwEndToEndTest1(defaultBackends);
 }
 
-TEST_CASE("RefInstanceNormalizationNhwcEndToEndTest2")
+BOOST_AUTO_TEST_CASE(RefInstanceNormalizationNhwcEndToEndTest2)
 {
     InstanceNormalizationNhwcEndToEndTest2(defaultBackends);
 }
 
-TEST_CASE("RefInstanceNormalizationNchwEndToEndTest2")
+BOOST_AUTO_TEST_CASE(RefInstanceNormalizationNchwEndToEndTest2)
 {
     InstanceNormalizationNchwEndToEndTest2(defaultBackends);
 }
 
 // ArgMinMax
-TEST_CASE("RefArgMaxSimpleTest")
+BOOST_AUTO_TEST_CASE(RefArgMaxSimpleTest)
 {
     ArgMaxEndToEndSimple<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxSimpleUint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxSimpleUint8Test)
 {
     ArgMaxEndToEndSimple<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinSimpleTest")
+BOOST_AUTO_TEST_CASE(RefArgMinSimpleTest)
 {
     ArgMinEndToEndSimple<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinSimpleUint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMinSimpleUint8Test)
 {
     ArgMinEndToEndSimple<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis0Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis0Test)
 {
     ArgMaxAxis0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis0Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis0Uint8Test)
 {
     ArgMaxAxis0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis0Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis0Test)
 {
     ArgMinAxis0EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis0Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis0Uint8Test)
 {
 
     ArgMinAxis0EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis1Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis1Test)
 {
     ArgMaxAxis1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis1Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis1Uint8Test)
 {
     ArgMaxAxis1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis1Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis1Test)
 {
     ArgMinAxis1EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis1Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis1Uint8Test)
 {
 
     ArgMinAxis1EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis2Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis2Test)
 {
     ArgMaxAxis2EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis2Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis2Uint8Test)
 {
     ArgMaxAxis2EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis2Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis2Test)
 {
     ArgMinAxis2EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis2Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis2Uint8Test)
 {
 
     ArgMinAxis2EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis3Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis3Test)
 {
     ArgMaxAxis3EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMaxAxis3Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMaxAxis3Uint8Test)
 {
     ArgMaxAxis3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis3Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis3Test)
 {
     ArgMinAxis3EndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefArgMinAxis3Uint8Test")
+BOOST_AUTO_TEST_CASE(RefArgMinAxis3Uint8Test)
 {
 
     ArgMinAxis3EndToEnd<armnn::DataType::QAsymmU8>(defaultBackends);
 }
 
-TEST_CASE("RefQLstmEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefQLstmEndToEndTest)
 {
     QLstmEndToEnd(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTest)
 {
     RankEndToEnd<armnn::DataType::Float32>(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTestFloat16")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestFloat16)
 {
     RankEndToEnd<armnn::DataType::Float16>(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTestInt32")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestInt32)
 {
     RankEndToEnd<armnn::DataType::Signed32>(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTestQAsymmS8")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQAsymmS8)
 {
     RankEndToEnd<armnn::DataType::QAsymmS8>(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTestQSymmS16")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQSymmS16)
 {
     RankEndToEnd<armnn::DataType::QSymmS16>(defaultBackends);
 }
 
-TEST_CASE("RefRankEndToEndTestQSymmS8")
+BOOST_AUTO_TEST_CASE(RefRankEndToEndTestQSymmS8)
 {
     RankEndToEnd<armnn::DataType::QSymmS8>(defaultBackends);
 }
 
-// Reduce
-TEST_CASE("RefReduceEndToEndTest")
-{
-    ReduceEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefReduceEndToEndTestFloat16")
-{
-    ReduceEndToEnd<armnn::DataType::Float16>(defaultBackends);
-}
-
-// Reshape
-TEST_CASE("RefReshapeEndToEndTest")
-{
-    ReshapeEndToEnd<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefReshapeEndToEndTestFloat16")
-{
-    ReshapeEndToEndFloat16<armnn::DataType::Float16>(defaultBackends);
-}
-
-TEST_CASE("RefForceImportWithAlignedBuffersEndToEndTest")
-{
-    ForceImportWithAlignedBuffersEndToEndTest(defaultBackends);
-}
-
-TEST_CASE("RefForceImportWithMisalignedInputBuffersEndToEndTest")
-{
-    ForceImportWithMisalignedInputBuffersEndToEndTest(defaultBackends);
-}
-
-TEST_CASE("RefForceImportWithMisalignedOutputBuffersEndToEndTest")
-{
-    ForceImportWithMisalignedOutputBuffersEndToEndTest(defaultBackends);
-}
-
-TEST_CASE("RefForceImportWithMisalignedInputAndOutputBuffersEndToEndTest")
-{
-    ForceImportWithMisalignedInputAndOutputBuffersEndToEndTest(defaultBackends);
-}
-
-TEST_CASE("RefForceImportRepeatedInferencesEndToEndTest")
-{
-    ForceImportRepeatedInferencesEndToEndTest(defaultBackends);
-}
-
-TEST_CASE("RefForceImportRepeatedInferencesInvertedEndToEndTest")
-{
-    ForceImportRepeatedInferencesInvertedEndToEndTest(defaultBackends);
-}
-
 #if !defined(__ANDROID__)
 // Only run these tests on non Android platforms
-TEST_CASE("RefImportNonAlignedPointerTest")
+BOOST_AUTO_TEST_CASE(RefImportNonAlignedPointerTest)
 {
     ImportNonAlignedInputPointerTest(defaultBackends);
 }
 
-TEST_CASE("RefExportNonAlignedPointerTest")
+BOOST_AUTO_TEST_CASE(RefExportNonAlignedPointerTest)
 {
     ExportNonAlignedOutputPointerTest(defaultBackends);
 }
 
-TEST_CASE("RefImportAlignedPointerTest")
+BOOST_AUTO_TEST_CASE(RefImportAlignedPointerTest)
 {
     ImportAlignedPointerTest(defaultBackends);
 }
 
-TEST_CASE("RefImportOnlyWorkload")
+BOOST_AUTO_TEST_CASE(RefImportOnlyWorkload)
 {
     ImportOnlyWorkload(defaultBackends);
 }
 
-TEST_CASE("RefExportOnlyWorkload")
+BOOST_AUTO_TEST_CASE(RefExportOnlyWorkload)
 {
     ExportOnlyWorkload(defaultBackends);
 }
 
-TEST_CASE("RefImportAndExportWorkload")
+BOOST_AUTO_TEST_CASE(RefImportAndExportWorkload)
 {
     ImportAndExportWorkload(defaultBackends);
 }
 
-TEST_CASE("RefExportOutputWithSeveralOutputSlotConnectionsTest")
+BOOST_AUTO_TEST_CASE(RefExportOutputWithSeveralOutputSlotConnectionsTest)
 {
     ExportOutputWithSeveralOutputSlotConnectionsTest(defaultBackends);
 }
 
-TEST_CASE("RefStridedSliceInvalidSliceEndToEndTest")
+BOOST_AUTO_TEST_CASE(RefStridedSliceInvalidSliceEndToEndTest)
 {
     StridedSliceInvalidSliceEndToEndTest(defaultBackends);
 }
 
-TEST_CASE("RefThreadSafeFP32StridedSlicedEndToEndTest")
-{
-    armnn::experimental::StridedSlicedEndToEndTest<armnn::DataType::Float32>(defaultBackends, 1);
-}
-
-TEST_CASE("RefAsyncFP32StridedSlicedMultiThreadedEndToEndTest")
-{
-    armnn::experimental::StridedSlicedMultiThreadedEndToEndTest<armnn::DataType::Float32>(defaultBackends);
-}
-
-TEST_CASE("RefAsyncFP32StridedSlicedScheduledMultiThreadedEndToEndTest")
-{
-    armnn::experimental::StridedSlicedEndToEndTest<armnn::DataType::Float32>(defaultBackends, 3);
-}
-
-TEST_CASE("RefAddEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Add);
-}
-TEST_CASE("RefAddEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Add);
-}
-TEST_CASE("RefDivEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Div);
-}
-TEST_CASE("RefDivEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Div);
-}
-TEST_CASE("RefMulEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Mul);
-}
-TEST_CASE("RefMulEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Mul);
-}
-TEST_CASE("RefSubEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Sub);
-}
-TEST_CASE("RefSubEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Sub);
-}
-TEST_CASE("RefMaximumEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Maximum);
-}
-TEST_CASE("RefMaximumEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Maximum);
-}
-TEST_CASE("RefMinimumEndToEndTestFloat32")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::Float32>(defaultBackends, BinaryOperation::Minimum);
-}
-TEST_CASE("RefMinimumEndToEndTestUint8")
-{
-    ElementwiseBinarySimpleEndToEnd<armnn::DataType::QAsymmU8>(defaultBackends, BinaryOperation::Minimum);
-}
 #endif
 
-}
+BOOST_AUTO_TEST_SUITE_END()

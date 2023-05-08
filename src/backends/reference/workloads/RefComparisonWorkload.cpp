@@ -1,5 +1,5 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -21,20 +21,14 @@ namespace armnn
 
 RefComparisonWorkload::RefComparisonWorkload(const ComparisonQueueDescriptor& desc,
                                              const WorkloadInfo& info)
-    : RefBaseWorkload<ComparisonQueueDescriptor>(desc, info)
+    : BaseWorkload<ComparisonQueueDescriptor>(desc, info)
 {}
 
 void RefComparisonWorkload::PostAllocationConfigure()
 {
-    PostAllocationConfigure(m_Data.m_Inputs, m_Data.m_Outputs);
-}
-
-void RefComparisonWorkload::PostAllocationConfigure(std::vector<ITensorHandle*> inputs,
-                                                    std::vector<ITensorHandle*> outputs)
-{
-    const TensorInfo& inputInfo0 = GetTensorInfo(inputs[0]);
-    const TensorInfo& inputInfo1 = GetTensorInfo(inputs[1]);
-    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
+    const TensorInfo& inputInfo0 = GetTensorInfo(m_Data.m_Inputs[0]);
+    const TensorInfo& inputInfo1 = GetTensorInfo(m_Data.m_Inputs[1]);
+    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
 
     m_Input0 = MakeDecoder<InType>(inputInfo0);
     m_Input1 = MakeDecoder<InType>(inputInfo1);
@@ -44,32 +38,19 @@ void RefComparisonWorkload::PostAllocationConfigure(std::vector<ITensorHandle*> 
 
 void RefComparisonWorkload::Execute() const
 {
-    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
-}
-
-void RefComparisonWorkload::ExecuteAsync(ExecutionData& executionData)
-{
-    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
-
-    PostAllocationConfigure(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
-    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
-}
-
-void RefComparisonWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
-{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefComparisonWorkload_Execute");
 
-    const TensorInfo& inputInfo0 = GetTensorInfo(inputs[0]);
-    const TensorInfo& inputInfo1 = GetTensorInfo(inputs[1]);
-    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
+    const TensorInfo& inputInfo0 = GetTensorInfo(m_Data.m_Inputs[0]);
+    const TensorInfo& inputInfo1 = GetTensorInfo(m_Data.m_Inputs[1]);
+    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
 
     const TensorShape& inShape0 = inputInfo0.GetShape();
     const TensorShape& inShape1 = inputInfo1.GetShape();
     const TensorShape& outShape = outputInfo.GetShape();
 
-    m_Input0->Reset(inputs[0]->Map());
-    m_Input1->Reset(inputs[1]->Map());
-    m_Output->Reset(outputs[0]->Map());
+    m_Input0->Reset(m_Data.m_Inputs[0]->Map());
+    m_Input1->Reset(m_Data.m_Inputs[1]->Map());
+    m_Output->Reset(m_Data.m_Outputs[0]->Map());
 
     using EqualFunction          = ElementwiseBinaryFunction<std::equal_to<InType>>;
     using GreaterFunction        = ElementwiseBinaryFunction<std::greater<InType>>;

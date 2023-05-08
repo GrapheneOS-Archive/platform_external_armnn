@@ -10,8 +10,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 using namespace armnnUtils;
 
@@ -28,7 +28,7 @@ std::unique_ptr<IWorkload> ResizeLayer::CreateWorkload(const IWorkloadFactory& f
     ResizeQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Resize, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateResize(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ResizeLayer* ResizeLayer::Clone(Graph& graph) const
@@ -75,9 +75,9 @@ void ResizeLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ResizeLayer");
 }
 
-void ResizeLayer::ExecuteStrategy(IStrategy& strategy) const
+void ResizeLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitResizeLayer(this, GetParameters(), GetName());
 }
 
 } // namespace armnn

@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include <armnnTestUtils/LayerTestResult.hpp>
+#include "LayerTestResult.hpp"
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 #if defined(ARMNNREF_ENABLED)
 void LstmUtilsZeroVectorTest();

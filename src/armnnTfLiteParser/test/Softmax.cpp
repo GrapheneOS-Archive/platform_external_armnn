@@ -1,13 +1,17 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
+#include "../TfLiteParser.hpp"
 
+#include <string>
+#include <iostream>
 
-TEST_SUITE("TensorflowLiteParser_Softmax")
-{
+BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
+
 struct SoftmaxFixture : public ParserFlatbuffersFixture
 {
     explicit SoftmaxFixture()
@@ -65,9 +69,9 @@ struct SoftmaxFixture : public ParserFlatbuffersFixture
     }
 };
 
-TEST_CASE_FIXTURE(SoftmaxFixture, "ParseSoftmaxLite")
+BOOST_FIXTURE_TEST_CASE(ParseSoftmaxLite, SoftmaxFixture)
 {
     RunTest<2, armnn::DataType::QAsymmU8>(0, { 0, 0, 100, 0, 0, 0, 0 }, { 0, 0, 255, 0, 0, 0, 0 });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

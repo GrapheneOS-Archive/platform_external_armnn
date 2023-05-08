@@ -4,18 +4,16 @@
 //
 
 #include "TestTimelinePacketHandler.hpp"
-
-#include <client/src/IProfilingConnection.hpp>
-
-#include <common/include/LabelsAndEventClasses.hpp>
+#include "IProfilingConnection.hpp"
+#include <LabelsAndEventClasses.hpp>
 
 #include <chrono>
 #include <iostream>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
 
 std::vector<uint32_t> TestTimelinePacketHandler::GetHeadersAccepted()
@@ -40,7 +38,7 @@ void TestTimelinePacketHandler::HandlePacket(const arm::pipe::Packet& packet)
     {
         std::stringstream ss;
         ss << "Received a packet with unknown header [" << packet.GetHeader() << "]";
-        throw arm::pipe::ProfilingException(ss.str());
+        throw armnn::Exception(ss.str());
     }
 }
 
@@ -64,7 +62,7 @@ void TestTimelinePacketHandler::WaitOnInferenceCompletion(unsigned int timeout)
         std::chrono::duration<double, std::milli> elapsed = finish - start;
         std::stringstream ss;
         ss << "Timed out waiting on inference completion for " << elapsed.count() << " ms";
-        throw arm::pipe::TimeoutException(ss.str());
+        throw armnn::TimeoutException(ss.str());
     }
     return;
 }
@@ -126,7 +124,7 @@ arm::pipe::ITimelineDecoder::TimelineStatus TimelineMessageDecoder::CreateRelati
         m_TimelineModel.IsInferenceGuid(relationship.m_HeadGuid))
     {
         ProfilingStaticGuid attributeGuid(relationship.m_AttributeGuid);
-        if (attributeGuid == LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS)
+        if (attributeGuid == armnn::profiling::LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS)
         {
             if (m_PacketHandler != nullptr)
             {
@@ -137,6 +135,6 @@ arm::pipe::ITimelineDecoder::TimelineStatus TimelineMessageDecoder::CreateRelati
     return arm::pipe::ITimelineDecoder::TimelineStatus::TimelineStatus_Success;
 }
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

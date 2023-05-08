@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include <armnnDeserializer/IDeserializer.hpp>
+#include "../Deserializer.hpp"
 
 #include <string>
 
-TEST_SUITE("Deserializer_StridedSlice")
-{
+BOOST_AUTO_TEST_SUITE(Deserializer)
+
 struct StridedSliceFixture : public ParserFlatbuffersSerializeFixture
 {
     explicit StridedSliceFixture(const std::string& inputShape,
@@ -133,7 +134,7 @@ struct SimpleStridedSliceFixture : StridedSliceFixture
                                                       "Float32") {}
 };
 
-TEST_CASE_FIXTURE(SimpleStridedSliceFixture, "SimpleStridedSliceFloat32")
+BOOST_FIXTURE_TEST_CASE(SimpleStridedSliceFloat32, SimpleStridedSliceFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0,
                                          {
@@ -162,7 +163,7 @@ struct StridedSliceMaskFixture : StridedSliceFixture
                                                     "Float32") {}
 };
 
-TEST_CASE_FIXTURE(StridedSliceMaskFixture, "StridedSliceMaskFloat32")
+BOOST_FIXTURE_TEST_CASE(StridedSliceMaskFloat32, StridedSliceMaskFixture)
 {
     RunTest<4, armnn::DataType::Float32>(0,
                                          {
@@ -177,4 +178,4 @@ TEST_CASE_FIXTURE(StridedSliceMaskFixture, "StridedSliceMaskFloat32")
                                          });
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

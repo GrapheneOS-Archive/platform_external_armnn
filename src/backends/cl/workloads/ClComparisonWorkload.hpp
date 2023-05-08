@@ -1,11 +1,11 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include "ClBaseWorkload.hpp"
+#include <backendsCommon/Workload.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLComparison.h>
 
@@ -17,12 +17,10 @@ arm_compute::Status ClComparisonWorkloadValidate(const TensorInfo& input0,
                                                  const TensorInfo& output,
                                                  const ComparisonDescriptor& descriptor);
 
-class ClComparisonWorkload : public ClBaseWorkload<ComparisonQueueDescriptor>
+class ClComparisonWorkload : public BaseWorkload<ComparisonQueueDescriptor>
 {
 public:
-    ClComparisonWorkload(const ComparisonQueueDescriptor& descriptor,
-                         const WorkloadInfo& info,
-                         const arm_compute::CLCompileContext& clCompileContext);
+    ClComparisonWorkload(const ComparisonQueueDescriptor& descriptor, const WorkloadInfo& info);
     void Execute() const override;
 
 private:

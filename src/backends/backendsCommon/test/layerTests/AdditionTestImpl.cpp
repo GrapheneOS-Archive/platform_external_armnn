@@ -7,7 +7,7 @@
 
 #include "ElementwiseTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <reference/test/RefWorkloadFactoryHelper.hpp>
 
 template<>
@@ -16,7 +16,7 @@ std::unique_ptr<armnn::IWorkload> CreateWorkload<armnn::AdditionQueueDescriptor>
     const armnn::WorkloadInfo& info,
     const armnn::AdditionQueueDescriptor& descriptor)
 {
-    return workloadFactory.CreateWorkload(armnn::LayerType::Addition, descriptor, info);
+    return workloadFactory.CreateAddition(descriptor, info);
 }
 
 LayerTestResult<float,4> AdditionTest(
@@ -186,7 +186,7 @@ LayerTestResult<T, 4> AdditionBroadcastTestImpl(
         outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    auto input1 = armnnUtils::QuantizedVector<T>(
+    auto input1 = MakeTensor<T, 4>(inputTensorInfo1, armnnUtils::QuantizedVector<T>(
     {
         0.0f,
         1.0f,
@@ -197,18 +197,17 @@ LayerTestResult<T, 4> AdditionBroadcastTestImpl(
         4.0f,
         5.0f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
-    auto input2 = armnnUtils::QuantizedVector<T>(
+    auto input2 = MakeTensor<T, 4>(inputTensorInfo2, armnnUtils::QuantizedVector<T>(
     {
         0.5f, 1.5f, 2.5f,
         3.5f, 4.5f, 5.5f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-
-    auto expectedOutput = armnnUtils::QuantizedVector<T>(
+    LayerTestResult<T,4> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo, armnnUtils::QuantizedVector<T>(
     {
         0.5f, 1.5f, 2.5f,
         4.5f, 5.5f, 6.5f,
@@ -219,7 +218,7 @@ LayerTestResult<T, 4> AdditionBroadcastTestImpl(
         4.5f, 5.5f, 6.5f,
         8.5f, 9.5f, 10.5f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle1 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
     std::unique_ptr<armnn::ITensorHandle> inputHandle2 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
@@ -231,25 +230,21 @@ LayerTestResult<T, 4> AdditionBroadcastTestImpl(
     AddInputToWorkload(data, info, inputTensorInfo2, inputHandle2.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Addition,
-                                                                                data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateAddition(data, info);
 
     inputHandle1->Allocate();
     inputHandle2->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle1.get(), input1.data());
-    CopyDataToITensorHandle(inputHandle2.get(), input2.data());
+    CopyDataToITensorHandle(inputHandle1.get(), &input1[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle2.get(), &input2[0][0][0][0]);
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
 
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -275,7 +270,7 @@ LayerTestResult<T, 4> AdditionBroadcast1ElementTestImpl(
         outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    auto input1 = armnnUtils::QuantizedVector<T>(
+    auto input1 = MakeTensor<T, 4>(inputTensorInfo1, armnnUtils::QuantizedVector<T>(
     {
          0.0f,  1.0f,  2.0f,
          3.0f,  4.0f,  5.0f,
@@ -284,17 +279,16 @@ LayerTestResult<T, 4> AdditionBroadcast1ElementTestImpl(
         12.0f, 13.0f, 14.0f,
         15.0f, 16.0f, 17.0f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
-    auto input2 = armnnUtils::QuantizedVector<T>(
+    auto input2 = MakeTensor<T, 4>(inputTensorInfo2, armnnUtils::QuantizedVector<T>(
     {
         0.5f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-
-    auto expectedOutput = armnnUtils::QuantizedVector<T>(
+    LayerTestResult<T,4> ret(outputTensorInfo);
+    ret.outputExpected = MakeTensor<T, 4>(outputTensorInfo, armnnUtils::QuantizedVector<T>(
     {
          0.5f,  1.5f,  2.5f,
          3.5f,  4.5f,  5.5f,
@@ -303,7 +297,7 @@ LayerTestResult<T, 4> AdditionBroadcast1ElementTestImpl(
         12.5f, 13.5f, 14.5f,
         15.5f, 16.5f, 17.5f,
     },
-    qScale, qOffset);
+    qScale, qOffset));
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle1 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
     std::unique_ptr<armnn::ITensorHandle> inputHandle2 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
@@ -315,25 +309,21 @@ LayerTestResult<T, 4> AdditionBroadcast1ElementTestImpl(
     AddInputToWorkload(data, info, inputTensorInfo2, inputHandle2.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Addition,
-                                                                                data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateAddition(data, info);
 
     inputHandle1->Allocate();
     inputHandle2->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle1.get(), input1.data());
-    CopyDataToITensorHandle(inputHandle2.get(), input2.data());
+    CopyDataToITensorHandle(inputHandle1.get(), &input1[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle2.get(), &input2[0][0][0][0]);
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
 
-    return LayerTestResult<T, 4>(actualOutput,
-                                 expectedOutput,
-                                 outputHandle->GetShape(),
-                                 outputTensorInfo.GetShape());
+    return ret;
 }
 
 LayerTestResult<float, 4> AdditionBroadcastTest(
@@ -555,10 +545,11 @@ LayerTestResult<float, 4> AdditionAfterMaxPoolTest(
     armnn::TensorInfo poolingInputTensorInfo({ 1, 1, 3, 3}, armnn::DataType::Float32);
     armnn::TensorInfo poolingOutputTensorInfo({ 1, 1, 2, 2}, armnn::DataType::Float32);
 
-    std::vector<float> poolingInput = {1, 2, 3,
-                                       4, 5, 6,
-                                       7, 8, 9
-                                      };
+    boost::multi_array<float, 4> poolingInput = MakeTensor<float,4>(poolingInputTensorInfo,
+                                                            {1, 2, 3,
+                                                             4, 5, 6,
+                                                             7, 8, 9
+                                                            });
     std::unique_ptr<armnn::ITensorHandle> poolingInputHandle =
             tensorHandleFactory.CreateTensorHandle(poolingInputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> poolingOutputHandle =
@@ -582,30 +573,39 @@ LayerTestResult<float, 4> AdditionAfterMaxPoolTest(
     AddOutputToWorkload(queueDescriptor, workloadInfo, poolingOutputTensorInfo, poolingOutputHandle.get());
 
     // Create the MaxPool
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Pooling2d,
-                                                                                queueDescriptor,
-                                                                                workloadInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreatePooling2d(queueDescriptor, workloadInfo);
 
-    std::vector<float> resultMaxPool(poolingOutputTensorInfo.GetNumElements());
+    //LayerTestResult<float, 4> result(poolingOutputTensorInfo);
+    auto shape( GetTensorShapeAsArray<4>(poolingOutputTensorInfo));
+    boost::multi_array<float, 4> resultMaxPool;
+    resultMaxPool.resize(shape);
+
 
     // Create addition with another tensor the same size
     // This would be the result to apply a Conv2d with kernel ones(2) and stride 1x1
     // with the initial tensor.
     // 12, 16
     // 24, 28
-    armnn::TensorInfo addInputTensorInfo({ 1,1,2,2 }, armnn::DataType::Float32);
-    armnn::TensorInfo addOutputTensorInfo({ 1,1,2,2 }, armnn::DataType::Float32);
 
-    std::vector<float> addInput = { 12, 16,
-                                    24, 28 };
+    armnn::TensorInfo addInputTensorInfo({ 1,1,2,2}, armnn::DataType::Float32);
+    armnn::TensorInfo addOutputTensorInfo({ 1,1,2,2}, armnn::DataType::Float32);
+
+    boost::multi_array<float, 4> addInput = MakeTensor<float,4>(addInputTensorInfo,
+                                                                    {12, 16,
+                                                                     24, 28,
+                                                                    });
 
     // Expected output tensor after MaxPool and Addition.
-    std::vector<float> actualOutput(addOutputTensorInfo.GetNumElements());
-    std::vector<float> expectedOutput = { 13, 19,
-                                          31, 37 };
+    LayerTestResult<float,4> addRet(addOutputTensorInfo);
+    addRet.outputExpected = MakeTensor<float, 4>(addOutputTensorInfo, std::vector<float>(
+    {
+        13, 19,
+        31, 37
+    }));
 
     std::unique_ptr<armnn::ITensorHandle> addInputHandle = tensorHandleFactory.CreateTensorHandle(addInputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> addOutputHandle = tensorHandleFactory.CreateTensorHandle(addOutputTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> addOutputHandle =
+        tensorHandleFactory.CreateTensorHandle(addOutputTensorInfo);
 
     armnn::AdditionQueueDescriptor data;
     armnn::WorkloadInfo info;
@@ -615,31 +615,27 @@ LayerTestResult<float, 4> AdditionAfterMaxPoolTest(
     AddInputToWorkload(data, info, addInputTensorInfo, addInputHandle.get());
     AddOutputToWorkload(data, info, addOutputTensorInfo, addOutputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> addWorkload = workloadFactory.CreateWorkload(armnn::LayerType::Addition,
-                                                                                   data, info);
+    std::unique_ptr<armnn::IWorkload> addWorkload = workloadFactory.CreateAddition(data, info);
 
     poolingInputHandle->Allocate();
     poolingOutputHandle->Allocate();
     addInputHandle->Allocate();
     addOutputHandle->Allocate();
 
-    CopyDataToITensorHandle(poolingInputHandle.get(), poolingInput.data());
-    CopyDataFromITensorHandle(resultMaxPool.data(), poolingOutputHandle.get());
+    CopyDataToITensorHandle(poolingInputHandle.get(), &poolingInput[0][0][0][0]);
+    CopyDataFromITensorHandle(&resultMaxPool[0][0][0][0], poolingOutputHandle.get());
 
-    CopyDataToITensorHandle(poolingOutputHandle.get(), resultMaxPool.data());
-    CopyDataToITensorHandle(addInputHandle.get(), addInput.data());
+    CopyDataToITensorHandle(poolingOutputHandle.get(), &resultMaxPool[0][0][0][0]);
+    CopyDataToITensorHandle(addInputHandle.get(), &addInput[0][0][0][0]);
 
     workload->PostAllocationConfigure();
     workload->Execute();
     addWorkload->PostAllocationConfigure();
     addWorkload->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), addOutputHandle.get());
+    CopyDataFromITensorHandle(&addRet.output[0][0][0][0], addOutputHandle.get());
 
-    return LayerTestResult<float, 4>(actualOutput,
-                                     expectedOutput,
-                                     addOutputHandle->GetShape(),
-                                     addOutputTensorInfo.GetShape());
+    return addRet;
 }
 
 LayerTestResult<float,4> CompareAdditionTest(
@@ -664,11 +660,10 @@ LayerTestResult<float,4> CompareAdditionTest(
     inputTensorInfo2 = armnn::TensorInfo(4, shape, armnn::DataType::Float32);
     outputTensorInfo = armnn::TensorInfo(4, shape, armnn::DataType::Float32);
 
-    auto input1 = MakeRandomTensor<float>(inputTensorInfo1, 1232);
-    auto input2 = MakeRandomTensor<float>(inputTensorInfo2, 456);
+    auto input1 = MakeRandomTensor<float, 4>(inputTensorInfo1, 1232);
+    auto input2 = MakeRandomTensor<float, 4>(inputTensorInfo2, 456);
 
-    std::vector<float> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<float> expectedOutput(outputTensorInfo.GetNumElements());
+    LayerTestResult<float,4> ret(outputTensorInfo);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle1 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
     std::unique_ptr<armnn::ITensorHandle> inputHandle2 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo2);
@@ -690,10 +685,8 @@ LayerTestResult<float,4> CompareAdditionTest(
     SetWorkloadInput(refData, refInfo, 1, inputTensorInfo2, inputHandle2Ref.get());
     SetWorkloadOutput(refData, refInfo, 0, outputTensorInfo, outputHandleRef.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Addition,
-                                                                                data, info);
-    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateWorkload(armnn::LayerType::Addition,
-                                                                                      refData, refInfo);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateAddition(data, info);
+    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateAddition(refData, refInfo);
 
     inputHandle1->Allocate();
     inputHandle2->Allocate();
@@ -702,21 +695,18 @@ LayerTestResult<float,4> CompareAdditionTest(
     inputHandle2Ref->Allocate();
     outputHandleRef->Allocate();
 
-    CopyDataToITensorHandle(inputHandle1.get(), input1.data());
-    CopyDataToITensorHandle(inputHandle2.get(), input2.data());
-    CopyDataToITensorHandle(inputHandle1Ref.get(), input1.data());
-    CopyDataToITensorHandle(inputHandle2Ref.get(), input2.data());
+    CopyDataToITensorHandle(inputHandle1.get(), &input1[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle2.get(), &input2[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle1Ref.get(), &input1[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle2Ref.get(), &input2[0][0][0][0]);
 
     workload->PostAllocationConfigure();
     workload->Execute();
     workloadRef->PostAllocationConfigure();
     workloadRef->Execute();
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-    CopyDataFromITensorHandle(expectedOutput.data(), outputHandleRef.get());
+    CopyDataFromITensorHandle(&ret.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(&ret.outputExpected[0][0][0][0], outputHandleRef.get());
 
-    return LayerTestResult<float, 4>(actualOutput,
-                                     expectedOutput,
-                                     outputHandle->GetShape(),
-                                     outputTensorInfo.GetShape());
+    return ret;
 }

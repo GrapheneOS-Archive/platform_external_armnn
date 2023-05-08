@@ -3,28 +3,24 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <client/src/ProfilingConnectionDumpToFileDecorator.hpp>
-
+#include "../ProfilingConnectionDumpToFileDecorator.hpp"
+#include <Filesystem.hpp>
 #include <Runtime.hpp>
-
-#include <armnnUtils/Filesystem.hpp>
-
-#include <common/include/IgnoreUnused.hpp>
-#include <common/include/NumericCast.hpp>
-
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <fstream>
 #include <sstream>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
-using namespace arm::pipe;
+using namespace armnn::profiling;
 
 namespace
 {
 
 const std::vector<char> g_Data       = { 'd', 'u', 'm', 'm', 'y' };
-const uint32_t          g_DataLength = arm::pipe::numeric_cast<uint32_t>(g_Data.size());
+const uint32_t          g_DataLength = armnn::numeric_cast<uint32_t>(g_Data.size());
 const unsigned char*    g_DataPtr    = reinterpret_cast<const unsigned char*>(g_Data.data());
 
 class DummyProfilingConnection : public IProfilingConnection
@@ -36,7 +32,7 @@ public:
     {
         // populate packet data and construct packet
         std::memcpy(m_PacketData.get(), g_DataPtr, g_DataLength);
-        m_Packet = std::make_unique<Packet>(0u, g_DataLength, m_PacketData);
+        m_Packet = std::make_unique<arm::pipe::Packet>(0u, g_DataLength, m_PacketData);
     }
 
     ~DummyProfilingConnection() = default;
@@ -53,21 +49,21 @@ public:
 
     bool WritePacket(const unsigned char* buffer, uint32_t length) override
     {
-        arm::pipe::IgnoreUnused(buffer);
-        arm::pipe::IgnoreUnused(length);
+        armnn::IgnoreUnused(buffer);
+        armnn::IgnoreUnused(length);
         return true;
     }
 
-    Packet ReadPacket(uint32_t timeout) override
+    arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        arm::pipe::IgnoreUnused(timeout);
+        armnn::IgnoreUnused(timeout);
         return std::move(*m_Packet);
     }
 
 private:
     bool m_Open;
     std::unique_ptr<unsigned char[]> m_PacketData;
-    std::unique_ptr<Packet> m_Packet;
+    std::unique_ptr<arm::pipe::Packet> m_Packet;
 };
 
 std::vector<char> ReadDumpFile(const std::string& dumpFileName)
@@ -78,39 +74,39 @@ std::vector<char> ReadDumpFile(const std::string& dumpFileName)
 
 } // anonymous namespace
 
-TEST_SUITE("ProfilingConnectionDumpToFileDecoratorTests")
+BOOST_AUTO_TEST_SUITE(ProfilingConnectionDumpToFileDecoratorTests)
+
+BOOST_AUTO_TEST_CASE(DumpIncomingInvalidFile)
 {
-TEST_CASE("DumpIncomingInvalidFile")
-{
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = "/";
     options.m_OutgoingCaptureFile =  "";
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, false);
-    CHECK_THROWS_AS(decorator.ReadPacket(0), arm::pipe::ProfilingException);
+    BOOST_CHECK_THROW(decorator.ReadPacket(0), armnn::RuntimeException);
 }
 
-TEST_CASE("DumpIncomingInvalidFileIgnoreErrors")
+BOOST_AUTO_TEST_CASE(DumpIncomingInvalidFileIgnoreErrors)
 {
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = "/";
     options.m_OutgoingCaptureFile =  "";
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, true);
-    CHECK_NOTHROW(decorator.ReadPacket(0));
+    BOOST_CHECK_NO_THROW(decorator.ReadPacket(0));
 }
 
-TEST_CASE("DumpIncomingValidFile")
+BOOST_AUTO_TEST_CASE(DumpIncomingValidFile)
 {
     fs::path fileName = armnnUtils::Filesystem::NamedTempFile("Armnn-DumpIncomingValidFileTest-TempFile");
 
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = fileName.string();
     options.m_OutgoingCaptureFile =  "";
 
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, false);
 
     // NOTE: unique_ptr is needed here because operator=() is deleted for Packet
-    std::unique_ptr<Packet> packet;
-    CHECK_NOTHROW(packet = std::make_unique<Packet>(decorator.ReadPacket(0)));
+    std::unique_ptr<arm::pipe::Packet> packet;
+    BOOST_CHECK_NO_THROW(packet = std::make_unique<arm::pipe::Packet>(decorator.ReadPacket(0)));
 
     decorator.Close();
 
@@ -120,45 +116,45 @@ TEST_CASE("DumpIncomingValidFile")
     // check if the data read back from the dump file matches the original
     constexpr unsigned int bytesToSkip = 2u * sizeof(uint32_t); // skip header and packet length
     int diff = std::strncmp(data.data() + bytesToSkip, packetData, g_DataLength);
-    CHECK(diff == 0);
+    BOOST_CHECK(diff == 0);
     fs::remove(fileName);
 }
 
-TEST_CASE("DumpOutgoingInvalidFile")
+BOOST_AUTO_TEST_CASE(DumpOutgoingInvalidFile)
 {
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = "";
     options.m_OutgoingCaptureFile = "/";
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, false);
-    CHECK_THROWS_AS(decorator.WritePacket(g_DataPtr, g_DataLength), arm::pipe::ProfilingException);
+    BOOST_CHECK_THROW(decorator.WritePacket(g_DataPtr, g_DataLength), armnn::RuntimeException);
 }
 
-TEST_CASE("DumpOutgoingInvalidFileIgnoreErrors")
+BOOST_AUTO_TEST_CASE(DumpOutgoingInvalidFileIgnoreErrors)
 {
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = "";
     options.m_OutgoingCaptureFile = "/";
 
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, true);
-    CHECK_NOTHROW(decorator.WritePacket(g_DataPtr, g_DataLength));
+    BOOST_CHECK_NO_THROW(decorator.WritePacket(g_DataPtr, g_DataLength));
 
     bool success = decorator.WritePacket(g_DataPtr, g_DataLength);
-    CHECK(!success);
+    BOOST_CHECK(!success);
 }
 
-TEST_CASE("DumpOutgoingValidFile")
+BOOST_AUTO_TEST_CASE(DumpOutgoingValidFile)
 {
     fs::path fileName = armnnUtils::Filesystem::NamedTempFile("Armnn-DumpOutgoingValidFileTest-TempFile");
 
-    ProfilingOptions options;
+    armnn::Runtime::CreationOptions::ExternalProfilingOptions options;
     options.m_IncomingCaptureFile = "";
     options.m_OutgoingCaptureFile = fileName.string();
 
     ProfilingConnectionDumpToFileDecorator decorator(std::make_unique<DummyProfilingConnection>(), options, false);
 
     bool success = false;
-    CHECK_NOTHROW(success = decorator.WritePacket(g_DataPtr, g_DataLength));
-    CHECK(success);
+    BOOST_CHECK_NO_THROW(success = decorator.WritePacket(g_DataPtr, g_DataLength));
+    BOOST_CHECK(success);
 
     decorator.Close();
 
@@ -166,8 +162,8 @@ TEST_CASE("DumpOutgoingValidFile")
 
     // check if the data read back from the dump file matches the original
     int diff = std::strncmp(data.data(), g_Data.data(), g_DataLength);
-    CHECK(diff == 0);
+    BOOST_CHECK(diff == 0);
     fs::remove(fileName);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

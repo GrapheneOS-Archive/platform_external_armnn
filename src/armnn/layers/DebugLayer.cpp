@@ -6,20 +6,15 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
 namespace armnn
 {
 
 DebugLayer::DebugLayer(const char* name)
-    : Layer(1, 1, LayerType::Debug, name),
-      m_ToFile(false)
-{}
-
-DebugLayer::DebugLayer(const char* name, bool toFile)
-    : Layer(1, 1, LayerType::Debug, name),
-      m_ToFile(toFile)
+    : Layer(1, 1, LayerType::Debug, name)
 {}
 
 std::unique_ptr<IWorkload> DebugLayer::CreateWorkload(const IWorkloadFactory& factory) const
@@ -30,11 +25,10 @@ std::unique_ptr<IWorkload> DebugLayer::CreateWorkload(const IWorkloadFactory& fa
     descriptor.m_Guid = prevLayer.GetGuid();
     descriptor.m_LayerName = prevLayer.GetNameStr();
     descriptor.m_SlotIndex = GetInputSlot(0).GetConnectedOutputSlot()->CalculateIndexOnOwner();
-    descriptor.m_LayerOutputToFile = m_ToFile;
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Debug, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateDebug(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 DebugLayer* DebugLayer::Clone(Graph& graph) const
@@ -58,9 +52,11 @@ void DebugLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "DebugLayer");
 }
 
-void DebugLayer::ExecuteStrategy(IStrategy& strategy) const
+void DebugLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    // by design debug layers are never in input graphs
+    IgnoreUnused(visitor);
+    throw armnn::Exception("DebugLayer should never appear in an input graph");
 }
 
 } // namespace armnn

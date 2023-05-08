@@ -5,35 +5,31 @@
 
 #pragma once
 
-#include <client/src/IProfilingConnectionFactory.hpp>
-#include <client/src/ProfilingService.hpp>
-#include <client/src/ProfilingUtils.hpp>
-#include <client/src/SendCounterPacket.hpp>
-#include <client/src/SendThread.hpp>
+#include <Holder.hpp>
+#include <IProfilingConnectionFactory.hpp>
+#include <IProfilingServiceStatus.hpp>
+#include <ProfilingService.hpp>
+#include <ProfilingGuidGenerator.hpp>
+#include <ProfilingUtils.hpp>
+#include <SendCounterPacket.hpp>
+#include <SendThread.hpp>
 
-#include <armnn/BackendId.hpp>
-#include <armnn/profiling/ArmNNProfiling.hpp>
-
-#include <client/include/Holder.hpp>
-#include <client/include/IProfilingServiceStatus.hpp>
-
-#include <common/include/Assert.hpp>
-#include <common/include/CommonProfilingUtils.hpp>
-#include <common/include/IgnoreUnused.hpp>
-#include <common/include/NumericCast.hpp>
-#include <common/include/Optional.hpp>
-#include <common/include/ProfilingException.hpp>
-#include <common/include/ProfilingGuidGenerator.hpp>
+#include <armnn/Exceptions.hpp>
+#include <armnn/Optional.hpp>
+#include <armnn/Conversion.hpp>
+#include <armnn/utility/Assert.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
+#include <armnn/utility/NumericCast.hpp>
 
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 
-namespace arm
+namespace armnn
 {
 
-namespace pipe
+namespace profiling
 {
 
 class MockProfilingConnection : public IProfilingConnection
@@ -134,7 +130,7 @@ public:
 
     arm::pipe::Packet ReadPacket(uint32_t timeout) override
     {
-        arm::pipe::IgnoreUnused(timeout);
+        IgnoreUnused(timeout);
 
         // Simulate a delay in the reading process. The default timeout is way too long.
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -166,9 +162,9 @@ private:
 class MockProfilingConnectionFactory : public IProfilingConnectionFactory
 {
 public:
-    IProfilingConnectionPtr GetProfilingConnection(const ProfilingOptions& options) const override
+    IProfilingConnectionPtr GetProfilingConnection(const ExternalProfilingOptions& options) const override
     {
-        arm::pipe::IgnoreUnused(options);
+        IgnoreUnused(options);
         return std::make_unique<MockProfilingConnection>();
     }
 };
@@ -297,8 +293,8 @@ public:
         reservedSize = 0;
         if (requestedSize > m_MaxBufferSize)
         {
-            throw arm::pipe::InvalidArgumentException("The maximum buffer size that can be requested is [" +
-                                                      std::to_string(m_MaxBufferSize) + "] bytes");
+            throw armnn::InvalidArgumentException("The maximum buffer size that can be requested is [" +
+                                                  std::to_string(m_MaxBufferSize) + "] bytes");
         }
         reservedSize = requestedSize;
         return std::make_unique<MockPacketBuffer>(requestedSize);
@@ -407,7 +403,7 @@ public:
 
     void SendCounterDirectoryPacket(const ICounterDirectory& counterDirectory) override
     {
-        arm::pipe::IgnoreUnused(counterDirectory);
+        IgnoreUnused(counterDirectory);
 
         std::string message("SendCounterDirectoryPacket");
         unsigned int reserved = 0;
@@ -419,7 +415,7 @@ public:
     void SendPeriodicCounterCapturePacket(uint64_t timestamp,
                                           const std::vector<CounterValue>& values) override
     {
-        arm::pipe::IgnoreUnused(timestamp, values);
+        IgnoreUnused(timestamp, values);
 
         std::string message("SendPeriodicCounterCapturePacket");
         unsigned int reserved = 0;
@@ -431,7 +427,7 @@ public:
     void SendPeriodicCounterSelectionPacket(uint32_t capturePeriod,
                                             const std::vector<uint16_t>& selectedCounterIds) override
     {
-        arm::pipe::IgnoreUnused(capturePeriod, selectedCounterIds);
+        IgnoreUnused(capturePeriod, selectedCounterIds);
 
         std::string message("SendPeriodicCounterSelectionPacket");
         unsigned int reserved = 0;
@@ -455,11 +451,11 @@ public:
     {
         // Create the category
         CategoryPtr category = std::make_unique<Category>(categoryName);
-        ARM_PIPE_ASSERT(category);
+        ARMNN_ASSERT(category);
 
         // Get the raw category pointer
         const Category* categoryPtr = category.get();
-        ARM_PIPE_ASSERT(categoryPtr);
+        ARMNN_ASSERT(categoryPtr);
 
         // Register the category
         m_Categories.insert(std::move(category));
@@ -475,11 +471,11 @@ public:
 
         // Create the device
         DevicePtr device = std::make_unique<Device>(deviceUid, deviceName, cores);
-        ARM_PIPE_ASSERT(device);
+        ARMNN_ASSERT(device);
 
         // Get the raw device pointer
         const Device* devicePtr = device.get();
-        ARM_PIPE_ASSERT(devicePtr);
+        ARMNN_ASSERT(devicePtr);
 
         // Register the device
         m_Devices.insert(std::make_pair(deviceUid, std::move(device)));
@@ -496,11 +492,11 @@ public:
 
         // Create the counter set
         CounterSetPtr counterSet = std::make_unique<CounterSet>(counterSetUid, counterSetName, count);
-        ARM_PIPE_ASSERT(counterSet);
+        ARMNN_ASSERT(counterSet);
 
         // Get the raw counter set pointer
         const CounterSet* counterSetPtr = counterSet.get();
-        ARM_PIPE_ASSERT(counterSetPtr);
+        ARMNN_ASSERT(counterSetPtr);
 
         // Register the counter set
         m_CounterSets.insert(std::make_pair(counterSetUid, std::move(counterSet)));
@@ -508,7 +504,7 @@ public:
         return counterSetPtr;
     }
 
-    const Counter* RegisterCounter(const std::string& backendId,
+    const Counter* RegisterCounter(const BackendId& backendId,
                                    const uint16_t uid,
                                    const std::string& parentCategoryName,
                                    uint16_t counterClass,
@@ -516,12 +512,12 @@ public:
                                    double multiplier,
                                    const std::string& name,
                                    const std::string& description,
-                                   const arm::pipe::Optional<std::string>& units = arm::pipe::EmptyOptional(),
-                                   const arm::pipe::Optional<uint16_t>& numberOfCores = arm::pipe::EmptyOptional(),
-                                   const arm::pipe::Optional<uint16_t>& deviceUid = arm::pipe::EmptyOptional(),
-                                   const arm::pipe::Optional<uint16_t>& counterSetUid = arm::pipe::EmptyOptional())
+                                   const armnn::Optional<std::string>& units = armnn::EmptyOptional(),
+                                   const armnn::Optional<uint16_t>& numberOfCores = armnn::EmptyOptional(),
+                                   const armnn::Optional<uint16_t>& deviceUid = armnn::EmptyOptional(),
+                                   const armnn::Optional<uint16_t>& counterSetUid = armnn::EmptyOptional())
     {
-        arm::pipe::IgnoreUnused(backendId);
+        IgnoreUnused(backendId);
 
         // Get the number of cores from the argument only
         uint16_t deviceCores = numberOfCores.has_value() ? numberOfCores.value() : 0;
@@ -534,7 +530,7 @@ public:
 
         // Get the counter UIDs and calculate the max counter UID
         std::vector<uint16_t> counterUids = GetNextCounterUids(uid, deviceCores);
-        ARM_PIPE_ASSERT(!counterUids.empty());
+        ARMNN_ASSERT(!counterUids.empty());
         uint16_t maxCounterUid = deviceCores <= 1 ? counterUids.front() : counterUids.back();
 
         // Get the counter units
@@ -552,18 +548,18 @@ public:
                                                        unitsValue,
                                                        deviceUidValue,
                                                        counterSetUidValue);
-        ARM_PIPE_ASSERT(counter);
+        ARMNN_ASSERT(counter);
 
         // Get the raw counter pointer
         const Counter* counterPtr = counter.get();
-        ARM_PIPE_ASSERT(counterPtr);
+        ARMNN_ASSERT(counterPtr);
 
         // Process multiple counters if necessary
         for (uint16_t counterUid : counterUids)
         {
             // Connect the counter to the parent category
             Category* parentCategory = const_cast<Category*>(GetCategory(parentCategoryName));
-            ARM_PIPE_ASSERT(parentCategory);
+            ARMNN_ASSERT(parentCategory);
             parentCategory->m_Counters.push_back(counterUid);
 
             // Register the counter
@@ -574,10 +570,10 @@ public:
     }
 
     // Getters for counts
-    uint16_t GetCategoryCount()   const override { return arm::pipe::numeric_cast<uint16_t>(m_Categories.size());  }
-    uint16_t GetDeviceCount()     const override { return arm::pipe::numeric_cast<uint16_t>(m_Devices.size());     }
-    uint16_t GetCounterSetCount() const override { return arm::pipe::numeric_cast<uint16_t>(m_CounterSets.size()); }
-    uint16_t GetCounterCount()    const override { return arm::pipe::numeric_cast<uint16_t>(m_Counters.size());    }
+    uint16_t GetCategoryCount()   const override { return armnn::numeric_cast<uint16_t>(m_Categories.size());  }
+    uint16_t GetDeviceCount()     const override { return armnn::numeric_cast<uint16_t>(m_Devices.size());     }
+    uint16_t GetCounterSetCount() const override { return armnn::numeric_cast<uint16_t>(m_CounterSets.size()); }
+    uint16_t GetCounterCount()    const override { return armnn::numeric_cast<uint16_t>(m_Counters.size());    }
 
     // Getters for collections
     const Categories&  GetCategories()  const override { return m_Categories;  }
@@ -590,7 +586,7 @@ public:
     {
         auto it = std::find_if(m_Categories.begin(), m_Categories.end(), [&name](const CategoryPtr& category)
         {
-            ARM_PIPE_ASSERT(category);
+            ARMNN_ASSERT(category);
 
             return category->m_Name == name;
         });
@@ -605,19 +601,19 @@ public:
 
     const Device* GetDevice(uint16_t uid) const override
     {
-        arm::pipe::IgnoreUnused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
     const CounterSet* GetCounterSet(uint16_t uid) const override
     {
-        arm::pipe::IgnoreUnused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
     const Counter* GetCounter(uint16_t uid) const override
     {
-        arm::pipe::IgnoreUnused(uid);
+        IgnoreUnused(uid);
         return nullptr; // Not used by the unit tests
     }
 
@@ -631,20 +627,10 @@ private:
 class MockProfilingService : public ProfilingService
 {
 public:
-    MockProfilingService(uint16_t maxGlobalCounterId,
-                         IInitialiseProfilingService& initialiser,
-                         MockBufferManager& mockBufferManager,
+    MockProfilingService(MockBufferManager& mockBufferManager,
                          bool isProfilingEnabled,
                          const CaptureData& captureData) :
-        ProfilingService(maxGlobalCounterId,
-                         initialiser,
-                         arm::pipe::ARMNN_SOFTWARE_INFO,
-                         arm::pipe::ARMNN_SOFTWARE_VERSION,
-                         arm::pipe::ARMNN_HARDWARE_VERSION),
-        m_SendCounterPacket(mockBufferManager,
-                            arm::pipe::ARMNN_SOFTWARE_INFO,
-                            arm::pipe::ARMNN_SOFTWARE_VERSION,
-                            arm::pipe::ARMNN_HARDWARE_VERSION),
+        m_SendCounterPacket(mockBufferManager),
         m_IsProfilingEnabled(isProfilingEnabled),
         m_CaptureData(captureData)
     {}
@@ -689,7 +675,7 @@ public:
 
     void RegisterMapping(uint16_t globalCounterId,
                          uint16_t backendCounterId,
-                         const std::string& backendId)
+                         const armnn::BackendId& backendId)
     {
         m_CounterMapping.RegisterMapping(globalCounterId, backendCounterId, backendId);
     }
@@ -711,9 +697,9 @@ class MockProfilingServiceStatus : public IProfilingServiceStatus
 {
 public:
     void NotifyProfilingServiceActive() override {}
-    void WaitForProfilingServiceActivation(unsigned int timeout) override { arm::pipe::IgnoreUnused(timeout); }
+    void WaitForProfilingServiceActivation(unsigned int timeout) override { IgnoreUnused(timeout); }
 };
 
-} // namespace pipe
+} // namespace profiling
 
-} // namespace arm
+} // namespace armnn

@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2019 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,7 +8,7 @@
 #include "NeonWorkloadUtils.hpp"
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <neon/NeonTensorHandle.hpp>
 
 using namespace armnn::armcomputetensorutils;
@@ -33,14 +33,8 @@ arm_compute::Status NeonInstanceNormalizationWorkloadValidate(const TensorInfo& 
 NeonInstanceNormalizationWorkload::NeonInstanceNormalizationWorkload(
     const InstanceNormalizationQueueDescriptor& descriptor,
     const WorkloadInfo& info)
-    : NeonBaseWorkload<InstanceNormalizationQueueDescriptor>(descriptor, info)
+    : BaseWorkload<InstanceNormalizationQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonInstanceNormalizationWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
-
     m_Data.ValidateInputsOutputs("NeonInstanceNormalizationWorkload", 1, 1);
 
     arm_compute::ITensor& input  = static_cast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -59,7 +53,7 @@ NeonInstanceNormalizationWorkload::NeonInstanceNormalizationWorkload(
 
 void NeonInstanceNormalizationWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonInstanceNormalizationWorkload_Execute", this->GetGuid());
+    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonInstanceNormalizationWorkload_Execute");
     m_Layer.run();
 }
 

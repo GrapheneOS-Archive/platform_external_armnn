@@ -14,7 +14,7 @@ std::unique_ptr<armnn::IWorkload> CreateWorkload<armnn::MultiplicationQueueDescr
     const armnn::WorkloadInfo& info,
     const armnn::MultiplicationQueueDescriptor& descriptor)
 {
-    return workloadFactory.CreateWorkload(armnn::LayerType::Multiplication, descriptor, info);
+    return workloadFactory.CreateMultiplication(descriptor, info);
 }
 
 LayerTestResult<float, 4> MultiplicationTest(armnn::IWorkloadFactory& workloadFactory,
@@ -545,11 +545,10 @@ LayerTestResult<float,4> CompareMultiplicationTest(
     inputTensorInfo1 = armnn::TensorInfo(4, shape, armnn::DataType::Float32);
     outputTensorInfo = armnn::TensorInfo(4, shape, armnn::DataType::Float32);
 
-    auto input0 = MakeRandomTensor<float>(inputTensorInfo0, 803506992);
-    auto input1 = MakeRandomTensor<float>(inputTensorInfo1, 54902257);
+    LayerTestResult<float,4> comparisonResult(outputTensorInfo);
 
-    std::vector<float> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<float> expectedOutput(outputTensorInfo.GetNumElements());
+    auto input0 = MakeRandomTensor<float, 4>(inputTensorInfo0, 803506992);
+    auto input1 = MakeRandomTensor<float, 4>(inputTensorInfo1, 54902257);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle0 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo0);
     std::unique_ptr<armnn::ITensorHandle> inputHandle1 = tensorHandleFactory.CreateTensorHandle(inputTensorInfo1);
@@ -571,10 +570,8 @@ LayerTestResult<float,4> CompareMultiplicationTest(
     SetWorkloadInput(refData, refInfo, 1, inputTensorInfo1, inputHandle1Ref.get());
     SetWorkloadOutput(refData, refInfo, 0, outputTensorInfo, outputHandleRef.get());
 
-    std::unique_ptr<armnn::IWorkload> workload
-                = workloadFactory.CreateWorkload(armnn::LayerType::Multiplication, data, info);
-    std::unique_ptr<armnn::IWorkload> workloadRef
-                = refWorkloadFactory.CreateWorkload(armnn::LayerType::Multiplication, refData, refInfo);
+    std::unique_ptr<armnn::IWorkload> workload    = workloadFactory.CreateMultiplication(data, info);
+    std::unique_ptr<armnn::IWorkload> workloadRef = refWorkloadFactory.CreateMultiplication(refData, refInfo);
 
     inputHandle0->Allocate();
     inputHandle1->Allocate();
@@ -583,20 +580,17 @@ LayerTestResult<float,4> CompareMultiplicationTest(
     inputHandle1Ref->Allocate();
     outputHandleRef->Allocate();
 
-    CopyDataToITensorHandle(inputHandle0.get(), input0.data());
-    CopyDataToITensorHandle(inputHandle1.get(), input1.data());
-    CopyDataToITensorHandle(inputHandle0Ref.get(), input0.data());
-    CopyDataToITensorHandle(inputHandle1Ref.get(), input1.data());
+    CopyDataToITensorHandle(inputHandle0.get(), input0.origin());
+    CopyDataToITensorHandle(inputHandle1.get(), input1.origin());
+    CopyDataToITensorHandle(inputHandle0Ref.get(), input0.origin());
+    CopyDataToITensorHandle(inputHandle1Ref.get(), input1.origin());
 
     workload->PostAllocationConfigure();
     workload->Execute();
     workloadRef->PostAllocationConfigure();
     workloadRef->Execute();
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-    CopyDataFromITensorHandle(expectedOutput.data(), outputHandleRef.get());
+    CopyDataFromITensorHandle(comparisonResult.output.origin(), outputHandle.get());
+    CopyDataFromITensorHandle(comparisonResult.outputExpected.origin(), outputHandleRef.get());
 
-    return LayerTestResult<float, 4>(actualOutput,
-                                     expectedOutput,
-                                     outputHandle->GetShape(),
-                                     outputTensorInfo.GetShape());
+    return comparisonResult;
 }

@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <vector>
 
-TEST_SUITE("QuantizeHelper")
-{
+BOOST_AUTO_TEST_SUITE(QuantizeHelper)
+
 namespace
 {
 
@@ -24,23 +24,23 @@ bool IsFloatIterFunc(T iter)
 
 } // anonymous namespace
 
-TEST_CASE("IsFloatIterFuncTest")
+BOOST_AUTO_TEST_CASE(IsFloatIterFuncTest)
 {
     std::vector<float> fArray;
-    CHECK(IsFloatIterFunc(fArray.begin()) == true);
-    CHECK(IsFloatIterFunc(fArray.cbegin()) == true);
+    BOOST_TEST(IsFloatIterFunc(fArray.begin()) == true);
+    BOOST_TEST(IsFloatIterFunc(fArray.cbegin()) == true);
 
     std::vector<double> dArray;
-    CHECK(IsFloatIterFunc(dArray.begin()) == true);
+    BOOST_TEST(IsFloatIterFunc(dArray.begin()) == true);
 
     std::vector<int> iArray;
-    CHECK(IsFloatIterFunc(iArray.begin()) == false);
+    BOOST_TEST(IsFloatIterFunc(iArray.begin()) == false);
 
     float floats[5];
-    CHECK(IsFloatIterFunc(&floats[0]) == true);
+    BOOST_TEST(IsFloatIterFunc(&floats[0]) == true);
 
     int ints[5];
-    CHECK(IsFloatIterFunc(&ints[0]) == false);
+    BOOST_TEST(IsFloatIterFunc(&ints[0]) == false);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

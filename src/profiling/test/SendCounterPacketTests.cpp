@@ -7,26 +7,24 @@
 #include "ProfilingTestUtils.hpp"
 #include "SendCounterPacketTests.hpp"
 
-#include <client/src/BufferManager.hpp>
-#include <client/src/ProfilingUtils.hpp>
-#include <client/src/SendCounterPacket.hpp>
+#include <BufferManager.hpp>
+#include <CounterDirectory.hpp>
+#include <common/include/EncodeVersion.hpp>
+#include <ProfilingUtils.hpp>
+#include <SendCounterPacket.hpp>
+#include <Processes.hpp>
 
+#include <armnn/Exceptions.hpp>
+#include <armnn/Conversion.hpp>
 #include <armnn/Utils.hpp>
 
-#include <common/include/Assert.hpp>
-#include <common/include/Conversion.hpp>
 #include <common/include/Constants.hpp>
-#include <common/include/CounterDirectory.hpp>
-#include <common/include/EncodeVersion.hpp>
-#include <common/include/NumericCast.hpp>
-#include <common/include/Processes.hpp>
-#include <common/include/ProfilingException.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include <chrono>
 
-using namespace arm::pipe;
+using namespace armnn::profiling;
 
 namespace
 {
@@ -50,7 +48,7 @@ void SetNotConnectedProfilingState(ProfilingStateMachine& profilingStateMachine)
     case ProfilingState::NotConnected:
         return;
     default:
-        CHECK_MESSAGE(false, "Invalid profiling state");
+        BOOST_CHECK_MESSAGE(false, "Invalid profiling state");
     }
 }
 
@@ -70,7 +68,7 @@ void SetWaitingForAckProfilingState(ProfilingStateMachine& profilingStateMachine
     case ProfilingState::WaitingForAck:
         return;
     default:
-        CHECK_MESSAGE(false, "Invalid profiling state");
+        BOOST_CHECK_MESSAGE(false, "Invalid profiling state");
     }
 }
 
@@ -91,17 +89,17 @@ void SetActiveProfilingState(ProfilingStateMachine& profilingStateMachine)
     case ProfilingState::Active:
         return;
     default:
-        CHECK_MESSAGE(false, "Invalid profiling state");
+        BOOST_CHECK_MESSAGE(false, "Invalid profiling state");
     }
 }
 
 } // Anonymous namespace
 
-TEST_SUITE("SendCounterPacketTests")
-{
+BOOST_AUTO_TEST_SUITE(SendCounterPacketTests)
+
 using PacketType = MockProfilingConnection::PacketType;
 
-TEST_CASE("MockSendCounterPacketTest")
+BOOST_AUTO_TEST_CASE(MockSendCounterPacketTest)
 {
     MockBufferManager mockBuffer(512);
     MockSendCounterPacket mockSendCounterPacket(mockBuffer);
@@ -111,7 +109,7 @@ TEST_CASE("MockSendCounterPacketTest")
     auto packetBuffer = mockBuffer.GetReadableBuffer();
     const char* buffer = reinterpret_cast<const char*>(packetBuffer->GetReadableData());
 
-    CHECK(strcmp(buffer, "SendStreamMetaDataPacket") == 0);
+    BOOST_TEST(strcmp(buffer, "SendStreamMetaDataPacket") == 0);
 
     mockBuffer.MarkRead(packetBuffer);
 
@@ -121,7 +119,7 @@ TEST_CASE("MockSendCounterPacketTest")
     packetBuffer = mockBuffer.GetReadableBuffer();
     buffer = reinterpret_cast<const char*>(packetBuffer->GetReadableData());
 
-    CHECK(strcmp(buffer, "SendCounterDirectoryPacket") == 0);
+    BOOST_TEST(strcmp(buffer, "SendCounterDirectoryPacket") == 0);
 
     mockBuffer.MarkRead(packetBuffer);
 
@@ -133,7 +131,7 @@ TEST_CASE("MockSendCounterPacketTest")
     packetBuffer = mockBuffer.GetReadableBuffer();
     buffer = reinterpret_cast<const char*>(packetBuffer->GetReadableData());
 
-    CHECK(strcmp(buffer, "SendPeriodicCounterCapturePacket") == 0);
+    BOOST_TEST(strcmp(buffer, "SendPeriodicCounterCapturePacket") == 0);
 
     mockBuffer.MarkRead(packetBuffer);
 
@@ -144,32 +142,25 @@ TEST_CASE("MockSendCounterPacketTest")
     packetBuffer = mockBuffer.GetReadableBuffer();
     buffer = reinterpret_cast<const char*>(packetBuffer->GetReadableData());
 
-    CHECK(strcmp(buffer, "SendPeriodicCounterSelectionPacket") == 0);
+    BOOST_TEST(strcmp(buffer, "SendPeriodicCounterSelectionPacket") == 0);
 
     mockBuffer.MarkRead(packetBuffer);
 }
 
-TEST_CASE("SendPeriodicCounterSelectionPacketTest")
+BOOST_AUTO_TEST_CASE(SendPeriodicCounterSelectionPacketTest)
 {
     // Error no space left in buffer
     MockBufferManager mockBuffer1(10);
-    SendCounterPacket sendPacket1(mockBuffer1,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket1(mockBuffer1);
 
     uint32_t capturePeriod = 1000;
     std::vector<uint16_t> selectedCounterIds;
-    CHECK_THROWS_AS(sendPacket1.SendPeriodicCounterSelectionPacket(
-                        capturePeriod, selectedCounterIds),
-                        BufferExhaustion);
+    BOOST_CHECK_THROW(sendPacket1.SendPeriodicCounterSelectionPacket(capturePeriod, selectedCounterIds),
+                      BufferExhaustion);
 
     // Packet without any counters
     MockBufferManager mockBuffer2(512);
-    SendCounterPacket sendPacket2(mockBuffer2,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket2(mockBuffer2);
 
     sendPacket2.SendPeriodicCounterSelectionPacket(capturePeriod, selectedCounterIds);
     auto readBuffer2 = mockBuffer2.GetReadableBuffer();
@@ -178,17 +169,14 @@ TEST_CASE("SendPeriodicCounterSelectionPacketTest")
     uint32_t headerWord1 = ReadUint32(readBuffer2, 4);
     uint32_t period = ReadUint32(readBuffer2, 8);
 
-    CHECK(((headerWord0 >> 26) & 0x3F) == 0);  // packet family
-    CHECK(((headerWord0 >> 16) & 0x3FF) == 4); // packet id
-    CHECK(headerWord1 == 4);                   // data lenght
-    CHECK(period == 1000);                     // capture period
+    BOOST_TEST(((headerWord0 >> 26) & 0x3F) == 0);  // packet family
+    BOOST_TEST(((headerWord0 >> 16) & 0x3FF) == 4); // packet id
+    BOOST_TEST(headerWord1 == 4);                   // data lenght
+    BOOST_TEST(period == 1000);                     // capture period
 
     // Full packet message
     MockBufferManager mockBuffer3(512);
-    SendCounterPacket sendPacket3(mockBuffer3,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket3(mockBuffer3);
 
     selectedCounterIds.reserve(5);
     selectedCounterIds.emplace_back(100);
@@ -203,10 +191,10 @@ TEST_CASE("SendPeriodicCounterSelectionPacketTest")
     headerWord1 = ReadUint32(readBuffer3, 4);
     period = ReadUint32(readBuffer3, 8);
 
-    CHECK(((headerWord0 >> 26) & 0x3F) == 0);  // packet family
-    CHECK(((headerWord0 >> 16) & 0x3FF) == 4); // packet id
-    CHECK(headerWord1 == 14);                  // data lenght
-    CHECK(period == 1000);                     // capture period
+    BOOST_TEST(((headerWord0 >> 26) & 0x3F) == 0);  // packet family
+    BOOST_TEST(((headerWord0 >> 16) & 0x3FF) == 4); // packet id
+    BOOST_TEST(headerWord1 == 14);                  // data lenght
+    BOOST_TEST(period == 1000);                     // capture period
 
     uint16_t counterId = 0;
     uint32_t offset = 12;
@@ -215,35 +203,29 @@ TEST_CASE("SendPeriodicCounterSelectionPacketTest")
     for(const uint16_t& id : selectedCounterIds)
     {
         counterId = ReadUint16(readBuffer3, offset);
-        CHECK(counterId == id);
+        BOOST_TEST(counterId == id);
         offset += 2;
     }
 }
 
-TEST_CASE("SendPeriodicCounterCapturePacketTest")
+BOOST_AUTO_TEST_CASE(SendPeriodicCounterCapturePacketTest)
 {
     ProfilingStateMachine profilingStateMachine;
 
     // Error no space left in buffer
     MockBufferManager mockBuffer1(10);
-    SendCounterPacket sendPacket1(mockBuffer1,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket1(mockBuffer1);
 
     auto captureTimestamp = std::chrono::steady_clock::now();
     uint64_t time =  static_cast<uint64_t >(captureTimestamp.time_since_epoch().count());
     std::vector<CounterValue> indexValuePairs;
 
-    CHECK_THROWS_AS(sendPacket1.SendPeriodicCounterCapturePacket(time, indexValuePairs),
+    BOOST_CHECK_THROW(sendPacket1.SendPeriodicCounterCapturePacket(time, indexValuePairs),
                       BufferExhaustion);
 
     // Packet without any counters
     MockBufferManager mockBuffer2(512);
-    SendCounterPacket sendPacket2(mockBuffer2,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket2(mockBuffer2);
 
     sendPacket2.SendPeriodicCounterCapturePacket(time, indexValuePairs);
     auto readBuffer2 = mockBuffer2.GetReadableBuffer();
@@ -252,18 +234,15 @@ TEST_CASE("SendPeriodicCounterCapturePacketTest")
     uint32_t headerWord1 = ReadUint32(readBuffer2, 4);
     uint64_t readTimestamp = ReadUint64(readBuffer2, 8);
 
-    CHECK(((headerWord0 >> 26) & 0x0000003F) == 3); // packet family
-    CHECK(((headerWord0 >> 19) & 0x0000007F) == 0); // packet class
-    CHECK(((headerWord0 >> 16) & 0x00000007) == 0); // packet type
-    CHECK(headerWord1 == 8);                        // data length
-    CHECK(time == readTimestamp);                   // capture period
+    BOOST_TEST(((headerWord0 >> 26) & 0x0000003F) == 3); // packet family
+    BOOST_TEST(((headerWord0 >> 19) & 0x0000007F) == 0); // packet class
+    BOOST_TEST(((headerWord0 >> 16) & 0x00000007) == 0); // packet type
+    BOOST_TEST(headerWord1 == 8);                        // data length
+    BOOST_TEST(time == readTimestamp);                   // capture period
 
     // Full packet message
     MockBufferManager mockBuffer3(512);
-    SendCounterPacket sendPacket3(mockBuffer3,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket3(mockBuffer3);
 
     indexValuePairs.reserve(5);
     indexValuePairs.emplace_back(CounterValue{0, 100});
@@ -278,11 +257,11 @@ TEST_CASE("SendPeriodicCounterCapturePacketTest")
     headerWord1 = ReadUint32(readBuffer3, 4);
     uint64_t readTimestamp2 = ReadUint64(readBuffer3, 8);
 
-    CHECK(((headerWord0 >> 26) & 0x0000003F) == 3); // packet family
-    CHECK(((headerWord0 >> 19) & 0x0000007F) == 0); // packet class
-    CHECK(((headerWord0 >> 16) & 0x00000007) == 0); // packet type
-    CHECK(headerWord1 == 38);                       // data length
-    CHECK(time == readTimestamp2);                  // capture period
+    BOOST_TEST(((headerWord0 >> 26) & 0x0000003F) == 3); // packet family
+    BOOST_TEST(((headerWord0 >> 19) & 0x0000007F) == 0); // packet class
+    BOOST_TEST(((headerWord0 >> 16) & 0x00000007) == 0); // packet type
+    BOOST_TEST(headerWord1 == 38);                       // data length
+    BOOST_TEST(time == readTimestamp2);                  // capture period
 
     uint16_t counterIndex = 0;
     uint32_t counterValue = 100;
@@ -293,39 +272,36 @@ TEST_CASE("SendPeriodicCounterCapturePacketTest")
     {
         // Check Counter Index
         uint16_t readIndex = ReadUint16(readBuffer3, offset);
-        CHECK(counterIndex == readIndex);
+        BOOST_TEST(counterIndex == readIndex);
         counterIndex++;
         offset += 2;
 
         // Check Counter Value
         uint32_t readValue = ReadUint32(readBuffer3, offset);
-        CHECK(counterValue == readValue);
+        BOOST_TEST(counterValue == readValue);
         counterValue += 100;
         offset += 4;
     }
 
 }
 
-TEST_CASE("SendStreamMetaDataPacketTest")
+BOOST_AUTO_TEST_CASE(SendStreamMetaDataPacketTest)
 {
-    uint32_t sizeUint32 = arm::pipe::numeric_cast<uint32_t>(sizeof(uint32_t));
+    uint32_t sizeUint32 = armnn::numeric_cast<uint32_t>(sizeof(uint32_t));
 
     // Error no space left in buffer
     MockBufferManager mockBuffer1(10);
-    SendCounterPacket sendPacket1(mockBuffer1,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendPacket1.SendStreamMetaDataPacket(), BufferExhaustion);
+    SendCounterPacket sendPacket1(mockBuffer1);
+    BOOST_CHECK_THROW(sendPacket1.SendStreamMetaDataPacket(), armnn::profiling::BufferExhaustion);
 
     // Full metadata packet
 
     std::string processName = GetProcessName().substr(0, 60);
 
-    uint32_t infoSize =            arm::pipe::numeric_cast<uint32_t>(arm::pipe::ARMNN_SOFTWARE_INFO.size()) + 1;
-    uint32_t hardwareVersionSize = arm::pipe::numeric_cast<uint32_t>(arm::pipe::ARMNN_HARDWARE_VERSION.size()) + 1;
-    uint32_t softwareVersionSize = arm::pipe::numeric_cast<uint32_t>(arm::pipe::ARMNN_SOFTWARE_VERSION.size()) + 1;
-    uint32_t processNameSize =     arm::pipe::numeric_cast<uint32_t>(processName.size()) + 1;
+    uint32_t infoSize =            armnn::numeric_cast<uint32_t>(GetSoftwareInfo().size()) + 1;
+    uint32_t hardwareVersionSize = armnn::numeric_cast<uint32_t>(GetHardwareVersion().size()) + 1;
+    uint32_t softwareVersionSize = armnn::numeric_cast<uint32_t>(GetSoftwareVersion().size()) + 1;
+    uint32_t processNameSize =     armnn::numeric_cast<uint32_t>(processName.size()) + 1;
 
     // Supported Packets
     // Packet Encoding version 1.0.0
@@ -362,104 +338,98 @@ TEST_CASE("SendStreamMetaDataPacketTest")
     uint32_t packetEntries = static_cast<uint32_t>(packetVersions.size());
 
     MockBufferManager mockBuffer2(512);
-    SendCounterPacket sendPacket2(mockBuffer2,
-                                  arm::pipe::ARMNN_SOFTWARE_INFO,
-                                  arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                  arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendPacket2(mockBuffer2);
     sendPacket2.SendStreamMetaDataPacket();
     auto readBuffer2 = mockBuffer2.GetReadableBuffer();
 
     uint32_t headerWord0 = ReadUint32(readBuffer2, 0);
     uint32_t headerWord1 = ReadUint32(readBuffer2, sizeUint32);
 
-    CHECK(((headerWord0 >> 26) & 0x3F) == 0); // packet family
-    CHECK(((headerWord0 >> 16) & 0x3FF) == 0); // packet id
+    BOOST_TEST(((headerWord0 >> 26) & 0x3F) == 0); // packet family
+    BOOST_TEST(((headerWord0 >> 16) & 0x3FF) == 0); // packet id
 
-    uint32_t totalLength = arm::pipe::numeric_cast<uint32_t>(2 * sizeUint32 +
+    uint32_t totalLength = armnn::numeric_cast<uint32_t>(2 * sizeUint32 +
                                                          10 * sizeUint32 + infoSize +
                                                          hardwareVersionSize + softwareVersionSize +
                                                          processNameSize + sizeUint32 +
                                                          2 * packetEntries * sizeUint32);
 
-    CHECK(headerWord1 == totalLength - (2 * sizeUint32)); // data length
+    BOOST_TEST(headerWord1 == totalLength - (2 * sizeUint32)); // data length
 
     uint32_t offset = sizeUint32 * 2;
-    CHECK(ReadUint32(readBuffer2, offset) == arm::pipe::PIPE_MAGIC); // pipe_magic
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == arm::pipe::PIPE_MAGIC); // pipe_magic
     offset += sizeUint32;
-    CHECK(ReadUint32(readBuffer2, offset) == arm::pipe::EncodeVersion(1, 0, 0)); // stream_metadata_version
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == arm::pipe::EncodeVersion(1, 0, 0)); // stream_metadata_version
     offset += sizeUint32;
-    CHECK(ReadUint32(readBuffer2, offset) == MAX_METADATA_PACKET_LENGTH); // max_data_len
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == MAX_METADATA_PACKET_LENGTH); // max_data_len
     offset += sizeUint32;
-    int pid = arm::pipe::GetCurrentProcessId();
-    CHECK(ReadUint32(readBuffer2, offset) == arm::pipe::numeric_cast<uint32_t>(pid));
+    int pid = armnnUtils::Processes::GetCurrentId();
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == armnn::numeric_cast<uint32_t>(pid));
     offset += sizeUint32;
     uint32_t poolOffset = 10 * sizeUint32;
-    CHECK(ReadUint32(readBuffer2, offset) == poolOffset); // offset_info
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == poolOffset); // offset_info
     offset += sizeUint32;
     poolOffset += infoSize;
-    CHECK(ReadUint32(readBuffer2, offset) == poolOffset); // offset_hw_version
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == poolOffset); // offset_hw_version
     offset += sizeUint32;
     poolOffset += hardwareVersionSize;
-    CHECK(ReadUint32(readBuffer2, offset) == poolOffset); // offset_sw_version
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == poolOffset); // offset_sw_version
     offset += sizeUint32;
     poolOffset += softwareVersionSize;
-    CHECK(ReadUint32(readBuffer2, offset) == poolOffset); // offset_process_name
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == poolOffset); // offset_process_name
     offset += sizeUint32;
     poolOffset += processNameSize;
-    CHECK(ReadUint32(readBuffer2, offset) == poolOffset); // offset_packet_version_table
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == poolOffset); // offset_packet_version_table
     offset += sizeUint32;
-    CHECK(ReadUint32(readBuffer2, offset) == 0); // reserved
+    BOOST_TEST(ReadUint32(readBuffer2, offset) == 0); // reserved
 
     const unsigned char* readData2 = readBuffer2->GetReadableData();
 
     offset += sizeUint32;
     if (infoSize)
     {
-        CHECK(strcmp(reinterpret_cast<const char *>(&readData2[offset]),
-                                                    arm::pipe::ARMNN_SOFTWARE_INFO.c_str()) == 0);
+        BOOST_TEST(strcmp(reinterpret_cast<const char *>(&readData2[offset]), GetSoftwareInfo().c_str()) == 0);
         offset += infoSize;
     }
 
     if (hardwareVersionSize)
     {
-        CHECK(strcmp(reinterpret_cast<const char *>(&readData2[offset]),
-                                                    arm::pipe::ARMNN_HARDWARE_VERSION.c_str()) == 0);
+        BOOST_TEST(strcmp(reinterpret_cast<const char *>(&readData2[offset]), GetHardwareVersion().c_str()) == 0);
         offset += hardwareVersionSize;
     }
 
     if (softwareVersionSize)
     {
-        CHECK(strcmp(reinterpret_cast<const char *>(&readData2[offset]),
-                                                    arm::pipe::ARMNN_SOFTWARE_VERSION.c_str()) == 0);
+        BOOST_TEST(strcmp(reinterpret_cast<const char *>(&readData2[offset]), GetSoftwareVersion().c_str()) == 0);
         offset += softwareVersionSize;
     }
 
     if (processNameSize)
     {
-        CHECK(strcmp(reinterpret_cast<const char *>(&readData2[offset]), GetProcessName().c_str()) == 0);
+        BOOST_TEST(strcmp(reinterpret_cast<const char *>(&readData2[offset]), GetProcessName().c_str()) == 0);
         offset += processNameSize;
     }
 
     if (packetEntries)
     {
         uint32_t numberOfEntries = ReadUint32(readBuffer2, offset);
-        CHECK((numberOfEntries >> 16) == packetEntries);
+        BOOST_TEST((numberOfEntries >> 16) == packetEntries);
         offset += sizeUint32;
         for (std::pair<uint32_t, uint32_t>& packetVersion : packetVersions)
         {
             uint32_t readPacketId = ReadUint32(readBuffer2, offset);
-            CHECK(packetVersion.first == readPacketId);
+            BOOST_TEST(packetVersion.first == readPacketId);
             offset += sizeUint32;
             uint32_t readVersion = ReadUint32(readBuffer2, offset);
-            CHECK(packetVersion.second == readVersion);
+            BOOST_TEST(packetVersion.second == readVersion);
             offset += sizeUint32;
         }
     }
 
-    CHECK(offset == totalLength);
+    BOOST_TEST(offset == totalLength);
 }
 
-TEST_CASE("CreateDeviceRecordTest")
+BOOST_AUTO_TEST_CASE(CreateDeviceRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -475,23 +445,23 @@ TEST_CASE("CreateDeviceRecordTest")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateDeviceRecordTest(device, deviceRecord, errorMessage);
 
-    CHECK(result);
-    CHECK(errorMessage.empty());
-    CHECK(deviceRecord.size() == 6); // Size in words: header [2] + device name [4]
+    BOOST_CHECK(result);
+    BOOST_CHECK(errorMessage.empty());
+    BOOST_CHECK(deviceRecord.size() == 6); // Size in words: header [2] + device name [4]
 
     uint16_t deviceRecordWord0[]
     {
         static_cast<uint16_t>(deviceRecord[0] >> 16),
         static_cast<uint16_t>(deviceRecord[0])
     };
-    CHECK(deviceRecordWord0[0] == deviceUid); // uid
-    CHECK(deviceRecordWord0[1] == deviceCores); // cores
-    CHECK(deviceRecord[1] == 8); // name_offset
-    CHECK(deviceRecord[2] == deviceName.size() + 1); // The length of the SWTrace string (name)
-    CHECK(std::memcmp(deviceRecord.data() + 3, deviceName.data(), deviceName.size()) == 0); // name
+    BOOST_CHECK(deviceRecordWord0[0] == deviceUid); // uid
+    BOOST_CHECK(deviceRecordWord0[1] == deviceCores); // cores
+    BOOST_CHECK(deviceRecord[1] == 8); // name_offset
+    BOOST_CHECK(deviceRecord[2] == deviceName.size() + 1); // The length of the SWTrace string (name)
+    BOOST_CHECK(std::memcmp(deviceRecord.data() + 3, deviceName.data(), deviceName.size()) == 0); // name
 }
 
-TEST_CASE("CreateInvalidDeviceRecordTest")
+BOOST_AUTO_TEST_CASE(CreateInvalidDeviceRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -507,12 +477,12 @@ TEST_CASE("CreateInvalidDeviceRecordTest")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateDeviceRecordTest(device, deviceRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(deviceRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(deviceRecord.empty());
 }
 
-TEST_CASE("CreateCounterSetRecordTest")
+BOOST_AUTO_TEST_CASE(CreateCounterSetRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -528,23 +498,23 @@ TEST_CASE("CreateCounterSetRecordTest")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateCounterSetRecordTest(counterSet, counterSetRecord, errorMessage);
 
-    CHECK(result);
-    CHECK(errorMessage.empty());
-    CHECK(counterSetRecord.size() == 8); // Size in words: header [2] + counter set name [6]
+    BOOST_CHECK(result);
+    BOOST_CHECK(errorMessage.empty());
+    BOOST_CHECK(counterSetRecord.size() == 8); // Size in words: header [2] + counter set name [6]
 
     uint16_t counterSetRecordWord0[]
     {
         static_cast<uint16_t>(counterSetRecord[0] >> 16),
         static_cast<uint16_t>(counterSetRecord[0])
     };
-    CHECK(counterSetRecordWord0[0] == counterSetUid); // uid
-    CHECK(counterSetRecordWord0[1] == counterSetCount); // cores
-    CHECK(counterSetRecord[1] == 8); // name_offset
-    CHECK(counterSetRecord[2] == counterSetName.size() + 1); // The length of the SWTrace string (name)
-    CHECK(std::memcmp(counterSetRecord.data() + 3, counterSetName.data(), counterSetName.size()) == 0); // name
+    BOOST_CHECK(counterSetRecordWord0[0] == counterSetUid); // uid
+    BOOST_CHECK(counterSetRecordWord0[1] == counterSetCount); // cores
+    BOOST_CHECK(counterSetRecord[1] == 8); // name_offset
+    BOOST_CHECK(counterSetRecord[2] == counterSetName.size() + 1); // The length of the SWTrace string (name)
+    BOOST_CHECK(std::memcmp(counterSetRecord.data() + 3, counterSetName.data(), counterSetName.size()) == 0); // name
 }
 
-TEST_CASE("CreateInvalidCounterSetRecordTest")
+BOOST_AUTO_TEST_CASE(CreateInvalidCounterSetRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -560,12 +530,12 @@ TEST_CASE("CreateInvalidCounterSetRecordTest")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateCounterSetRecordTest(counterSet, counterSetRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(counterSetRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(counterSetRecord.empty());
 }
 
-TEST_CASE("CreateEventRecordTest")
+BOOST_AUTO_TEST_CASE(CreateEventRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -592,16 +562,16 @@ TEST_CASE("CreateEventRecordTest")
                                                          counterUnits,
                                                          deviceUid,
                                                          counterSetUid);
-    ARM_PIPE_ASSERT(counter);
+    ARMNN_ASSERT(counter);
 
     // Create an event record
     SendCounterPacket::EventRecord eventRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateEventRecordTest(counter, eventRecord, errorMessage);
 
-    CHECK(result);
-    CHECK(errorMessage.empty());
-    CHECK(eventRecord.size() == 24); // Size in words: header [8] + counter name [6] + description [7] + units [3]
+    BOOST_CHECK(result);
+    BOOST_CHECK(errorMessage.empty());
+    BOOST_CHECK(eventRecord.size() == 24); // Size in words: header [8] + counter name [6] + description [7] + units [3]
 
     uint16_t eventRecordWord0[]
     {
@@ -624,16 +594,16 @@ TEST_CASE("CreateEventRecordTest")
         eventRecord[4]
     };
 
-    CHECK(eventRecordWord0[0] == maxCounterUid); // max_counter_uid
-    CHECK(eventRecordWord0[1] == counterUid); // counter_uid
-    CHECK(eventRecordWord1[0] == deviceUid); // device
+    BOOST_CHECK(eventRecordWord0[0] == maxCounterUid); // max_counter_uid
+    BOOST_CHECK(eventRecordWord0[1] == counterUid); // counter_uid
+    BOOST_CHECK(eventRecordWord1[0] == deviceUid); // device
 
-    CHECK(eventRecordWord1[1] == counterSetUid); // counter_set
-    CHECK(eventRecordWord2[0] == counterClass); // class
-    CHECK(eventRecordWord2[1] == counterInterpolation); // interpolation
-    CHECK(std::memcmp(eventRecordWord34, &counterMultiplier, sizeof(counterMultiplier)) == 0); // multiplier
+    BOOST_CHECK(eventRecordWord1[1] == counterSetUid); // counter_set
+    BOOST_CHECK(eventRecordWord2[0] == counterClass); // class
+    BOOST_CHECK(eventRecordWord2[1] == counterInterpolation); // interpolation
+    BOOST_CHECK(std::memcmp(eventRecordWord34, &counterMultiplier, sizeof(counterMultiplier)) == 0); // multiplier
 
-    ARM_PIPE_NO_CONVERSION_WARN_BEGIN
+    ARMNN_NO_CONVERSION_WARN_BEGIN
     uint32_t eventRecordBlockSize = 8u * sizeof(uint32_t);
     uint32_t counterNameOffset = eventRecordBlockSize; // The name is the first item in pool
     uint32_t counterDescriptionOffset = counterNameOffset + // Counter name offset
@@ -648,51 +618,51 @@ TEST_CASE("CreateEventRecordTest")
                                 1u + // Null-terminator
                                 2u;  // Rounding to the next word
 
-    ARM_PIPE_NO_CONVERSION_WARN_END
+    ARMNN_NO_CONVERSION_WARN_END
 
-    CHECK(eventRecord[5] == counterNameOffset); // name_offset
-    CHECK(eventRecord[6] == counterDescriptionOffset); // description_offset
-    CHECK(eventRecord[7] == counterUnitsOffset); // units_offset
+    BOOST_CHECK(eventRecord[5] == counterNameOffset); // name_offset
+    BOOST_CHECK(eventRecord[6] == counterDescriptionOffset); // description_offset
+    BOOST_CHECK(eventRecord[7] == counterUnitsOffset); // units_offset
 
     // Offsets are relative to the start of the eventRecord
     auto eventRecordPool = reinterpret_cast<unsigned char*>(eventRecord.data());
     size_t uint32_t_size = sizeof(uint32_t);
 
     // The length of the SWTrace string (name)
-    CHECK(eventRecordPool[counterNameOffset] == counterName.size() + 1);
+    BOOST_CHECK(eventRecordPool[counterNameOffset] == counterName.size() + 1);
     // The counter name
-    CHECK(std::memcmp(eventRecordPool +
+    BOOST_CHECK(std::memcmp(eventRecordPool +
                             counterNameOffset + // Offset
                             uint32_t_size /* The length of the name */,
                             counterName.data(),
                             counterName.size()) == 0); // name
     // The null-terminator at the end of the name
-    CHECK(eventRecordPool[counterNameOffset + uint32_t_size + counterName.size()] == '\0');
+    BOOST_CHECK(eventRecordPool[counterNameOffset + uint32_t_size + counterName.size()] == '\0');
 
     // The length of the SWTrace string (description)
-    CHECK(eventRecordPool[counterDescriptionOffset] == counterDescription.size() + 1);
+    BOOST_CHECK(eventRecordPool[counterDescriptionOffset] == counterDescription.size() + 1);
     // The counter description
-    CHECK(std::memcmp(eventRecordPool +
+    BOOST_CHECK(std::memcmp(eventRecordPool +
                             counterDescriptionOffset + // Offset
                             uint32_t_size /* The length of the description */,
                             counterDescription.data(),
                             counterDescription.size()) == 0); // description
     // The null-terminator at the end of the description
-    CHECK(eventRecordPool[counterDescriptionOffset + uint32_t_size + counterDescription.size()] == '\0');
+    BOOST_CHECK(eventRecordPool[counterDescriptionOffset + uint32_t_size + counterDescription.size()] == '\0');
 
     // The length of the SWTrace namestring (units)
-    CHECK(eventRecordPool[counterUnitsOffset] == counterUnits.size() + 1);
+    BOOST_CHECK(eventRecordPool[counterUnitsOffset] == counterUnits.size() + 1);
     // The counter units
-    CHECK(std::memcmp(eventRecordPool +
+    BOOST_CHECK(std::memcmp(eventRecordPool +
                             counterUnitsOffset + // Offset
                             uint32_t_size /* The length of the units */,
                             counterUnits.data(),
                             counterUnits.size()) == 0); // units
     // The null-terminator at the end of the units
-    CHECK(eventRecordPool[counterUnitsOffset + uint32_t_size + counterUnits.size()] == '\0');
+    BOOST_CHECK(eventRecordPool[counterUnitsOffset + uint32_t_size + counterUnits.size()] == '\0');
 }
 
-TEST_CASE("CreateEventRecordNoUnitsTest")
+BOOST_AUTO_TEST_CASE(CreateEventRecordNoUnitsTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -718,16 +688,16 @@ TEST_CASE("CreateEventRecordNoUnitsTest")
                                                          "",
                                                          deviceUid,
                                                          counterSetUid);
-    ARM_PIPE_ASSERT(counter);
+    ARMNN_ASSERT(counter);
 
     // Create an event record
     SendCounterPacket::EventRecord eventRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateEventRecordTest(counter, eventRecord, errorMessage);
 
-    CHECK(result);
-    CHECK(errorMessage.empty());
-    CHECK(eventRecord.size() == 21); // Size in words: header [8] + counter name [6] + description [7]
+    BOOST_CHECK(result);
+    BOOST_CHECK(errorMessage.empty());
+    BOOST_CHECK(eventRecord.size() == 21); // Size in words: header [8] + counter name [6] + description [7]
 
     uint16_t eventRecordWord0[]
     {
@@ -749,15 +719,15 @@ TEST_CASE("CreateEventRecordNoUnitsTest")
         eventRecord[3],
         eventRecord[4]
     };
-    CHECK(eventRecordWord0[0] == maxCounterUid); // max_counter_uid
-    CHECK(eventRecordWord0[1] == counterUid); // counter_uid
-    CHECK(eventRecordWord1[0] == deviceUid); // device
-    CHECK(eventRecordWord1[1] == counterSetUid); // counter_set
-    CHECK(eventRecordWord2[0] == counterClass); // class
-    CHECK(eventRecordWord2[1] == counterInterpolation); // interpolation
-    CHECK(std::memcmp(eventRecordWord34, &counterMultiplier, sizeof(counterMultiplier)) == 0); // multiplier
+    BOOST_CHECK(eventRecordWord0[0] == maxCounterUid); // max_counter_uid
+    BOOST_CHECK(eventRecordWord0[1] == counterUid); // counter_uid
+    BOOST_CHECK(eventRecordWord1[0] == deviceUid); // device
+    BOOST_CHECK(eventRecordWord1[1] == counterSetUid); // counter_set
+    BOOST_CHECK(eventRecordWord2[0] == counterClass); // class
+    BOOST_CHECK(eventRecordWord2[1] == counterInterpolation); // interpolation
+    BOOST_CHECK(std::memcmp(eventRecordWord34, &counterMultiplier, sizeof(counterMultiplier)) == 0); // multiplier
 
-    ARM_PIPE_NO_CONVERSION_WARN_BEGIN
+    ARMNN_NO_CONVERSION_WARN_BEGIN
     uint32_t eventRecordBlockSize = 8u * sizeof(uint32_t);
     uint32_t counterNameOffset = eventRecordBlockSize; // The name is the first item in pool
     uint32_t counterDescriptionOffset = counterNameOffset + // Counter name offset
@@ -765,40 +735,40 @@ TEST_CASE("CreateEventRecordNoUnitsTest")
                                         counterName.size() + // 18u
                                         1u + // Null-terminator
                                         1u; // Rounding to the next word
-    ARM_PIPE_NO_CONVERSION_WARN_END
+    ARMNN_NO_CONVERSION_WARN_END
 
-    CHECK(eventRecord[5] == counterNameOffset); // name_offset
-    CHECK(eventRecord[6] == counterDescriptionOffset); // description_offset
-    CHECK(eventRecord[7] == 0); // units_offset
+    BOOST_CHECK(eventRecord[5] == counterNameOffset); // name_offset
+    BOOST_CHECK(eventRecord[6] == counterDescriptionOffset); // description_offset
+    BOOST_CHECK(eventRecord[7] == 0); // units_offset
 
     // Offsets are relative to the start of the eventRecord
     auto eventRecordPool = reinterpret_cast<unsigned char*>(eventRecord.data());
     size_t uint32_t_size = sizeof(uint32_t);
 
     // The length of the SWTrace string (name)
-    CHECK(eventRecordPool[counterNameOffset] == counterName.size() + 1);
+    BOOST_CHECK(eventRecordPool[counterNameOffset] == counterName.size() + 1);
     // The counter name
-    CHECK(std::memcmp(eventRecordPool +
+    BOOST_CHECK(std::memcmp(eventRecordPool +
                             counterNameOffset + // Offset
                             uint32_t_size, // The length of the name
                             counterName.data(),
                             counterName.size()) == 0); // name
     // The null-terminator at the end of the name
-    CHECK(eventRecordPool[counterNameOffset + uint32_t_size + counterName.size()] == '\0');
+    BOOST_CHECK(eventRecordPool[counterNameOffset + uint32_t_size + counterName.size()] == '\0');
 
     // The length of the SWTrace string (description)
-    CHECK(eventRecordPool[counterDescriptionOffset] == counterDescription.size() + 1);
+    BOOST_CHECK(eventRecordPool[counterDescriptionOffset] == counterDescription.size() + 1);
     // The counter description
-    CHECK(std::memcmp(eventRecordPool +
+    BOOST_CHECK(std::memcmp(eventRecordPool +
                             counterDescriptionOffset + // Offset
                             uint32_t_size, // The length of the description
                             counterDescription.data(),
                             counterDescription.size()) == 0); // description
     // The null-terminator at the end of the description
-    CHECK(eventRecordPool[counterDescriptionOffset + uint32_t_size + counterDescription.size()] == '\0');
+    BOOST_CHECK(eventRecordPool[counterDescriptionOffset + uint32_t_size + counterDescription.size()] == '\0');
 }
 
-TEST_CASE("CreateInvalidEventRecordTest1")
+BOOST_AUTO_TEST_CASE(CreateInvalidEventRecordTest1)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -825,19 +795,19 @@ TEST_CASE("CreateInvalidEventRecordTest1")
                                                          counterUnits,
                                                          deviceUid,
                                                          counterSetUid);
-    ARM_PIPE_ASSERT(counter);
+    ARMNN_ASSERT(counter);
 
     // Create an event record
     SendCounterPacket::EventRecord eventRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateEventRecordTest(counter, eventRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(eventRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(eventRecord.empty());
 }
 
-TEST_CASE("CreateInvalidEventRecordTest2")
+BOOST_AUTO_TEST_CASE(CreateInvalidEventRecordTest2)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -864,19 +834,19 @@ TEST_CASE("CreateInvalidEventRecordTest2")
                                                          counterUnits,
                                                          deviceUid,
                                                          counterSetUid);
-    ARM_PIPE_ASSERT(counter);
+    ARMNN_ASSERT(counter);
 
     // Create an event record
     SendCounterPacket::EventRecord eventRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateEventRecordTest(counter, eventRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(eventRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(eventRecord.empty());
 }
 
-TEST_CASE("CreateInvalidEventRecordTest3")
+BOOST_AUTO_TEST_CASE(CreateInvalidEventRecordTest3)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -903,19 +873,19 @@ TEST_CASE("CreateInvalidEventRecordTest3")
                                                          counterUnits,
                                                          deviceUid,
                                                          counterSetUid);
-    ARM_PIPE_ASSERT(counter);
+    ARMNN_ASSERT(counter);
 
     // Create an event record
     SendCounterPacket::EventRecord eventRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateEventRecordTest(counter, eventRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(eventRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(eventRecord.empty());
 }
 
-TEST_CASE("CreateCategoryRecordTest")
+BOOST_AUTO_TEST_CASE(CreateCategoryRecordTest)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -923,7 +893,7 @@ TEST_CASE("CreateCategoryRecordTest")
     // Create a category for testing
     const std::string categoryName = "some_category";
     const CategoryPtr category = std::make_unique<Category>(categoryName);
-    ARM_PIPE_ASSERT(category);
+    ARMNN_ASSERT(category);
     category->m_Counters = { 11u, 23u, 5670u };
 
     // Create a collection of counters
@@ -967,9 +937,9 @@ TEST_CASE("CreateCategoryRecordTest")
     Counter* counter1 = counters.find(11)->second.get();
     Counter* counter2 = counters.find(23)->second.get();
     Counter* counter3 = counters.find(5670)->second.get();
-    ARM_PIPE_ASSERT(counter1);
-    ARM_PIPE_ASSERT(counter2);
-    ARM_PIPE_ASSERT(counter3);
+    ARMNN_ASSERT(counter1);
+    ARMNN_ASSERT(counter2);
+    ARMNN_ASSERT(counter3);
     uint16_t categoryEventCount = armnn::numeric_cast<uint16_t>(counters.size());
 
     // Create a category record
@@ -977,9 +947,9 @@ TEST_CASE("CreateCategoryRecordTest")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateCategoryRecordTest(category, counters, categoryRecord, errorMessage);
 
-    CHECK(result);
-    CHECK(errorMessage.empty());
-    CHECK(categoryRecord.size() == 79); // Size in words: header [3] + event pointer table [3] +
+    BOOST_CHECK(result);
+    BOOST_CHECK(errorMessage.empty());
+    BOOST_CHECK(categoryRecord.size() == 79); // Size in words: header [3] + event pointer table [3] +
                                               //                category name [5] + event records [68 = 22 + 20 + 26]
 
     uint16_t categoryRecordWord1[]
@@ -987,20 +957,20 @@ TEST_CASE("CreateCategoryRecordTest")
         static_cast<uint16_t>(categoryRecord[0] >> 16),
         static_cast<uint16_t>(categoryRecord[0])
     };
-    CHECK(categoryRecordWord1[0] == categoryEventCount); // event_count
-    CHECK(categoryRecordWord1[1] == 0); // reserved
+    BOOST_CHECK(categoryRecordWord1[0] == categoryEventCount); // event_count
+    BOOST_CHECK(categoryRecordWord1[1] == 0); // reserved
 
     size_t uint32_t_size = sizeof(uint32_t);
 
-    ARM_PIPE_NO_CONVERSION_WARN_BEGIN
+    ARMNN_NO_CONVERSION_WARN_BEGIN
     uint32_t categoryRecordBlockSize = 3u * uint32_t_size;
     uint32_t eventPointerTableOffset = categoryRecordBlockSize; // The event pointer table is the first item in pool
     uint32_t categoryNameOffset = eventPointerTableOffset + // Event pointer table offset
                                   categoryEventCount * uint32_t_size; // The size of the event pointer table
-    ARM_PIPE_NO_CONVERSION_WARN_END
+    ARMNN_NO_CONVERSION_WARN_END
 
-    CHECK(categoryRecord[1] == eventPointerTableOffset); // event_pointer_table_offset
-    CHECK(categoryRecord[2] == categoryNameOffset); // name_offset
+    BOOST_CHECK(categoryRecord[1] == eventPointerTableOffset); // event_pointer_table_offset
+    BOOST_CHECK(categoryRecord[2] == categoryNameOffset); // name_offset
     // Offsets are relative to the start of the category record
     auto categoryRecordPool = reinterpret_cast<unsigned char*>(categoryRecord.data());
 
@@ -1008,20 +978,20 @@ TEST_CASE("CreateCategoryRecordTest")
     uint32_t eventRecord0Offset = categoryRecordPool[eventPointerTableOffset + 0 * uint32_t_size];
     uint32_t eventRecord1Offset = categoryRecordPool[eventPointerTableOffset + 1 * uint32_t_size];
     uint32_t eventRecord2Offset = categoryRecordPool[eventPointerTableOffset + 2 * uint32_t_size];
-    CHECK(eventRecord0Offset == 32);
-    CHECK(eventRecord1Offset == 120);
-    CHECK(eventRecord2Offset == 200);
+    BOOST_CHECK(eventRecord0Offset == 32);
+    BOOST_CHECK(eventRecord1Offset == 120);
+    BOOST_CHECK(eventRecord2Offset == 200);
 
     // The length of the SWTrace namestring (name)
-    CHECK(categoryRecordPool[categoryNameOffset] == categoryName.size() + 1);
+    BOOST_CHECK(categoryRecordPool[categoryNameOffset] == categoryName.size() + 1);
     // The category name
-    CHECK(std::memcmp(categoryRecordPool +
+    BOOST_CHECK(std::memcmp(categoryRecordPool +
                             categoryNameOffset + // Offset
                             uint32_t_size, // The length of the name
                             categoryName.data(),
                             categoryName.size()) == 0); // name
     // The null-terminator at the end of the name
-    CHECK(categoryRecordPool[categoryNameOffset + uint32_t_size + categoryName.size()] == '\0');
+    BOOST_CHECK(categoryRecordPool[categoryNameOffset + uint32_t_size + categoryName.size()] == '\0');
 
     // For brevity, checking only the UIDs, max counter UIDs and names of the counters in the event records,
     // as the event records already have a number of unit tests dedicated to them
@@ -1030,22 +1000,22 @@ TEST_CASE("CreateCategoryRecordTest")
     uint16_t eventRecord0Word0[2] = { 0u, 0u };
     std::memcpy(eventRecord0Word0, categoryRecordPool + categoryRecordBlockSize + eventRecord0Offset,
                 sizeof(eventRecord0Word0));
-    CHECK(eventRecord0Word0[0] == counter1->m_Uid);
-    CHECK(eventRecord0Word0[1] == counter1->m_MaxCounterUid);
+    BOOST_CHECK(eventRecord0Word0[0] == counter1->m_Uid);
+    BOOST_CHECK(eventRecord0Word0[1] == counter1->m_MaxCounterUid);
 
     // Counter1 name
     uint32_t counter1NameOffset = 0;
     std::memcpy(&counter1NameOffset, categoryRecordPool  + eventRecord0Offset + 5u * uint32_t_size, uint32_t_size);
-    CHECK(counter1NameOffset == 0);
+    BOOST_CHECK(counter1NameOffset == 0);
     // The length of the SWTrace string (name)
-    CHECK(categoryRecordPool[eventRecord0Offset +       // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord0Offset +       // Offset to the event record
                                    categoryRecordBlockSize  + // Offset to the end of the category record block
                                    8u * uint32_t_size +       // Offset to the event record pool
                                    counter1NameOffset         // Offset to the name of the counter
                                   ] == counter1->m_Name.size() + 1); // The length of the name including the
                                                                      // null-terminator
     // The counter1 name
-    CHECK(std::memcmp(categoryRecordPool +      // The beginning of the category pool
+    BOOST_CHECK(std::memcmp(categoryRecordPool +      // The beginning of the category pool
                             categoryRecordBlockSize + // Offset to the end of the category record block
                             eventRecord0Offset +      // Offset to the event record
                             8u * uint32_t_size +      // Offset to the event record pool
@@ -1054,7 +1024,7 @@ TEST_CASE("CreateCategoryRecordTest")
                             counter1->m_Name.data(),
                             counter1->m_Name.size()) == 0); // name
     // The null-terminator at the end of the counter1 name
-    CHECK(categoryRecordPool[eventRecord0Offset +      // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord0Offset +      // Offset to the event record
                                    categoryRecordBlockSize + // Offset to the end of the category record block
                                    8u * uint32_t_size +      // Offset to the event record pool
                                    counter1NameOffset +      // Offset to the name of the counter
@@ -1069,16 +1039,16 @@ TEST_CASE("CreateCategoryRecordTest")
                                      eventRecord1Offset +
                                      5u * uint32_t_size,
                                      uint32_t_size);
-    CHECK(counter2NameOffset == 8u * uint32_t_size );
+    BOOST_CHECK(counter2NameOffset == 8u * uint32_t_size );
     // The length of the SWTrace string (name)
 
-    CHECK(categoryRecordPool[eventRecord1Offset + // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord1Offset + // Offset to the event record
                                    categoryRecordBlockSize +
                                    counter2NameOffset   // Offset to the name of the counter
                                   ] == counter2->m_Name.size() + 1); // The length of the name including the
                                                                      // null-terminator
     // The counter2 name
-    CHECK(std::memcmp(categoryRecordPool +      // The beginning of the category pool
+    BOOST_CHECK(std::memcmp(categoryRecordPool +      // The beginning of the category pool
                             categoryRecordBlockSize + // Offset to the end of the category record block
                             eventRecord1Offset +      // Offset to the event record
                             counter2NameOffset +      // Offset to the name of the counter
@@ -1088,7 +1058,7 @@ TEST_CASE("CreateCategoryRecordTest")
 
 
     // The null-terminator at the end of the counter2 name
-    CHECK(categoryRecordPool[eventRecord1Offset +      // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord1Offset +      // Offset to the event record
                                    categoryRecordBlockSize + // Offset to the end of the category record block
                                    counter2NameOffset +      // Offset to the name of the counter
                                    uint32_t_size +           // The length of the name
@@ -1098,16 +1068,16 @@ TEST_CASE("CreateCategoryRecordTest")
     // Counter3 name
     uint32_t counter3NameOffset = 0;
     std::memcpy(&counter3NameOffset, categoryRecordPool + eventRecord2Offset + 5u * uint32_t_size, uint32_t_size);
-    CHECK(counter3NameOffset == 0);
+    BOOST_CHECK(counter3NameOffset == 0);
     // The length of the SWTrace string (name)
-    CHECK(categoryRecordPool[eventRecord2Offset + // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord2Offset + // Offset to the event record
                                    categoryRecordBlockSize +
                                    8u * uint32_t_size + // Offset to the event record pool
                                    counter3NameOffset   // Offset to the name of the counter
                                   ] == counter3->m_Name.size() + 1); // The length of the name including the
                                                                      // null-terminator
     // The counter3 name
-    CHECK(std::memcmp(categoryRecordPool + // The beginning of the category pool
+    BOOST_CHECK(std::memcmp(categoryRecordPool + // The beginning of the category pool
                             categoryRecordBlockSize +
                             eventRecord2Offset + // Offset to the event record
                             8u * uint32_t_size + // Offset to the event record pool
@@ -1116,7 +1086,7 @@ TEST_CASE("CreateCategoryRecordTest")
                             counter3->m_Name.data(),
                             counter3->m_Name.size()) == 0); // name
     // The null-terminator at the end of the counter3 name
-    CHECK(categoryRecordPool[eventRecord2Offset +    // Offset to the event record
+    BOOST_CHECK(categoryRecordPool[eventRecord2Offset +    // Offset to the event record
                                    categoryRecordBlockSize +
                                    8u * uint32_t_size +    // Offset to the event record pool
                                    counter3NameOffset +    // Offset to the name of the counter
@@ -1125,7 +1095,7 @@ TEST_CASE("CreateCategoryRecordTest")
                                    ] == '\0');
 }
 
-TEST_CASE("CreateInvalidCategoryRecordTest1")
+BOOST_AUTO_TEST_CASE(CreateInvalidCategoryRecordTest1)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -1133,7 +1103,7 @@ TEST_CASE("CreateInvalidCategoryRecordTest1")
     // Create a category for testing
     const std::string categoryName = "some invalid category";
     const CategoryPtr category = std::make_unique<Category>(categoryName);
-    CHECK(category);
+    BOOST_CHECK(category);
 
     // Create a category record
     Counters counters;
@@ -1141,12 +1111,12 @@ TEST_CASE("CreateInvalidCategoryRecordTest1")
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateCategoryRecordTest(category, counters, categoryRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(categoryRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(categoryRecord.empty());
 }
 
-TEST_CASE("CreateInvalidCategoryRecordTest2")
+BOOST_AUTO_TEST_CASE(CreateInvalidCategoryRecordTest2)
 {
     MockBufferManager mockBuffer(0);
     SendCounterPacketTest sendCounterPacketTest(mockBuffer);
@@ -1154,7 +1124,7 @@ TEST_CASE("CreateInvalidCategoryRecordTest2")
     // Create a category for testing
     const std::string categoryName = "some_category";
     const CategoryPtr category = std::make_unique<Category>(categoryName);
-    CHECK(category);
+    BOOST_CHECK(category);
     category->m_Counters = { 11u, 23u, 5670u };
 
     // Create a collection of counters
@@ -1173,19 +1143,19 @@ TEST_CASE("CreateInvalidCategoryRecordTest2")
                                                                                 0))));
 
     Counter* counter1 = counters.find(11)->second.get();
-    CHECK(counter1);
+    BOOST_CHECK(counter1);
 
     // Create a category record
     SendCounterPacket::CategoryRecord categoryRecord;
     std::string errorMessage;
     bool result = sendCounterPacketTest.CreateCategoryRecordTest(category, counters, categoryRecord, errorMessage);
 
-    CHECK(!result);
-    CHECK(!errorMessage.empty());
-    CHECK(categoryRecord.empty());
+    BOOST_CHECK(!result);
+    BOOST_CHECK(!errorMessage.empty());
+    BOOST_CHECK(categoryRecord.empty());
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest1")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest1)
 {
     // The counter directory used for testing
     CounterDirectory counterDirectory;
@@ -1193,28 +1163,25 @@ TEST_CASE("SendCounterDirectoryPacketTest1")
     // Register a device
     const std::string device1Name = "device1";
     const Device* device1 = nullptr;
-    CHECK_NOTHROW(device1 = counterDirectory.RegisterDevice(device1Name, 3));
-    CHECK(counterDirectory.GetDeviceCount() == 1);
-    CHECK(device1);
+    BOOST_CHECK_NO_THROW(device1 = counterDirectory.RegisterDevice(device1Name, 3));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 1);
+    BOOST_CHECK(device1);
 
     // Register a device
     const std::string device2Name = "device2";
     const Device* device2 = nullptr;
-    CHECK_NOTHROW(device2 = counterDirectory.RegisterDevice(device2Name));
-    CHECK(counterDirectory.GetDeviceCount() == 2);
-    CHECK(device2);
+    BOOST_CHECK_NO_THROW(device2 = counterDirectory.RegisterDevice(device2Name));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 2);
+    BOOST_CHECK(device2);
 
     // Buffer with not enough space
     MockBufferManager mockBuffer(10);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory),
-                      BufferExhaustion);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory),
+                      armnn::profiling::BufferExhaustion);
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest2")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest2)
 {
     // The counter directory used for testing
     CounterDirectory counterDirectory;
@@ -1222,96 +1189,93 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     // Register a device
     const std::string device1Name = "device1";
     const Device* device1 = nullptr;
-    CHECK_NOTHROW(device1 = counterDirectory.RegisterDevice(device1Name, 3));
-    CHECK(counterDirectory.GetDeviceCount() == 1);
-    CHECK(device1);
+    BOOST_CHECK_NO_THROW(device1 = counterDirectory.RegisterDevice(device1Name, 3));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 1);
+    BOOST_CHECK(device1);
 
     // Register a device
     const std::string device2Name = "device2";
     const Device* device2 = nullptr;
-    CHECK_NOTHROW(device2 = counterDirectory.RegisterDevice(device2Name));
-    CHECK(counterDirectory.GetDeviceCount() == 2);
-    CHECK(device2);
+    BOOST_CHECK_NO_THROW(device2 = counterDirectory.RegisterDevice(device2Name));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 2);
+    BOOST_CHECK(device2);
 
     // Register a counter set
     const std::string counterSet1Name = "counterset1";
     const CounterSet* counterSet1 = nullptr;
-    CHECK_NOTHROW(counterSet1 = counterDirectory.RegisterCounterSet(counterSet1Name));
-    CHECK(counterDirectory.GetCounterSetCount() == 1);
-    CHECK(counterSet1);
+    BOOST_CHECK_NO_THROW(counterSet1 = counterDirectory.RegisterCounterSet(counterSet1Name));
+    BOOST_CHECK(counterDirectory.GetCounterSetCount() == 1);
+    BOOST_CHECK(counterSet1);
 
     // Register a category associated to "device1" and "counterset1"
     const std::string category1Name = "category1";
     const Category* category1 = nullptr;
-    CHECK_NOTHROW(category1 = counterDirectory.RegisterCategory(category1Name));
-    CHECK(counterDirectory.GetCategoryCount() == 1);
-    CHECK(category1);
+    BOOST_CHECK_NO_THROW(category1 = counterDirectory.RegisterCategory(category1Name));
+    BOOST_CHECK(counterDirectory.GetCategoryCount() == 1);
+    BOOST_CHECK(category1);
 
     // Register a category not associated to "device2" but no counter set
     const std::string category2Name = "category2";
     const Category* category2 = nullptr;
-    CHECK_NOTHROW(category2 = counterDirectory.RegisterCategory(category2Name));
-    CHECK(counterDirectory.GetCategoryCount() == 2);
-    CHECK(category2);
+    BOOST_CHECK_NO_THROW(category2 = counterDirectory.RegisterCategory(category2Name));
+    BOOST_CHECK(counterDirectory.GetCategoryCount() == 2);
+    BOOST_CHECK(category2);
 
     uint16_t numberOfCores = 4;
 
     // Register a counter associated to "category1"
     const Counter* counter1 = nullptr;
-    CHECK_NOTHROW(counter1 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
-                                                              0,
-                                                              category1Name,
-                                                              0,
-                                                              1,
-                                                              123.45f,
-                                                              "counter1",
-                                                              "counter1description",
-                                                              std::string("counter1units"),
-                                                              numberOfCores));
-    CHECK(counterDirectory.GetCounterCount() == 4);
-    CHECK(counter1);
+    BOOST_CHECK_NO_THROW(counter1 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
+                                                                     0,
+                                                                     category1Name,
+                                                                     0,
+                                                                     1,
+                                                                     123.45f,
+                                                                     "counter1",
+                                                                     "counter1description",
+                                                                     std::string("counter1units"),
+                                                                     numberOfCores));
+    BOOST_CHECK(counterDirectory.GetCounterCount() == 4);
+    BOOST_CHECK(counter1);
 
     // Register a counter associated to "category1"
     const Counter* counter2 = nullptr;
-    CHECK_NOTHROW(counter2 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
-                                                              4,
-                                                              category1Name,
-                                                              1,
-                                                              0,
-                                                              330.1245656765f,
-                                                              "counter2",
-                                                              "counter2description",
-                                                              std::string("counter2units"),
-                                                              arm::pipe::EmptyOptional(),
-                                                              device2->m_Uid,
-                                                              0));
-    CHECK(counterDirectory.GetCounterCount() == 5);
-    CHECK(counter2);
+    BOOST_CHECK_NO_THROW(counter2 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
+                                                                     4,
+                                                                     category1Name,
+                                                                     1,
+                                                                     0,
+                                                                     330.1245656765f,
+                                                                     "counter2",
+                                                                     "counter2description",
+                                                                     std::string("counter2units"),
+                                                                     armnn::EmptyOptional(),
+                                                                     device2->m_Uid,
+                                                                     0));
+    BOOST_CHECK(counterDirectory.GetCounterCount() == 5);
+    BOOST_CHECK(counter2);
 
     // Register a counter associated to "category2"
     const Counter* counter3 = nullptr;
-    CHECK_NOTHROW(counter3 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
-                                                              5,
-                                                              category2Name,
-                                                              1,
-                                                              1,
-                                                              0.0000045399f,
-                                                              "counter3",
-                                                              "counter3description",
-                                                              arm::pipe::EmptyOptional(),
-                                                              numberOfCores,
-                                                              device2->m_Uid,
-                                                              counterSet1->m_Uid));
-    CHECK(counterDirectory.GetCounterCount() == 9);
-    CHECK(counter3);
+    BOOST_CHECK_NO_THROW(counter3 = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
+                                                                     5,
+                                                                     category2Name,
+                                                                     1,
+                                                                     1,
+                                                                     0.0000045399f,
+                                                                     "counter3",
+                                                                     "counter3description",
+                                                                     armnn::EmptyOptional(),
+                                                                     numberOfCores,
+                                                                     device2->m_Uid,
+                                                                     counterSet1->m_Uid));
+    BOOST_CHECK(counterDirectory.GetCounterCount() == 9);
+    BOOST_CHECK(counter3);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_NOTHROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory));
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_NO_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory));
 
     // Get the readable buffer
     auto readBuffer = mockBuffer.GetReadableBuffer();
@@ -1319,9 +1283,9 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     // Check the packet header
     const uint32_t packetHeaderWord0 = ReadUint32(readBuffer, 0);
     const uint32_t packetHeaderWord1 = ReadUint32(readBuffer, 4);
-    CHECK(((packetHeaderWord0 >> 26) & 0x3F) == 0);  // packet_family
-    CHECK(((packetHeaderWord0 >> 16) & 0x3FF) == 2); // packet_id
-    CHECK(packetHeaderWord1 == 432);                 // data_length
+    BOOST_TEST(((packetHeaderWord0 >> 26) & 0x3F) == 0);  // packet_family
+    BOOST_TEST(((packetHeaderWord0 >> 16) & 0x3FF) == 2); // packet_id
+    BOOST_TEST(packetHeaderWord1 == 432);                 // data_length
 
     // Check the body header
     const uint32_t bodyHeaderWord0 = ReadUint32(readBuffer,  8);
@@ -1333,28 +1297,28 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     const uint16_t deviceRecordCount     = static_cast<uint16_t>(bodyHeaderWord0 >> 16);
     const uint16_t counterSetRecordCount = static_cast<uint16_t>(bodyHeaderWord2 >> 16);
     const uint16_t categoryRecordCount   = static_cast<uint16_t>(bodyHeaderWord4 >> 16);
-    CHECK(deviceRecordCount == 2);                      // device_records_count
-    CHECK(bodyHeaderWord1 == bodyHeaderSize * 4);           // device_records_pointer_table_offset
-    CHECK(counterSetRecordCount == 1);                  // counter_set_count
-    CHECK(bodyHeaderWord3 == 8 + bodyHeaderSize * 4);       // counter_set_pointer_table_offset
-    CHECK(categoryRecordCount == 2);                    // categories_count
-    CHECK(bodyHeaderWord5 == 12 + bodyHeaderSize * 4);      // categories_pointer_table_offset
+    BOOST_TEST(deviceRecordCount == 2);                      // device_records_count
+    BOOST_TEST(bodyHeaderWord1 == bodyHeaderSize * 4);           // device_records_pointer_table_offset
+    BOOST_TEST(counterSetRecordCount == 1);                  // counter_set_count
+    BOOST_TEST(bodyHeaderWord3 == 8 + bodyHeaderSize * 4);       // counter_set_pointer_table_offset
+    BOOST_TEST(categoryRecordCount == 2);                    // categories_count
+    BOOST_TEST(bodyHeaderWord5 == 12 + bodyHeaderSize * 4);      // categories_pointer_table_offset
 
     // Check the device records pointer table
     const uint32_t deviceRecordOffset0 = ReadUint32(readBuffer, 32);
     const uint32_t deviceRecordOffset1 = ReadUint32(readBuffer, 36);
-    CHECK(deviceRecordOffset0 == 20); // Device record offset for "device1"
-    CHECK(deviceRecordOffset1 == 40); // Device record offset for "device2"
+    BOOST_TEST(deviceRecordOffset0 == 20); // Device record offset for "device1"
+    BOOST_TEST(deviceRecordOffset1 == 40); // Device record offset for "device2"
 
     // Check the counter set pointer table
     const uint32_t counterSetRecordOffset0 = ReadUint32(readBuffer, 40);
-    CHECK(counterSetRecordOffset0 == 52); // Counter set record offset for "counterset1"
+    BOOST_TEST(counterSetRecordOffset0 == 52); // Counter set record offset for "counterset1"
 
     // Check the category pointer table
     const uint32_t categoryRecordOffset0 = ReadUint32(readBuffer, 44);
     const uint32_t categoryRecordOffset1 = ReadUint32(readBuffer, 48);
-    CHECK(categoryRecordOffset0 ==  72); // Category record offset for "category1"
-    CHECK(categoryRecordOffset1 == 176); // Category record offset for "category2"
+    BOOST_TEST(categoryRecordOffset0 ==  72); // Category record offset for "category1"
+    BOOST_TEST(categoryRecordOffset1 == 176); // Category record offset for "category2"
 
     // Get the device record pool offset
     const uint32_t uint32_t_size = sizeof(uint32_t);
@@ -1409,7 +1373,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
         deviceRecord.name_length = deviceRecordNameLength; // name_length
         unsigned char deviceRecordNameNullTerminator = // name null-terminator
                 ReadUint8(readBuffer, deviceRecordPoolOffset + uint32_t_size + deviceRecordNameLength - 1);
-        CHECK(deviceRecordNameNullTerminator == '\0');
+        BOOST_CHECK(deviceRecordNameNullTerminator == '\0');
         std::vector<unsigned char> deviceRecordNameBuffer(deviceRecord.name_length - 1);
         std::memcpy(deviceRecordNameBuffer.data(),
                     readData + deviceRecordPoolOffset + uint32_t_size, deviceRecordNameBuffer.size());
@@ -1419,14 +1383,14 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     }
 
     // Check that the device records are correct
-    CHECK(deviceRecords.size() == 2);
+    BOOST_CHECK(deviceRecords.size() == 2);
     for (const DeviceRecord& deviceRecord : deviceRecords)
     {
         const Device* device = counterDirectory.GetDevice(deviceRecord.uid);
-        CHECK(device);
-        CHECK(device->m_Uid   == deviceRecord.uid);
-        CHECK(device->m_Cores == deviceRecord.cores);
-        CHECK(device->m_Name  == deviceRecord.name);
+        BOOST_CHECK(device);
+        BOOST_CHECK(device->m_Uid   == deviceRecord.uid);
+        BOOST_CHECK(device->m_Cores == deviceRecord.cores);
+        BOOST_CHECK(device->m_Name  == deviceRecord.name);
     }
 
 
@@ -1469,7 +1433,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
         counterSetRecord.name_length = counterSetRecordNameLength; // name_length
         unsigned char counterSetRecordNameNullTerminator = // name null-terminator
                 ReadUint8(readBuffer, counterSetRecordPoolOffset + uint32_t_size + counterSetRecordNameLength - 1);
-        CHECK(counterSetRecordNameNullTerminator == '\0');
+        BOOST_CHECK(counterSetRecordNameNullTerminator == '\0');
         std::vector<unsigned char> counterSetRecordNameBuffer(counterSetRecord.name_length - 1);
         std::memcpy(counterSetRecordNameBuffer.data(),
                     readData + counterSetRecordPoolOffset + uint32_t_size, counterSetRecordNameBuffer.size());
@@ -1479,14 +1443,14 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     }
 
     // Check that the counter set records are correct
-    CHECK(counterSetRecords.size() == 1);
+    BOOST_CHECK(counterSetRecords.size() == 1);
     for (const CounterSetRecord& counterSetRecord : counterSetRecords)
     {
         const CounterSet* counterSet = counterDirectory.GetCounterSet(counterSetRecord.uid);
-        CHECK(counterSet);
-        CHECK(counterSet->m_Uid   == counterSetRecord.uid);
-        CHECK(counterSet->m_Count == counterSetRecord.count);
-        CHECK(counterSet->m_Name  == counterSetRecord.name);
+        BOOST_CHECK(counterSet);
+        BOOST_CHECK(counterSet->m_Uid   == counterSetRecord.uid);
+        BOOST_CHECK(counterSet->m_Count == counterSetRecord.count);
+        BOOST_CHECK(counterSet->m_Name  == counterSetRecord.name);
     }
 
     // Event record structure/collection used for testing
@@ -1553,7 +1517,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
                           categoryRecord.name_offset +
                           uint32_t_size +
                           categoryRecordNameLength - 1); // name null-terminator
-        CHECK(categoryRecordNameNullTerminator == '\0');
+        BOOST_CHECK(categoryRecordNameNullTerminator == '\0');
         std::vector<unsigned char> categoryRecordNameBuffer(categoryRecord.name_length - 1);
         std::memcpy(categoryRecordNameBuffer.data(),
                     readData +
@@ -1606,7 +1570,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
                               eventRecord.name_offset +
                               uint32_t_size +
                               eventRecordNameLength - 1); // name null-terminator
-            CHECK(eventRecordNameNullTerminator == '\0');
+            BOOST_CHECK(eventRecordNameNullTerminator == '\0');
             std::vector<unsigned char> eventRecordNameBuffer(eventRecord.name_length - 1);
             std::memcpy(eventRecordNameBuffer.data(),
                         readData +
@@ -1625,7 +1589,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
                               eventRecord.description_offset +
                               uint32_t_size +
                               eventRecordDescriptionLength - 1); // description null-terminator
-            CHECK(eventRecordDescriptionNullTerminator == '\0');
+            BOOST_CHECK(eventRecordDescriptionNullTerminator == '\0');
             std::vector<unsigned char> eventRecordDescriptionBuffer(eventRecord.description_length - 1);
             std::memcpy(eventRecordDescriptionBuffer.data(),
                         readData +
@@ -1647,7 +1611,7 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
                                   eventRecord.units_offset +
                                   uint32_t_size +
                                   eventRecordUnitsLength - 1); // units null-terminator
-                CHECK(eventRecordUnitsNullTerminator == '\0');
+                BOOST_CHECK(eventRecordUnitsNullTerminator == '\0');
                 std::vector<unsigned char> eventRecordUnitsBuffer(eventRecord.units_length - 1);
                 std::memcpy(eventRecordUnitsBuffer.data(),
                             readData +
@@ -1665,34 +1629,34 @@ TEST_CASE("SendCounterDirectoryPacketTest2")
     }
 
     // Check that the category records are correct
-    CHECK(categoryRecords.size() == 2);
+    BOOST_CHECK(categoryRecords.size() == 2);
     for (const CategoryRecord& categoryRecord : categoryRecords)
     {
         const Category* category = counterDirectory.GetCategory(categoryRecord.name);
-        CHECK(category);
-        CHECK(category->m_Name == categoryRecord.name);
-        CHECK(category->m_Counters.size() == categoryRecord.event_count + static_cast<size_t>(numberOfCores) -1);
-        CHECK(category->m_Counters.size() == categoryRecord.event_count + static_cast<size_t>(numberOfCores) -1);
+        BOOST_CHECK(category);
+        BOOST_CHECK(category->m_Name == categoryRecord.name);
+        BOOST_CHECK(category->m_Counters.size() == categoryRecord.event_count + static_cast<size_t>(numberOfCores) -1);
+        BOOST_CHECK(category->m_Counters.size() == categoryRecord.event_count + static_cast<size_t>(numberOfCores) -1);
 
         // Check that the event records are correct
         for (const EventRecord& eventRecord : categoryRecord.event_records)
         {
             const Counter* counter = counterDirectory.GetCounter(eventRecord.counter_uid);
-            CHECK(counter);
-            CHECK(counter->m_MaxCounterUid == eventRecord.max_counter_uid);
-            CHECK(counter->m_DeviceUid == eventRecord.device);
-            CHECK(counter->m_CounterSetUid == eventRecord.counter_set);
-            CHECK(counter->m_Class == eventRecord.counter_class);
-            CHECK(counter->m_Interpolation == eventRecord.interpolation);
-            CHECK(counter->m_Multiplier == eventRecord.multiplier);
-            CHECK(counter->m_Name == eventRecord.name);
-            CHECK(counter->m_Description == eventRecord.description);
-            CHECK(counter->m_Units == eventRecord.units);
+            BOOST_CHECK(counter);
+            BOOST_CHECK(counter->m_MaxCounterUid == eventRecord.max_counter_uid);
+            BOOST_CHECK(counter->m_DeviceUid == eventRecord.device);
+            BOOST_CHECK(counter->m_CounterSetUid == eventRecord.counter_set);
+            BOOST_CHECK(counter->m_Class == eventRecord.counter_class);
+            BOOST_CHECK(counter->m_Interpolation == eventRecord.interpolation);
+            BOOST_CHECK(counter->m_Multiplier == eventRecord.multiplier);
+            BOOST_CHECK(counter->m_Name == eventRecord.name);
+            BOOST_CHECK(counter->m_Description == eventRecord.description);
+            BOOST_CHECK(counter->m_Units == eventRecord.units);
         }
     }
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest3")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest3)
 {
     // Using a mock counter directory that allows to register invalid objects
     MockCounterDirectory counterDirectory;
@@ -1700,20 +1664,17 @@ TEST_CASE("SendCounterDirectoryPacketTest3")
     // Register an invalid device
     const std::string deviceName = "inv@lid dev!c€";
     const Device* device = nullptr;
-    CHECK_NOTHROW(device = counterDirectory.RegisterDevice(deviceName, 3));
-    CHECK(counterDirectory.GetDeviceCount() == 1);
-    CHECK(device);
+    BOOST_CHECK_NO_THROW(device = counterDirectory.RegisterDevice(deviceName, 3));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 1);
+    BOOST_CHECK(device);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), arm::pipe::ProfilingException);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), armnn::RuntimeException);
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest4")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest4)
 {
     // Using a mock counter directory that allows to register invalid objects
     MockCounterDirectory counterDirectory;
@@ -1721,20 +1682,17 @@ TEST_CASE("SendCounterDirectoryPacketTest4")
     // Register an invalid counter set
     const std::string counterSetName = "inv@lid count€rs€t";
     const CounterSet* counterSet = nullptr;
-    CHECK_NOTHROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
-    CHECK(counterDirectory.GetCounterSetCount() == 1);
-    CHECK(counterSet);
+    BOOST_CHECK_NO_THROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
+    BOOST_CHECK(counterDirectory.GetCounterSetCount() == 1);
+    BOOST_CHECK(counterSet);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), arm::pipe::ProfilingException);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), armnn::RuntimeException);
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest5")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest5)
 {
     // Using a mock counter directory that allows to register invalid objects
     MockCounterDirectory counterDirectory;
@@ -1742,20 +1700,17 @@ TEST_CASE("SendCounterDirectoryPacketTest5")
     // Register an invalid category
     const std::string categoryName = "c@t€gory";
     const Category* category = nullptr;
-    CHECK_NOTHROW(category = counterDirectory.RegisterCategory(categoryName));
-    CHECK(counterDirectory.GetCategoryCount() == 1);
-    CHECK(category);
+    BOOST_CHECK_NO_THROW(category = counterDirectory.RegisterCategory(categoryName));
+    BOOST_CHECK(counterDirectory.GetCategoryCount() == 1);
+    BOOST_CHECK(category);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), arm::pipe::ProfilingException);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), armnn::RuntimeException);
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest6")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest6)
 {
     // Using a mock counter directory that allows to register invalid objects
     MockCounterDirectory counterDirectory;
@@ -1763,34 +1718,31 @@ TEST_CASE("SendCounterDirectoryPacketTest6")
     // Register an invalid device
     const std::string deviceName = "inv@lid dev!c€";
     const Device* device = nullptr;
-    CHECK_NOTHROW(device = counterDirectory.RegisterDevice(deviceName, 3));
-    CHECK(counterDirectory.GetDeviceCount() == 1);
-    CHECK(device);
+    BOOST_CHECK_NO_THROW(device = counterDirectory.RegisterDevice(deviceName, 3));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 1);
+    BOOST_CHECK(device);
 
     // Register an invalid counter set
     const std::string counterSetName = "inv@lid count€rs€t";
     const CounterSet* counterSet = nullptr;
-    CHECK_NOTHROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
-    CHECK(counterDirectory.GetCounterSetCount() == 1);
-    CHECK(counterSet);
+    BOOST_CHECK_NO_THROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
+    BOOST_CHECK(counterDirectory.GetCounterSetCount() == 1);
+    BOOST_CHECK(counterSet);
 
     // Register an invalid category associated to an invalid device and an invalid counter set
     const std::string categoryName = "c@t€gory";
     const Category* category = nullptr;
-    CHECK_NOTHROW(category = counterDirectory.RegisterCategory(categoryName));
-    CHECK(counterDirectory.GetCategoryCount() == 1);
-    CHECK(category);
+    BOOST_CHECK_NO_THROW(category = counterDirectory.RegisterCategory(categoryName));
+    BOOST_CHECK(counterDirectory.GetCategoryCount() == 1);
+    BOOST_CHECK(category);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), arm::pipe::ProfilingException);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), armnn::RuntimeException);
 }
 
-TEST_CASE("SendCounterDirectoryPacketTest7")
+BOOST_AUTO_TEST_CASE(SendCounterDirectoryPacketTest7)
 {
     // Using a mock counter directory that allows to register invalid objects
     MockCounterDirectory counterDirectory;
@@ -1798,78 +1750,72 @@ TEST_CASE("SendCounterDirectoryPacketTest7")
     // Register an valid device
     const std::string deviceName = "valid device";
     const Device* device = nullptr;
-    CHECK_NOTHROW(device = counterDirectory.RegisterDevice(deviceName, 3));
-    CHECK(counterDirectory.GetDeviceCount() == 1);
-    CHECK(device);
+    BOOST_CHECK_NO_THROW(device = counterDirectory.RegisterDevice(deviceName, 3));
+    BOOST_CHECK(counterDirectory.GetDeviceCount() == 1);
+    BOOST_CHECK(device);
 
     // Register an valid counter set
     const std::string counterSetName = "valid counterset";
     const CounterSet* counterSet = nullptr;
-    CHECK_NOTHROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
-    CHECK(counterDirectory.GetCounterSetCount() == 1);
-    CHECK(counterSet);
+    BOOST_CHECK_NO_THROW(counterSet = counterDirectory.RegisterCounterSet(counterSetName));
+    BOOST_CHECK(counterDirectory.GetCounterSetCount() == 1);
+    BOOST_CHECK(counterSet);
 
     // Register an valid category associated to a valid device and a valid counter set
     const std::string categoryName = "category";
     const Category* category = nullptr;
-    CHECK_NOTHROW(category = counterDirectory.RegisterCategory(categoryName));
-    CHECK(counterDirectory.GetCategoryCount() == 1);
-    CHECK(category);
+    BOOST_CHECK_NO_THROW(category = counterDirectory.RegisterCategory(categoryName));
+    BOOST_CHECK(counterDirectory.GetCategoryCount() == 1);
+    BOOST_CHECK(category);
 
     // Register an invalid counter associated to a valid category
     const Counter* counter = nullptr;
-    CHECK_NOTHROW(counter = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
-                                                             0,
-                                                             categoryName,
-                                                             0,
-                                                             1,
-                                                             123.45f,
-                                                             "counter",
-                                                             "counter description",
-                                                             std::string("invalid counter units"),
-                                                             5,
-                                                             device->m_Uid,
-                                                             counterSet->m_Uid));
-    CHECK(counterDirectory.GetCounterCount() == 5);
-    CHECK(counter);
+    BOOST_CHECK_NO_THROW(counter = counterDirectory.RegisterCounter(armnn::profiling::BACKEND_ID,
+                                                                    0,
+                                                                    categoryName,
+                                                                    0,
+                                                                    1,
+                                                                    123.45f,
+                                                                    "counter",
+                                                                    "counter description",
+                                                                    std::string("invalid counter units"),
+                                                                    5,
+                                                                    device->m_Uid,
+                                                                    counterSet->m_Uid));
+    BOOST_CHECK(counterDirectory.GetCounterCount() == 5);
+    BOOST_CHECK(counter);
 
     // Buffer with enough space
     MockBufferManager mockBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
-    CHECK_THROWS_AS(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), arm::pipe::ProfilingException);
+    SendCounterPacket sendCounterPacket(mockBuffer);
+    BOOST_CHECK_THROW(sendCounterPacket.SendCounterDirectoryPacket(counterDirectory), armnn::RuntimeException);
 }
 
-TEST_CASE("SendThreadTest0")
+BOOST_AUTO_TEST_CASE(SendThreadTest0)
 {
     ProfilingStateMachine profilingStateMachine;
     SetActiveProfilingState(profilingStateMachine);
 
     MockProfilingConnection mockProfilingConnection;
     MockStreamCounterBuffer mockStreamCounterBuffer(0);
-    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer);
     SendThread sendThread(profilingStateMachine, mockStreamCounterBuffer, sendCounterPacket);
 
     // Try to start the send thread many times, it must only start once
 
     sendThread.Start(mockProfilingConnection);
-    CHECK(sendThread.IsRunning());
+    BOOST_CHECK(sendThread.IsRunning());
     sendThread.Start(mockProfilingConnection);
     sendThread.Start(mockProfilingConnection);
     sendThread.Start(mockProfilingConnection);
     sendThread.Start(mockProfilingConnection);
-    CHECK(sendThread.IsRunning());
+    BOOST_CHECK(sendThread.IsRunning());
 
     sendThread.Stop();
-    CHECK(!sendThread.IsRunning());
+    BOOST_CHECK(!sendThread.IsRunning());
 }
 
-TEST_CASE("SendThreadTest1")
+BOOST_AUTO_TEST_CASE(SendThreadTest1)
 {
     ProfilingStateMachine profilingStateMachine;
     SetActiveProfilingState(profilingStateMachine);
@@ -1878,10 +1824,7 @@ TEST_CASE("SendThreadTest1")
 
     MockProfilingConnection mockProfilingConnection;
     MockStreamCounterBuffer mockStreamCounterBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer);
     SendThread sendThread(profilingStateMachine, mockStreamCounterBuffer, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
@@ -1975,12 +1918,12 @@ TEST_CASE("SendThreadTest1")
 
     sendThread.Stop();
 
-    CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadableSize()  == totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadSize()      == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadableSize()  == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadSize()      == totalWrittenSize);
 }
 
-TEST_CASE("SendThreadTest2")
+BOOST_AUTO_TEST_CASE(SendThreadTest2)
 {
     ProfilingStateMachine profilingStateMachine;
     SetActiveProfilingState(profilingStateMachine);
@@ -1989,10 +1932,7 @@ TEST_CASE("SendThreadTest2")
 
     MockProfilingConnection mockProfilingConnection;
     MockStreamCounterBuffer mockStreamCounterBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer);
     SendThread sendThread(profilingStateMachine, mockStreamCounterBuffer, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
@@ -2096,12 +2036,12 @@ TEST_CASE("SendThreadTest2")
     // read all what's remaining in the buffer
     sendThread.Stop();
 
-    CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadableSize()  == totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadSize()      == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadableSize()  == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadSize()      == totalWrittenSize);
 }
 
-TEST_CASE("SendThreadTest3")
+BOOST_AUTO_TEST_CASE(SendThreadTest3)
 {
     ProfilingStateMachine profilingStateMachine;
     SetActiveProfilingState(profilingStateMachine);
@@ -2110,10 +2050,7 @@ TEST_CASE("SendThreadTest3")
 
     MockProfilingConnection mockProfilingConnection;
     MockStreamCounterBuffer mockStreamCounterBuffer(1024);
-    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(mockStreamCounterBuffer);
     SendThread sendThread(profilingStateMachine, mockStreamCounterBuffer, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
@@ -2200,24 +2137,21 @@ TEST_CASE("SendThreadTest3")
     // thread is not guaranteed to flush the buffer)
     sendThread.Stop();
 
-    CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadableSize()  <= totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadSize()      <= totalWrittenSize);
-    CHECK(mockStreamCounterBuffer.GetReadSize()      <= mockStreamCounterBuffer.GetReadableSize());
-    CHECK(mockStreamCounterBuffer.GetReadSize()      <= mockStreamCounterBuffer.GetCommittedSize());
+    BOOST_CHECK(mockStreamCounterBuffer.GetCommittedSize() == totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadableSize()  <= totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadSize()      <= totalWrittenSize);
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadSize()      <= mockStreamCounterBuffer.GetReadableSize());
+    BOOST_CHECK(mockStreamCounterBuffer.GetReadSize()      <= mockStreamCounterBuffer.GetCommittedSize());
 }
 
-TEST_CASE("SendCounterPacketTestWithSendThread")
+BOOST_AUTO_TEST_CASE(SendCounterPacketTestWithSendThread)
 {
     ProfilingStateMachine profilingStateMachine;
     SetWaitingForAckProfilingState(profilingStateMachine);
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(1, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket, -1);
     sendThread.Start(mockProfilingConnection);
 
@@ -2226,7 +2160,7 @@ TEST_CASE("SendCounterPacketTestWithSendThread")
     sendThread.Stop();
 
     // check for packet in ProfilingConnection
-    CHECK(mockProfilingConnection.CheckForPacket({PacketType::StreamMetaData, streamMetadataPacketsize}) == 1);
+    BOOST_CHECK(mockProfilingConnection.CheckForPacket({PacketType::StreamMetaData, streamMetadataPacketsize}) == 1);
 
     SetActiveProfilingState(profilingStateMachine);
     sendThread.Start(mockProfilingConnection);
@@ -2238,7 +2172,7 @@ TEST_CASE("SendCounterPacketTestWithSendThread")
     sendThread.Stop();
     unsigned int counterDirectoryPacketSize = 32;
     // check for packet in ProfilingConnection
-    CHECK(mockProfilingConnection.CheckForPacket(
+    BOOST_CHECK(mockProfilingConnection.CheckForPacket(
         {PacketType::CounterDirectory, counterDirectoryPacketSize}) == 1);
 
     sendThread.Start(mockProfilingConnection);
@@ -2253,21 +2187,18 @@ TEST_CASE("SendCounterPacketTestWithSendThread")
     sendThread.Stop();
 
     unsigned int periodicCounterCapturePacketSize = 28;
-    CHECK(mockProfilingConnection.CheckForPacket(
+    BOOST_CHECK(mockProfilingConnection.CheckForPacket(
         {PacketType::PeriodicCounterCapture, periodicCounterCapturePacketSize}) == 1);
 }
 
-TEST_CASE("SendThreadBufferTest")
+BOOST_AUTO_TEST_CASE(SendThreadBufferTest)
 {
     ProfilingStateMachine profilingStateMachine;
     SetActiveProfilingState(profilingStateMachine);
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(3, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket, -1);
     sendThread.Start(mockProfilingConnection);
 
@@ -2277,10 +2208,10 @@ TEST_CASE("SendThreadBufferTest")
     // Read data from the buffer
     // Buffer should become readable after commit by SendStreamMetaDataPacket
     auto packetBuffer = bufferManager.GetReadableBuffer();
-    CHECK(packetBuffer.get());
+    BOOST_TEST(packetBuffer.get());
 
     unsigned int streamMetadataPacketsize = GetStreamMetaDataPacketSize();
-    CHECK(packetBuffer->GetSize() == streamMetadataPacketsize);
+    BOOST_TEST(packetBuffer->GetSize() == streamMetadataPacketsize);
 
     // Recommit to be read by sendCounterPacket
     bufferManager.Commit(packetBuffer, streamMetadataPacketsize);
@@ -2300,61 +2231,55 @@ TEST_CASE("SendThreadBufferTest")
 
     // The buffer is read by the send thread so it should not be in the readable buffer.
     auto readBuffer = bufferManager.GetReadableBuffer();
-    CHECK(!readBuffer);
+    BOOST_TEST(!readBuffer);
 
     // Successfully reserved the buffer with requested size
     unsigned int reservedSize = 0;
     auto reservedBuffer = bufferManager.Reserve(512, reservedSize);
-    CHECK(reservedSize == 512);
-    CHECK(reservedBuffer.get());
+    BOOST_TEST(reservedSize == 512);
+    BOOST_TEST(reservedBuffer.get());
 
     const auto writtenDataSize = mockProfilingConnection.GetWrittenDataSize();
     const auto metaDataPacketCount =
             mockProfilingConnection.CheckForPacket({PacketType::StreamMetaData, streamMetadataPacketsize});
 
-    CHECK(metaDataPacketCount >= 1);
-    CHECK(mockProfilingConnection.CheckForPacket({PacketType::CounterDirectory, 32}) == 1);
-    CHECK(mockProfilingConnection.CheckForPacket({PacketType::PeriodicCounterCapture, 28}) == 1);
+    BOOST_TEST(metaDataPacketCount >= 1);
+    BOOST_TEST(mockProfilingConnection.CheckForPacket({PacketType::CounterDirectory, 32}) == 1);
+    BOOST_TEST(mockProfilingConnection.CheckForPacket({PacketType::PeriodicCounterCapture, 28}) == 1);
     // Check that we only received the packets we expected
-    CHECK(metaDataPacketCount + 2 == writtenDataSize);
+    BOOST_TEST(metaDataPacketCount + 2 == writtenDataSize);
 }
 
-TEST_CASE("SendThreadSendStreamMetadataPacket1")
+BOOST_AUTO_TEST_CASE(SendThreadSendStreamMetadataPacket1)
 {
     ProfilingStateMachine profilingStateMachine;
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(3, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
     // The profiling state is set to "Uninitialized", so the send thread should throw an exception
-    CHECK_THROWS_AS(sendThread.Stop(), arm::pipe::ProfilingException);
+    BOOST_CHECK_THROW(sendThread.Stop(), armnn::RuntimeException);
 }
 
-TEST_CASE("SendThreadSendStreamMetadataPacket2")
+BOOST_AUTO_TEST_CASE(SendThreadSendStreamMetadataPacket2)
 {
     ProfilingStateMachine profilingStateMachine;
     SetNotConnectedProfilingState(profilingStateMachine);
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(3, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
     // The profiling state is set to "NotConnected", so the send thread should throw an exception
-    CHECK_THROWS_AS(sendThread.Stop(), arm::pipe::ProfilingException);
+    BOOST_CHECK_THROW(sendThread.Stop(), armnn::RuntimeException);
 }
 
-TEST_CASE("SendThreadSendStreamMetadataPacket3")
+BOOST_AUTO_TEST_CASE(SendThreadSendStreamMetadataPacket3)
 {
     ProfilingStateMachine profilingStateMachine;
     SetWaitingForAckProfilingState(profilingStateMachine);
@@ -2363,26 +2288,23 @@ TEST_CASE("SendThreadSendStreamMetadataPacket3")
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(3, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
     // The profiling state is set to "WaitingForAck", so the send thread should send a Stream Metadata packet
     // Wait for sendThread to join
-    CHECK_NOTHROW(sendThread.Stop());
+    BOOST_CHECK_NO_THROW(sendThread.Stop());
 
     // Check that the buffer contains at least one Stream Metadata packet and no other packets
     const auto writtenDataSize = mockProfilingConnection.GetWrittenDataSize();
 
-    CHECK(writtenDataSize >= 1u);
-    CHECK(mockProfilingConnection.CheckForPacket(
+    BOOST_TEST(writtenDataSize >= 1u);
+    BOOST_TEST(mockProfilingConnection.CheckForPacket(
                   {PacketType::StreamMetaData, streamMetadataPacketsize}) == writtenDataSize);
 }
 
-TEST_CASE("SendThreadSendStreamMetadataPacket4")
+BOOST_AUTO_TEST_CASE(SendThreadSendStreamMetadataPacket4)
 {
     ProfilingStateMachine profilingStateMachine;
     SetWaitingForAckProfilingState(profilingStateMachine);
@@ -2391,10 +2313,7 @@ TEST_CASE("SendThreadSendStreamMetadataPacket4")
 
     MockProfilingConnection mockProfilingConnection;
     BufferManager bufferManager(3, 1024);
-    SendCounterPacket sendCounterPacket(bufferManager,
-                                        arm::pipe::ARMNN_SOFTWARE_INFO,
-                                        arm::pipe::ARMNN_SOFTWARE_VERSION,
-                                        arm::pipe::ARMNN_HARDWARE_VERSION);
+    SendCounterPacket sendCounterPacket(bufferManager);
     SendThread sendThread(profilingStateMachine, bufferManager, sendCounterPacket);
     sendThread.Start(mockProfilingConnection);
 
@@ -2404,10 +2323,10 @@ TEST_CASE("SendThreadSendStreamMetadataPacket4")
 
     sendThread.Start(mockProfilingConnection);
     // Check that the profiling state is still "WaitingForAck"
-    CHECK((profilingStateMachine.GetCurrentState() == ProfilingState::WaitingForAck));
+    BOOST_TEST((profilingStateMachine.GetCurrentState() == ProfilingState::WaitingForAck));
 
     // Check that the buffer contains at least one Stream Metadata packet
-    CHECK(mockProfilingConnection.CheckForPacket({PacketType::StreamMetaData, streamMetadataPacketsize}) >= 1);
+    BOOST_TEST(mockProfilingConnection.CheckForPacket({PacketType::StreamMetaData, streamMetadataPacketsize}) >= 1);
 
     mockProfilingConnection.Clear();
 
@@ -2418,17 +2337,17 @@ TEST_CASE("SendThreadSendStreamMetadataPacket4")
     sendThread.SetReadyToRead();
 
     // Wait for sendThread to join
-    CHECK_NOTHROW(sendThread.Stop());
+    BOOST_CHECK_NO_THROW(sendThread.Stop());
 
     // Check that the profiling state is still "WaitingForAck"
-    CHECK((profilingStateMachine.GetCurrentState() == ProfilingState::WaitingForAck));
+    BOOST_TEST((profilingStateMachine.GetCurrentState() == ProfilingState::WaitingForAck));
 
     // Check that the buffer contains at least one Stream Metadata packet and no other packets
     const auto writtenDataSize = mockProfilingConnection.GetWrittenDataSize();
 
-    CHECK(writtenDataSize >= 1u);
-    CHECK(mockProfilingConnection.CheckForPacket(
+    BOOST_TEST(writtenDataSize >= 1u);
+    BOOST_TEST(mockProfilingConnection.CheckForPacket(
                   {PacketType::StreamMetaData, streamMetadataPacketsize}) == writtenDataSize);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

@@ -11,8 +11,6 @@
 #include <armnn/TypesUtils.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <armnnUtils/TContainer.hpp>
-
 #include <cxxopts/cxxopts.hpp>
 #include <fmt/format.h>
 
@@ -112,10 +110,11 @@ template <typename TModel>
 class InferenceModelTestCase : public IInferenceTestCase
 {
 public:
+    using TContainer = mapbox::util::variant<std::vector<float>, std::vector<int>, std::vector<unsigned char>>;
 
     InferenceModelTestCase(TModel& model,
                            unsigned int testCaseId,
-                           const std::vector<armnnUtils::TContainer>& inputs,
+                           const std::vector<TContainer>& inputs,
                            const std::vector<unsigned int>& outputSizes)
         : m_Model(model)
         , m_TestCaseId(testCaseId)
@@ -138,13 +137,13 @@ public:
 
 protected:
     unsigned int GetTestCaseId() const { return m_TestCaseId; }
-    const std::vector<armnnUtils::TContainer>& GetOutputs() const { return m_Outputs; }
+    const std::vector<TContainer>& GetOutputs() const { return m_Outputs; }
 
 private:
-    TModel&                         m_Model;
-    unsigned int                    m_TestCaseId;
-    std::vector<armnnUtils::TContainer>  m_Inputs;
-    std::vector<armnnUtils::TContainer>  m_Outputs;
+    TModel&                 m_Model;
+    unsigned int            m_TestCaseId;
+    std::vector<TContainer> m_Inputs;
+    std::vector<TContainer> m_Outputs;
 };
 
 template <typename TTestCaseDatabase, typename TModel>

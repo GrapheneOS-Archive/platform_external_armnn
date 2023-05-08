@@ -1,5 +1,5 @@
 //
-// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -17,28 +17,24 @@ bool OptimizationViews::Validate(const armnn::SubgraphView& originalSubgraph) co
     bool valid = true;
 
     // Create a copy of the layer list from the original subgraph and sort it
-    SubgraphView::IConnectableLayers originalLayers = originalSubgraph.GetIConnectableLayers();
+    SubgraphView::Layers originalLayers = originalSubgraph.GetLayers();
     originalLayers.sort();
 
     // Create a new list based on the sum of all the subgraphs and sort it
-    SubgraphView::IConnectableLayers countedLayers;
+    SubgraphView::Layers countedLayers;
     for (auto& failed : m_FailedOptimizations)
     {
-        countedLayers.insert(countedLayers.end(),
-                             failed.GetIConnectableLayers().begin(),
-                             failed.GetIConnectableLayers().end());
+        countedLayers.insert(countedLayers.end(), failed.GetLayers().begin(), failed.GetLayers().end());
     }
     for (auto& untouched : m_UntouchedSubgraphs)
     {
-        countedLayers.insert(countedLayers.end(),
-                             untouched.GetIConnectableLayers().begin(),
-                             untouched.GetIConnectableLayers().end());
+        countedLayers.insert(countedLayers.end(), untouched.GetLayers().begin(), untouched.GetLayers().end());
     }
     for (auto& successful : m_SuccesfulOptimizations)
     {
         countedLayers.insert(countedLayers.end(),
-                             successful.m_SubstitutableSubgraph.GetIConnectableLayers().begin(),
-                             successful.m_SubstitutableSubgraph.GetIConnectableLayers().end());
+                             successful.m_SubstitutableSubgraph.GetLayers().begin(),
+                             successful.m_SubstitutableSubgraph.GetLayers().end());
     }
     countedLayers.sort();
 
@@ -60,8 +56,8 @@ bool OptimizationViews::Validate(const armnn::SubgraphView& originalSubgraph) co
             bool validSubstitution = true;
             const SubgraphView& replacement = substitution.m_ReplacementSubgraph;
             const SubgraphView& old = substitution.m_SubstitutableSubgraph;
-            validSubstitution &= replacement.GetIInputSlots().size() == old.GetIInputSlots().size();
-            validSubstitution &= replacement.GetIOutputSlots().size() == old.GetIOutputSlots().size();
+            validSubstitution &= replacement.GetInputSlots().size() == old.GetInputSlots().size();
+            validSubstitution &= replacement.GetOutputSlots().size() == old.GetOutputSlots().size();
             valid &= validSubstitution;
         }
     }

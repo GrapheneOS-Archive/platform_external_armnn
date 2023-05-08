@@ -2,7 +2,7 @@
 // Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
 
 #include "WallClockTimer.hpp"
 
@@ -11,13 +11,13 @@
 
 using namespace armnn;
 
-TEST_SUITE("Instruments")
-{
-TEST_CASE("WallClockTimerInMicroseconds")
+BOOST_AUTO_TEST_SUITE(Instruments)
+
+BOOST_AUTO_TEST_CASE(WallClockTimerInMicroseconds)
 {
     WallClockTimer wallClockTimer;
 
-    CHECK((std::string(wallClockTimer.GetName()) == std::string("WallClockTimer")));
+    BOOST_CHECK_EQUAL(wallClockTimer.GetName(), "WallClockTimer");
 
     // start the timer
     wallClockTimer.Start();
@@ -28,17 +28,17 @@ TEST_CASE("WallClockTimerInMicroseconds")
    // stop the timer
     wallClockTimer.Stop();
 
-    CHECK((wallClockTimer.GetMeasurements().front().m_Name == WallClockTimer::WALL_CLOCK_TIME));
+    BOOST_CHECK_EQUAL(wallClockTimer.GetMeasurements().front().m_Name, WallClockTimer::WALL_CLOCK_TIME);
 
     // check that WallClockTimer measurement should be >= 10 microseconds
-    CHECK_GE(wallClockTimer.GetMeasurements().front().m_Value, std::chrono::microseconds(10).count());
+    BOOST_CHECK_GE(wallClockTimer.GetMeasurements().front().m_Value, std::chrono::microseconds(10).count());
 }
 
-TEST_CASE("WallClockTimerInNanoseconds")
+BOOST_AUTO_TEST_CASE(WallClockTimerInNanoseconds)
 {
     WallClockTimer wallClockTimer;
 
-    CHECK((std::string(wallClockTimer.GetName()) == std::string("WallClockTimer")));
+    BOOST_CHECK_EQUAL(wallClockTimer.GetName(), "WallClockTimer");
 
     // start the timer
     wallClockTimer.Start();
@@ -49,14 +49,14 @@ TEST_CASE("WallClockTimerInNanoseconds")
     // stop the timer
     wallClockTimer.Stop();
 
-    CHECK((wallClockTimer.GetMeasurements().front().m_Name == WallClockTimer::WALL_CLOCK_TIME));
+    BOOST_CHECK_EQUAL(wallClockTimer.GetMeasurements().front().m_Name, WallClockTimer::WALL_CLOCK_TIME);
 
     // delta is 0.5 microseconds
     const auto delta =
         std::chrono::duration_cast<std::chrono::duration<double, std::micro>>(std::chrono::nanoseconds(500));
 
     // check that WallClockTimer measurement should be >= 0.5 microseconds
-    CHECK_GE(wallClockTimer.GetMeasurements().front().m_Value, delta.count());
+    BOOST_CHECK_GE(wallClockTimer.GetMeasurements().front().m_Value, delta.count());
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

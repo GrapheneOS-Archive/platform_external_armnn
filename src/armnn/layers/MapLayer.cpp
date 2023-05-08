@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 #include <backendsCommon/MapWorkload.hpp>
 
 namespace armnn
@@ -41,9 +41,9 @@ void MapLayer::ValidateTensorShapesFromInputs()
     ARMNN_ASSERT(GetNumOutputSlots() == 0);
 }
 
-void MapLayer::ExecuteStrategy(IStrategy& strategy) const
+void MapLayer::Accept(ILayerVisitor& visitor) const
 {
-    IgnoreUnused(strategy);
+    IgnoreUnused(visitor);
     throw armnn::Exception("MapLayer should not appear in an input graph");
 }
 

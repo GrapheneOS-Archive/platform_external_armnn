@@ -5,14 +5,14 @@
 
 #pragma once
 
-#include <armnn/backends/WorkloadData.hpp>
-#include "NeonBaseWorkload.hpp"
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/Workload.hpp>
 #include <arm_compute/runtime/IFunction.h>
 #include <arm_compute/core/Error.h>
 
 namespace armnn {
 
-class NeonFillWorkload : public NeonBaseWorkload<FillQueueDescriptor>
+class NeonFillWorkload : public BaseWorkload<FillQueueDescriptor>
 {
 public:
     NeonFillWorkload(const FillQueueDescriptor& descriptor, const WorkloadInfo& info);

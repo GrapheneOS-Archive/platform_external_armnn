@@ -7,8 +7,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> MaximumLayer::CreateWorkload(const IWorkloadFactory& 
     MaximumQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::Maximum, descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateMaximum(descriptor, PrepInfoAndDesc(descriptor));
 }
 
 MaximumLayer* MaximumLayer::Clone(Graph& graph) const
@@ -31,9 +31,9 @@ MaximumLayer* MaximumLayer::Clone(Graph& graph) const
     return CloneBase<MaximumLayer>(graph, GetName());
 }
 
-void MaximumLayer::ExecuteStrategy(IStrategy& strategy) const
+void MaximumLayer::Accept(ILayerVisitor& visitor) const
 {
-    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
+    visitor.VisitMaximumLayer(this, GetName());
 }
 
 } // namespace armnn

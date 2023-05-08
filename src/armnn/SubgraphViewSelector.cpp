@@ -1,5 +1,5 @@
 //
-// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -176,7 +176,7 @@ private:
 /// Intermediate data structure to store information associated with a particular layer.
 struct LayerSelectionInfo
 {
-    using LayerInfoContainer = std::map<IConnectableLayer*, LayerSelectionInfo>;
+    using LayerInfoContainer = std::map<Layer*, LayerSelectionInfo>;
     using LayerInfoQueue = std::queue<LayerSelectionInfo*>;
 
     LayerSelectionInfo(Layer* layer, const SubgraphViewSelector::LayerSelectorFunction& selector)
@@ -193,11 +193,9 @@ struct LayerSelectionInfo
     }
 
     void CollectNonSelectedInputs(LayerSelectionInfo::LayerInfoContainer& layerInfos,
-                                  SubgraphView::IInputSlots& inputSlots)
+                                  SubgraphView::InputSlots& inputSlots)
     {
-        for (auto&& slot = PolymorphicDowncast<Layer*>(m_Layer)->BeginInputSlots();
-             slot != PolymorphicDowncast<Layer*>(m_Layer)->EndInputSlots();
-             ++slot)
+        for (auto&& slot = m_Layer->BeginInputSlots(); slot != m_Layer->EndInputSlots(); ++slot)
         {
             OutputSlot* parentLayerOutputSlot = slot->GetConnectedOutputSlot();
             ARMNN_ASSERT_MSG(parentLayerOutputSlot != nullptr, "The input slots must be connected here.");
@@ -220,11 +218,9 @@ struct LayerSelectionInfo
     }
 
     void CollectNonSelectedOutputSlots(LayerSelectionInfo::LayerInfoContainer& layerInfos,
-                                       SubgraphView::IOutputSlots& outputSlots)
+                                       SubgraphView::OutputSlots& outputSlots)
     {
-        for (auto&& slot = PolymorphicDowncast<Layer*>(m_Layer)->BeginOutputSlots();
-             slot != PolymorphicDowncast<Layer*>(m_Layer)->EndOutputSlots();
-             ++slot)
+        for (auto&& slot = m_Layer->BeginOutputSlots(); slot != m_Layer->EndOutputSlots(); ++slot)
         {
             for (InputSlot* childLayerInputSlot : slot->GetConnections())
             {
@@ -244,7 +240,7 @@ struct LayerSelectionInfo
         }
     }
 
-    IConnectableLayer* m_Layer;
+    Layer* m_Layer;
     /// Which subgraph this layer has been assigned to. Only valid once m_IsProcessed is true.
     /// Two layers with different m_Subgraph pointers may in fact have been merged into the same subgraph -
     /// see the description of the PartialSubgraph class.
@@ -268,7 +264,7 @@ void ForEachLayerInput(LayerSelectionInfo::LayerInfoContainer& layerInfos,
                        LayerSelectionInfo& layerInfo,
                        Delegate function)
 {
-    Layer& layer = *PolymorphicDowncast<Layer*>(layerInfo.m_Layer);
+    Layer& layer = *layerInfo.m_Layer;
 
     for (auto inputSlot : layer.GetInputSlots())
     {
@@ -289,7 +285,7 @@ void ForEachLayerOutput(LayerSelectionInfo::LayerInfoContainer& layerInfos,
                         LayerSelectionInfo& layerInfo,
                         Delegate function)
 {
-    Layer& layer = *PolymorphicDowncast<Layer*>(layerInfo.m_Layer);
+    Layer& layer= *layerInfo.m_Layer;
 
     for (auto& outputSlot : layer.GetOutputSlots())
     {
@@ -391,11 +387,9 @@ SubgraphViewSelector::SelectSubgraphs(SubgraphView& subgraph, const LayerSelecto
     LayerSelectionInfo::LayerInfoContainer layerInfos;
 
     LayerSelectionInfo::LayerInfoQueue processQueue;
-    const SubgraphView::IConnectableLayers& subgraphLayers = subgraph.GetIConnectableLayers();
-    for (auto& layer : subgraphLayers)
+    for (auto& layer : subgraph)
     {
-
-        auto emplaced = layerInfos.emplace(layer, LayerSelectionInfo{PolymorphicDowncast<Layer*>(layer), selector});
+        auto emplaced = layerInfos.emplace(layer, LayerSelectionInfo{layer, selector});
         LayerSelectionInfo& layerInfo = emplaced.first->second;
 
         // Start with Input type layers
@@ -405,10 +399,10 @@ SubgraphViewSelector::SelectSubgraphs(SubgraphView& subgraph, const LayerSelecto
         }
     }
 
-    const SubgraphView::IInputSlots& subgraphInputSlots = subgraph.GetIInputSlots();
+    const SubgraphView::InputSlots& subgraphInputSlots = subgraph.GetInputSlots();
     for (auto& inputSlot : subgraphInputSlots)
     {
-        Layer& layer = PolymorphicDowncast<InputSlot*>(inputSlot)->GetOwningLayer();
+        Layer& layer = inputSlot->GetOwningLayer();
         auto emplaced = layerInfos.emplace(&layer, LayerSelectionInfo{&layer, selector});
         LayerSelectionInfo& layerInfo = emplaced.first->second;
 
@@ -469,66 +463,20 @@ SubgraphViewSelector::SelectSubgraphs(SubgraphView& subgraph, const LayerSelecto
     Subgraphs result;
     for (auto& splitGraph : splitMap)
     {
-        SubgraphView::IInputSlots inputs;
-        SubgraphView::IOutputSlots outputs;
-        SubgraphView::IConnectableLayers layers;
+        SubgraphView::InputSlots inputs;
+        SubgraphView::OutputSlots outputs;
+        SubgraphView::Layers layers;
         for (auto&& infoPtr : splitGraph.second)
         {
             infoPtr->CollectNonSelectedInputs(layerInfos, inputs);
             infoPtr->CollectNonSelectedOutputSlots(layerInfos, outputs);
             layers.push_back(infoPtr->m_Layer);
         }
-
-        // Sort lists into deterministic order, not relying on pointer values which may be different on each execution.
-        // This makes debugging the optimised graph much easier as subsequent stages can also be deterministic.
-        std::sort(inputs.begin(), inputs.end(), [](const IInputSlot* a, const IInputSlot* b)
-        {
-            auto* castA = PolymorphicDowncast<const InputSlot*>(a);
-            auto* castB = PolymorphicDowncast<const InputSlot*>(b);
-            const LayerGuid guidA = castA->GetOwningLayer().GetGuid();
-            const LayerGuid guidB = castB->GetOwningLayer().GetGuid();
-            if (guidA < guidB)
-            {
-                return true;
-            }
-            else if (guidA == guidB)
-            {
-                return (castA->GetSlotIndex() < castB->GetSlotIndex());
-            }
-            return false;
-        });
-        std::sort(outputs.begin(), outputs.end(), [](const IOutputSlot* a, const IOutputSlot* b)
-        {
-            auto* castA = PolymorphicDowncast<const OutputSlot*>(a);
-            auto* castB = PolymorphicDowncast<const OutputSlot*>(b);
-            const LayerGuid guidA = castA->GetOwningLayer().GetGuid();
-            const LayerGuid guidB = castB->GetOwningLayer().GetGuid();
-            if (guidA < guidB)
-            {
-                return true;
-            }
-            else if (guidA == guidB)
-            {
-                return (a->CalculateIndexOnOwner() < b->CalculateIndexOnOwner());
-            }
-            return false;
-        });
-        layers.sort([](const IConnectableLayer* a, const IConnectableLayer* b) { return a->GetGuid() < b->GetGuid(); });
-
         // Create a new sub-graph with the new lists of input/output slots and layer
-        result.emplace_back(std::make_unique<SubgraphView>(std::move(layers),
-                                                           std::move(inputs),
-                                                           std::move(outputs)));
+        result.emplace_back(std::make_unique<SubgraphView>(std::move(inputs),
+                                                            std::move(outputs),
+                                                            std::move(layers)));
     }
-
-    // Sort subgraphs list into deterministic order, not relying on pointer values which may be different on each 
-    // execution. This makes debugging the optimised graph much easier as subsequent stages can also be 
-    // deterministic.
-    std::sort(result.begin(), result.end(), [](const SubgraphView::SubgraphViewPtr& a,
-                                               const SubgraphView::SubgraphViewPtr& b)
-    {
-        return a->GetIConnectableLayers().front()->GetGuid() < b->GetIConnectableLayers().front()->GetGuid();
-    });
 
     return result;
 }

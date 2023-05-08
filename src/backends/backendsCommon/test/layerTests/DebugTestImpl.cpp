@@ -1,21 +1,18 @@
 //
-// Copyright © 2017,2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "DebugTestImpl.hpp"
 
-#include <armnnUtils/QuantizeHelper.hpp>
-#include <armnnUtils/Filesystem.hpp>
+#include <QuantizeHelper.hpp>
 #include <ResolveType.hpp>
 
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <doctest/doctest.h>
-#include <armnnUtils/Filesystem.hpp>
+#include <test/TensorHelpers.hpp>
 
 namespace
 {
@@ -30,8 +27,6 @@ LayerTestResult<T, Dim> DebugTestImpl(
     std::vector<float>& outputExpectedData,
     armnn::DebugQueueDescriptor descriptor,
     const std::string expectedStringOutput,
-    const std::string& layerName,
-    bool toFile,
     const float qScale = 1.0f,
     const int32_t qOffset = 0)
 {
@@ -45,10 +40,12 @@ LayerTestResult<T, Dim> DebugTestImpl(
         outputTensorInfo.SetQuantizationOffset(qOffset);
     }
 
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset);
+    boost::multi_array<T, Dim> input =
+        MakeTensor<T, Dim>(inputTensorInfo, armnnUtils::QuantizedVector<T>(inputData, qScale, qOffset));
 
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
-    std::vector<T> expectedOutput = armnnUtils::QuantizedVector<T>(outputExpectedData, qScale, qOffset);
+    LayerTestResult<T, Dim> ret(outputTensorInfo);
+    ret.outputExpected =
+        MakeTensor<T, Dim>(outputTensorInfo, armnnUtils::QuantizedVector<T>(outputExpectedData, qScale, qOffset));
 
     ARMNN_NO_DEPRECATE_WARN_BEGIN
     std::unique_ptr<armnn::ITensorHandle> inputHandle = workloadFactory.CreateTensorHandle(inputTensorInfo);
@@ -59,55 +56,32 @@ LayerTestResult<T, Dim> DebugTestImpl(
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Debug,
-                                                                                descriptor,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateDebug(descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
     CopyDataToITensorHandle(inputHandle.get(), input.data());
 
-    if (toFile)
-    {
-        // Given that this is dependent on an ExNet switch, we need to explicitly set the directory that the
-        //  files are stored in as this happens within the ExNet flow
-        auto tmpDir = armnnUtils::Filesystem::CreateDirectory("/ArmNNIntermediateLayerOutputs");
-        std::string full_path = tmpDir + layerName + ".numpy";
+    std::ostringstream oss;
+    std::streambuf* coutStreambuf = std::cout.rdbuf();
+    std::cout.rdbuf(oss.rdbuf());
 
-        ExecuteWorkload(*workload, memoryManager);
+    ExecuteWorkload(*workload, memoryManager);
 
-        armnnUtils::Filesystem::FileContents output = armnnUtils::Filesystem::ReadFileContentsIntoString(full_path);
-        CHECK((output == expectedStringOutput));
+    std::cout.rdbuf(coutStreambuf);
 
-        // Clean up afterwards.
-        armnnUtils::Filesystem::RemoveDirectoryAndContents(tmpDir);
-    }
-    else
-    {
-        std::ostringstream oss;
-        std::streambuf* coutStreambuf = std::cout.rdbuf();
-        std::cout.rdbuf(oss.rdbuf());
+    BOOST_TEST(oss.str() == expectedStringOutput);
 
-        ExecuteWorkload(*workload, memoryManager);
+    CopyDataFromITensorHandle(ret.output.data(), outputHandle.get());
 
-        std::cout.rdbuf(coutStreambuf);
-        CHECK(oss.str() == expectedStringOutput);
-    }
-
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-
-    return LayerTestResult<T, Dim>(actualOutput,
-                                   expectedOutput,
-                                   outputHandle->GetShape(),
-                                   outputTensorInfo.GetShape());
+    return ret;
 }
 
 template <armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 4> Debug4dTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -119,7 +93,6 @@ LayerTestResult<T, 4> Debug4dTest(
     desc.m_Guid = 1;
     desc.m_LayerName = "TestOutput";
     desc.m_SlotIndex = 0;
-    desc.m_LayerOutputToFile = toFile;
 
     inputTensorInfo = armnn::TensorInfo(4, inputShape, ArmnnType);
     outputTensorInfo = armnn::TensorInfo(4, outputShape, ArmnnType);
@@ -155,16 +128,13 @@ LayerTestResult<T, 4> Debug4dTest(
                                input,
                                outputExpected,
                                desc,
-                               expectedStringOutput,
-                               desc.m_LayerName,
-                               toFile);
+                               expectedStringOutput);
 }
 
 template <armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 3> Debug3dTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -176,7 +146,6 @@ LayerTestResult<T, 3> Debug3dTest(
     desc.m_Guid = 1;
     desc.m_LayerName = "TestOutput";
     desc.m_SlotIndex = 0;
-    desc.m_LayerOutputToFile = toFile;
 
     inputTensorInfo = armnn::TensorInfo(3, inputShape, ArmnnType);
     outputTensorInfo = armnn::TensorInfo(3, outputShape, ArmnnType);
@@ -210,16 +179,13 @@ LayerTestResult<T, 3> Debug3dTest(
                                input,
                                outputExpected,
                                desc,
-                               expectedStringOutput,
-                               desc.m_LayerName,
-                               toFile);
+                               expectedStringOutput);
 }
 
 template <armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 2> Debug2dTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -231,7 +197,6 @@ LayerTestResult<T, 2> Debug2dTest(
     desc.m_Guid = 1;
     desc.m_LayerName = "TestOutput";
     desc.m_SlotIndex = 0;
-    desc.m_LayerOutputToFile = toFile;
 
     inputTensorInfo = armnn::TensorInfo(2, inputShape, ArmnnType);
     outputTensorInfo = armnn::TensorInfo(2, outputShape, ArmnnType);
@@ -263,16 +228,13 @@ LayerTestResult<T, 2> Debug2dTest(
                                input,
                                outputExpected,
                                desc,
-                               expectedStringOutput,
-                               desc.m_LayerName,
-                               toFile);
+                               expectedStringOutput);
 }
 
 template <armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 1> Debug1dTest(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
     armnn::TensorInfo inputTensorInfo;
     armnn::TensorInfo outputTensorInfo;
@@ -284,7 +246,6 @@ LayerTestResult<T, 1> Debug1dTest(
     desc.m_Guid = 1;
     desc.m_LayerName = "TestOutput";
     desc.m_SlotIndex = 0;
-    desc.m_LayerOutputToFile = toFile;
 
     inputTensorInfo = armnn::TensorInfo(1, inputShape, ArmnnType);
     outputTensorInfo = armnn::TensorInfo(1, outputShape, ArmnnType);
@@ -314,137 +275,119 @@ LayerTestResult<T, 1> Debug1dTest(
                                input,
                                outputExpected,
                                desc,
-                               expectedStringOutput,
-                               desc.m_LayerName,
-                               toFile);
+                               expectedStringOutput);
 }
 
 } // anonymous namespace
 
 LayerTestResult<float, 4> Debug4dFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug4dTest<armnn::DataType::Float32>(workloadFactory, memoryManager, toFile);
+    return Debug4dTest<armnn::DataType::Float32>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<float, 3> Debug3dFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug3dTest<armnn::DataType::Float32>(workloadFactory, memoryManager, toFile);
+    return Debug3dTest<armnn::DataType::Float32>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<float, 2> Debug2dFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug2dTest<armnn::DataType::Float32>(workloadFactory, memoryManager, toFile);
+    return Debug2dTest<armnn::DataType::Float32>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<float, 1> Debug1dFloat32Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug1dTest<armnn::DataType::Float32>(workloadFactory, memoryManager, toFile);
+    return Debug1dTest<armnn::DataType::Float32>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<armnn::BFloat16, 4> Debug4dBFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug4dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager, toFile);
+    return Debug4dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<armnn::BFloat16, 3> Debug3dBFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug3dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager, toFile);
+    return Debug3dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<armnn::BFloat16, 2> Debug2dBFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug2dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager, toFile);
+    return Debug2dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<armnn::BFloat16, 1> Debug1dBFloat16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug1dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager, toFile);
+    return Debug1dTest<armnn::DataType::BFloat16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<uint8_t, 4> Debug4dUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug4dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, toFile);
+    return Debug4dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<uint8_t, 3> Debug3dUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug3dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, toFile);
+    return Debug3dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<uint8_t, 2> Debug2dUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug2dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, toFile);
+    return Debug2dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<uint8_t, 1> Debug1dUint8Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug1dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager, toFile);
+    return Debug1dTest<armnn::DataType::QAsymmU8>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<int16_t, 4> Debug4dInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug4dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager, toFile);
+    return Debug4dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<int16_t, 3> Debug3dInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug3dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager, toFile);
+    return Debug3dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<int16_t, 2> Debug2dInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug2dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager, toFile);
+    return Debug2dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager);
 }
 
 LayerTestResult<int16_t, 1> Debug1dInt16Test(
     armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    bool toFile = false)
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager)
 {
-    return Debug1dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager, toFile);
+    return Debug1dTest<armnn::DataType::QSymmS16>(workloadFactory, memoryManager);
 }

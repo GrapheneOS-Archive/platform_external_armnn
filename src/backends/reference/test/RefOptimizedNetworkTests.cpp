@@ -1,29 +1,23 @@
 //
-// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <doctest/doctest.h>
 #include <Graph.hpp>
-#include <armnn/BackendId.hpp>
-#include <armnn/Descriptors.hpp>
-#include <armnn/INetwork.hpp>
-#include <armnn/IRuntime.hpp>
-#include <armnn/Tensor.hpp>
-#include <armnn/Types.hpp>
-#include <GraphUtils.hpp>
-#include <reference/RefWorkloadFactory.hpp>
-#include <memory>
-#include <vector>
+#include <Network.hpp>
 
-TEST_SUITE("RefOptimizedNetwork")
-{
-TEST_CASE("OptimizeValidateCpuRefWorkloads")
+#include <reference/RefWorkloadFactory.hpp>
+
+#include <boost/test/unit_test.hpp>
+#include <test/GraphUtils.hpp>
+
+BOOST_AUTO_TEST_SUITE(RefOptimizedNetwork)
+
+BOOST_AUTO_TEST_CASE(OptimizeValidateCpuRefWorkloads)
 {
     const armnn::TensorInfo desc({3, 5}, armnn::DataType::Float32);
 
-    // build up the structure of the network
-    armnn::INetworkPtr net(armnn::INetwork::Create());
+    armnn::Network  net;
 
     armnn::NormalizationDescriptor nmDesc;
     armnn::ActivationDescriptor acDesc;
@@ -39,21 +33,21 @@ TEST_CASE("OptimizeValidateCpuRefWorkloads")
     //    sm
     //     |
     //    ot
-    armnn::IConnectableLayer* layer = net->AddInputLayer(0, "in");
+    armnn::IConnectableLayer* layer = net.AddInputLayer(0, "in");
     layer->GetOutputSlot(0).SetTensorInfo(desc);
 
-    armnn::IConnectableLayer* const normLayer = net->AddNormalizationLayer(nmDesc, "nm");
+    armnn::IConnectableLayer* const normLayer = net.AddNormalizationLayer(nmDesc, "nm");
 
     layer->GetOutputSlot(0).Connect(normLayer->GetInputSlot(0));
     normLayer->GetOutputSlot(0).SetTensorInfo(desc);
 
-    layer = net->AddActivationLayer(acDesc, "ac");
+    layer = net.AddActivationLayer(acDesc, "ac");
 
     normLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0));
     layer->GetOutputSlot(0).SetTensorInfo(desc);
 
     armnn::IConnectableLayer* prevLayer = layer;
-    layer = net->AddElementwiseBinaryLayer(armnn::BinaryOperation::Mul, "ml");
+    layer = net.AddMultiplicationLayer("ml");
 
     prevLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0));
     normLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1));
@@ -61,13 +55,13 @@ TEST_CASE("OptimizeValidateCpuRefWorkloads")
 
     prevLayer = layer;
     armnn::SoftmaxDescriptor softmaxDescriptor;
-    layer = net->AddSoftmaxLayer(softmaxDescriptor, "sm");
+    layer = net.AddSoftmaxLayer(softmaxDescriptor, "sm");
 
     prevLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0));
     layer->GetOutputSlot(0).SetTensorInfo(desc);
 
     prevLayer = layer;
-    layer = net->AddOutputLayer(0, "ot");
+    layer = net.AddOutputLayer(0, "ot");
 
     prevLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0));
 
@@ -75,20 +69,19 @@ TEST_CASE("OptimizeValidateCpuRefWorkloads")
     armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
 
     std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*net, backends, runtime->GetDeviceSpec());
-    armnn::Graph& graph = GetGraphForTesting(optNet.get());
-    graph.AllocateDynamicBuffers();
-    CHECK(optNet);
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(net, backends, runtime->GetDeviceSpec());
+    static_cast<armnn::OptimizedNetwork*>(optNet.get())->GetGraph().AllocateDynamicBuffers();
+    BOOST_CHECK(optNet);
 
     // Validates workloads.
     armnn::RefWorkloadFactory fact;
-    for (auto&& layer : graph)
+    for (auto&& layer : static_cast<armnn::OptimizedNetwork*>(optNet.get())->GetGraph())
     {
-        CHECK_NOTHROW(layer->CreateWorkload(fact));
+        BOOST_CHECK_NO_THROW(layer->CreateWorkload(fact));
     }
 }
 
-TEST_CASE("OptimizeValidateWorkloadsCpuRefPermuteLayer")
+BOOST_AUTO_TEST_CASE(OptimizeValidateWorkloadsCpuRefPermuteLayer)
 {
     // Create runtime in which test will run
     armnn::IRuntime::CreationOptions options;
@@ -115,16 +108,13 @@ TEST_CASE("OptimizeValidateWorkloadsCpuRefPermuteLayer")
     // optimize the network
     armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*net, backends, runtime->GetDeviceSpec());
 
-    armnn::Graph& graph = GetGraphForTesting(optNet.get());
-    graph.AllocateDynamicBuffers();
-
-    for (auto&& layer : graph)
+    for (auto&& layer : static_cast<armnn::OptimizedNetwork*>(optNet.get())->GetGraph())
     {
-        CHECK(layer->GetBackendId() == armnn::Compute::CpuRef);
+        BOOST_CHECK(layer->GetBackendId() == armnn::Compute::CpuRef);
     }
 }
 
-TEST_CASE("OptimizeValidateWorkloadsCpuRefMeanLayer")
+BOOST_AUTO_TEST_CASE(OptimizeValidateWorkloadsCpuRefMeanLayer)
 {
     // Create runtime in which test will run
     armnn::IRuntime::CreationOptions options;
@@ -150,18 +140,16 @@ TEST_CASE("OptimizeValidateWorkloadsCpuRefMeanLayer")
 
     // optimize the network
     armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*net, backends, runtime->GetDeviceSpec());
-    armnn::Graph& graph = GetGraphForTesting(optNet.get());
-    graph.AllocateDynamicBuffers();
-    for (auto&& layer : graph)
+
+    for (auto&& layer : static_cast<armnn::OptimizedNetwork*>(optNet.get())->GetGraph())
     {
-        CHECK(layer->GetBackendId() == armnn::Compute::CpuRef);
+        BOOST_CHECK(layer->GetBackendId() == armnn::Compute::CpuRef);
     }
 }
 
-TEST_CASE("DebugTestOnCpuRef")
+BOOST_AUTO_TEST_CASE(DebugTestOnCpuRef)
 {
-    // build up the structure of the network
-    armnn::INetworkPtr net(armnn::INetwork::Create());
+    armnn::Network net;
 
     armnn::ActivationDescriptor activation1Descriptor;
     activation1Descriptor.m_Function = armnn::ActivationFunction::BoundedReLu;
@@ -169,9 +157,9 @@ TEST_CASE("DebugTestOnCpuRef")
     activation1Descriptor.m_B = -1.f;
 
     // Defines layers.
-    auto input = net->AddInputLayer(0, "InputLayer");
-    auto activation = net->AddActivationLayer(activation1Descriptor, "ActivationLayer");
-    auto output = net->AddOutputLayer(0, "OutputLayer");
+    auto input = net.AddInputLayer(0, "InputLayer");
+    auto activation = net.AddActivationLayer(activation1Descriptor, "ActivationLayer");
+    auto output = net.AddOutputLayer(0, "OutputLayer");
 
     // Connects layers.
     input->GetOutputSlot(0).Connect(activation->GetInputSlot(0));
@@ -187,24 +175,22 @@ TEST_CASE("DebugTestOnCpuRef")
 
     std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
 
-    armnn::OptimizerOptionsOpaque optimizerOptions;
-    optimizerOptions.SetDebugEnabled(true);
+    armnn::OptimizerOptions optimizerOptions;
+    optimizerOptions.m_Debug = true;
 
-    armnn::IOptimizedNetworkPtr optimizedNet = armnn::Optimize(*net, backends, runtime->GetDeviceSpec(),
+    armnn::IOptimizedNetworkPtr optimizedNet = armnn::Optimize(net, backends, runtime->GetDeviceSpec(),
                                                                optimizerOptions);
 
-    armnn::Graph& graph = GetGraphForTesting(optimizedNet.get());
-    graph.AllocateDynamicBuffers();
-
+    const armnn::Graph& graph = static_cast<armnn::OptimizedNetwork*>(optimizedNet.get())->GetGraph();
     // Tests that all layers are present in the graph.
-    CHECK(graph.GetNumLayers() == 5);
+    BOOST_TEST(graph.GetNumLayers() == 5);
 
     // Tests that the vertices exist and have correct names.
-    CHECK(GraphHasNamedLayer(graph, "InputLayer"));
-    CHECK(GraphHasNamedLayer(graph, "DebugLayerAfterInputLayer_0"));
-    CHECK(GraphHasNamedLayer(graph, "ActivationLayer"));
-    CHECK(GraphHasNamedLayer(graph, "DebugLayerAfterActivationLayer_0"));
-    CHECK(GraphHasNamedLayer(graph, "OutputLayer"));
+    BOOST_TEST(GraphHasNamedLayer(graph, "InputLayer"));
+    BOOST_TEST(GraphHasNamedLayer(graph, "DebugLayerAfterInputLayer"));
+    BOOST_TEST(GraphHasNamedLayer(graph, "ActivationLayer"));
+    BOOST_TEST(GraphHasNamedLayer(graph, "DebugLayerAfterActivationLayer"));
+    BOOST_TEST(GraphHasNamedLayer(graph, "OutputLayer"));
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

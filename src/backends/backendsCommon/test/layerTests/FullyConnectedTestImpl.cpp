@@ -1,20 +1,20 @@
 //
-// Copyright © 2017,2022-2023 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "FullyConnectedTestImpl.hpp"
 
 
-#include <armnnUtils/QuantizeHelper.hpp>
+#include <QuantizeHelper.hpp>
 
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 
-#include <DataTypeUtils.hpp>
-#include <armnnTestUtils/TensorCopyUtils.hpp>
-#include <armnnTestUtils/WorkloadTestUtils.hpp>
+#include <backendsCommon/test/DataTypeUtils.hpp>
+#include <backendsCommon/test/TensorCopyUtils.hpp>
+#include <backendsCommon/test/WorkloadTestUtils.hpp>
 
-#include <armnnTestUtils/TensorHelpers.hpp>
+#include <test/TensorHelpers.hpp>
 
 //
 // Implementation templates
@@ -22,64 +22,47 @@
 
 template<typename T, typename B>
 LayerTestResult<T, 2> SimpleFullyConnectedTestImpl(
-    armnn::IWorkloadFactory& workloadFactory,
-    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
-    const armnn::ITensorHandleFactory& tensorHandleFactory,
-    armnn::TensorInfo inputTensorInfo,
-    armnn::TensorInfo outputTensorInfo,
-    armnn::TensorInfo weightsTensorInfo,
-    armnn::TensorInfo biasesTensorInfo,
-    std::vector<T>& weights,
-    std::vector<B>& bias,
-    std::vector<T>& input,
-    bool biasEnabled,
-    bool transposeWeights,
-    bool constantWeights)
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory,
+        armnn::TensorInfo inputTensorInfo,
+        armnn::TensorInfo outputTensorInfo,
+        armnn::TensorInfo weightsDesc,
+        armnn::TensorInfo biasesDesc,
+        boost::multi_array<T, 2>& weights,
+        boost::multi_array<B, 1>& bias,
+        boost::multi_array<T, 4>& input,
+        bool biasEnabled,
+        bool transposeWeights)
 {
-    std::unique_ptr<armnn::ITensorHandle> input0Handle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
-    std::unique_ptr<armnn::ITensorHandle> input1Handle = tensorHandleFactory.CreateTensorHandle(weightsTensorInfo);
+    std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
-
-    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
 
     armnn::FullyConnectedQueueDescriptor data;
     armnn::WorkloadInfo info;
+    armnn::ScopedCpuTensorHandle weightsTensor(weightsDesc);
+    armnn::ScopedCpuTensorHandle biasTensor(biasesDesc);
 
-    AddInputToWorkload(data, info, inputTensorInfo, input0Handle.get());
-    AddInputToWorkload(data, info, weightsTensorInfo, input1Handle.get());
+    AllocateAndCopyDataToITensorHandle(&weightsTensor, &weights[0][0]);
+    AllocateAndCopyDataToITensorHandle(&biasTensor, &bias[0]);
+
+    AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
-
+    data.m_Weight = &weightsTensor;
+    data.m_Bias = &biasTensor;
     data.m_Parameters.m_BiasEnabled = biasEnabled;
     data.m_Parameters.m_TransposeWeightMatrix = transposeWeights;
-    data.m_Parameters.m_ConstantWeights = constantWeights;
 
-    std::unique_ptr<armnn::ITensorHandle> input2Handle = nullptr;
-    if (biasEnabled)
-    {
-        input2Handle = tensorHandleFactory.CreateTensorHandle(biasesTensorInfo);
-        AddInputToWorkload(data, info, biasesTensorInfo, input2Handle.get());
-    }
-
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::FullyConnected,
-                                                                                data,
-                                                                                info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateFullyConnected(data, info);
     LayerTestResult<T, 2> result(outputTensorInfo);
 
-    input0Handle->Allocate();
-    input1Handle->Allocate();
+    inputHandle->Allocate();
     outputHandle->Allocate();
-    CopyDataToITensorHandle(input0Handle.get(), input.data());
-    CopyDataToITensorHandle(input1Handle.get(), weights.data());
-    if (biasEnabled)
-    {
-        input2Handle->Allocate();
-        CopyDataToITensorHandle(input2Handle.get(), bias.data());
-    }
+    CopyDataToITensorHandle(inputHandle.get(), &input[0][0][0][0]);
 
     ExecuteWorkload(*workload, memoryManager);
 
-    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
-    result.m_ActualData = actualOutput;
+    CopyDataFromITensorHandle(&result.output[0][0], outputHandle.get());
 
     return result;
 }
@@ -89,8 +72,7 @@ LayerTestResult<T, 2> FullyConnectedTest(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
         const armnn::ITensorHandleFactory& tensorHandleFactory,
-        bool biasEnabled,
-        bool constantWeights)
+        bool biasEnabled)
 {
     constexpr static unsigned int inputWidth = 3u;
     constexpr static unsigned int inputHeight = 2u;
@@ -118,43 +100,41 @@ LayerTestResult<T, 2> FullyConnectedTest(
 
     LayerTestResult<T, 2> result(outputTensorInfo);
 
-    std::vector<T> input = ConvertToDataType<ArmnnType>(
+    auto input = MakeTensor<T, 4>(inputTensorInfo, ConvertToDataType<ArmnnType>(
         {
             -1.2f, 6.1f, -3.5f,
             18.8f, -5.5f, 2.9f
         },
-        inputTensorInfo);
+        inputTensorInfo));
 
-    std::vector<T> weights = ConvertToDataType<ArmnnType>(
+    auto weights = MakeTensor<T, 2>(weightsDesc, ConvertToDataType<ArmnnType>(
         {
             -8.4f, 20.0f, -10.4f, -8, 16.4f, -11.8f,
             23.4f, 10.4f, -14.0f, -3.8f, -11.8f, 11.4f
         },
-        weightsDesc);
+        weightsDesc));
 
-    std::vector<int32_t> bias = {9250, 67500};
+    auto bias = MakeTensor<int32_t, 1>(biasesDesc, std::vector<int32_t>{9250, 67500});
 
-    result = SimpleFullyConnectedTestImpl<T>(workloadFactory,
-                                             memoryManager,
-                                             tensorHandleFactory,
-                                             inputTensorInfo,
-                                             outputTensorInfo,
-                                             weightsDesc,
-                                             biasesDesc,
-                                             weights,
-                                             bias,
-                                             input,
-                                             biasEnabled,
-                                             true,
-                                             constantWeights);
+    result = SimpleFullyConnectedTestImpl<T>(
+            workloadFactory,
+            memoryManager,
+            tensorHandleFactory,
+            inputTensorInfo, outputTensorInfo,
+            weightsDesc, biasesDesc,
+            weights, bias, input,
+            biasEnabled, true
+    );
 
     if (biasEnabled)
     {
-        result.m_ExpectedData = ConvertToDataType<ArmnnType>({80.f, 1460.f}, outputTensorInfo);
+        result.outputExpected = MakeTensor<T, 2>(outputTensorInfo,
+                                                 ConvertToDataType<ArmnnType>({80.f, 1460.f}, outputTensorInfo));
     }
     else
     {
-        result.m_ExpectedData = ConvertToDataType<ArmnnType>({-107.04f, 110.f}, outputTensorInfo);
+        result.outputExpected = MakeTensor<T, 2>(outputTensorInfo,
+                                                 ConvertToDataType<ArmnnType>({-107.04f, 110.f}, outputTensorInfo));
     }
 
     return result;
@@ -172,7 +152,7 @@ LayerTestResult<T, 2> FullyConnectedLargeTestCommon(
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
     bool transposeWeights,
-    float qScale = 1.0f,
+    float qScale = 0.0f,
     int32_t qOffset = 0)
 {
     unsigned int inputWidth = 1;
@@ -215,19 +195,22 @@ LayerTestResult<T, 2> FullyConnectedLargeTestCommon(
 
     LayerTestResult<T, 2> result(outputTensorInfo);
 
-    std::vector<T> input = armnnUtils::QuantizedVector<T>(
-        {
+    boost::multi_array<T, 4> input = MakeTensor<T, 4>(inputTensorInfo,
+        armnnUtils::QuantizedVector<T>({
             1.0f, 10.0f, 100.0f, 1000.0f, 10000.0f,
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    );
 
-    std::vector<T> weights = armnnUtils::QuantizedVector<T>(
-        {
+    boost::multi_array<T, 2> weights = MakeTensor<T, 2>(weightsDesc,
+        armnnUtils::QuantizedVector<T>({
             2.0f, 3.0f, 4.0f, 5.0f, 6.0f
         },
-        qScale, qOffset);
+        qScale, qOffset)
+    );
 
     std::vector<T> biasValues({900000.f});
+    boost::multi_array<T, 1> bias = MakeTensor<T, 1>(biasesDesc, biasValues);
 
     result = SimpleFullyConnectedTestImpl<T>(
         workloadFactory,
@@ -235,11 +218,12 @@ LayerTestResult<T, 2> FullyConnectedLargeTestCommon(
         tensorHandleFactory,
         inputTensorInfo, outputTensorInfo,
         weightsDesc, biasesDesc,
-        weights, biasValues, input,
-        true, transposeWeights, true
+        weights, bias, input,
+        true, transposeWeights
     );
 
-    result.m_ExpectedData = armnnUtils::QuantizedVector<T>({ 965432.0f }, qScale, qOffset);
+    result.outputExpected = MakeTensor<T, 2>(outputTensorInfo,
+                                             armnnUtils::QuantizedVector<T>({ 965432.0f }, qScale, qOffset));
 
     return result;
 }
@@ -253,16 +237,14 @@ FullyConnectedTest<armnn::DataType::QAsymmU8>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
-    bool biasEnabled,
-    bool constWeights);
+    bool biasEnabled);
 
 template LayerTestResult<armnn::ResolveType<armnn::DataType::QSymmS16>, 2>
 FullyConnectedTest<armnn::DataType::QSymmS16>(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory,
-    bool biasEnabled,
-    bool constWeights);
+    bool biasEnabled);
 
 //
 // Implementation functions
@@ -307,36 +289,40 @@ LayerTestResult<float, 2> FullyConnectedFloat32Test(
 
     LayerTestResult<float, 2> result(outputTensorInfo);
 
-    std::vector<float> input =
-    {
-        1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
-        5.0f, 4.0f, 3.0f, 2.0f, 1.0f
-    };
+    boost::multi_array<float, 4> input = MakeTensor<float, 4>(inputTensorInfo, std::vector<float>(
+        {
+            1.0f, 2.0f, 3.0f, 4.0f, 5.0f,
 
-    std::vector<float> weights =
-    {
-        .5f, 2.f, .5f,
-        .5f, 2.f, 1.f,
-        .5f, 2.f, 2.f,
-        .5f, 2.f, 3.f,
-        .5f, 2.f, 4.f
-    };
+            5.0f, 4.0f, 3.0f, 2.0f, 1.0f
+        })
+    );
+
+    boost::multi_array<float, 2> weights = MakeTensor<float, 2>(weightsDesc, std::vector<float>(
+        {
+            .5f, 2.f, .5f,
+            .5f, 2.f, 1.f,
+            .5f, 2.f, 2.f,
+            .5f, 2.f, 3.f,
+            .5f, 2.f, 4.f
+        }));
 
     if (transposeWeights)
     {
-        weights =
+        weights = MakeTensor<float, 2>(weightsDesc, std::vector<float>(
         {
             .5f, .5f, .5f, .5f, .5f,
             2.f, 2.f, 2.f, 2.f, 2.f,
             .5f, 1.f, 2.f, 3.f, 4.f
-        };
+        }));
     }
+
 
     std::vector<float> biasValues({0.f, 0.f, 0.f});
     if (biasEnabled)
     {
-        biasValues = std::vector<float>({10.f, 20.f, 30.f});
+        biasValues =  std::vector<float>({10.f, 20.f, 30.f});
     }
+    boost::multi_array<float, 1> bias = MakeTensor<float, 1>(biasesDesc, biasValues);
 
     result = SimpleFullyConnectedTestImpl<float>(
         workloadFactory,
@@ -344,21 +330,21 @@ LayerTestResult<float, 2> FullyConnectedFloat32Test(
         tensorHandleFactory,
         inputTensorInfo, outputTensorInfo,
         weightsDesc, biasesDesc,
-        weights, biasValues, input,
-        biasEnabled, transposeWeights, true
+        weights, bias, input,
+        biasEnabled, transposeWeights
     );
 
-    std::vector<float> expectedOutput =
-    {
-        0.5f + 1.0f + 1.5f + 2.0f + 2.5f + biasValues[0],
-        2.0f + 4.0f + 6.0f + 8.0f + 10.f + biasValues[1],
-        0.5f + 2.0f + 6.0f + 12.f + 20.f + biasValues[2],
+    result.outputExpected = MakeTensor<float, 2>(outputTensorInfo, std::vector<float>(
+        {
+            0.5f + 1.0f + 1.5f + 2.0f + 2.5f + biasValues[0],
+            2.0f + 4.0f + 6.0f + 8.0f + 10.f + biasValues[1],
+            0.5f + 2.0f + 6.0f + 12.f + 20.f + biasValues[2],
 
-        2.5f + 2.0f + 1.5f + 1.0f + 0.5f + biasValues[0],
-        10.0f + 8.0f + 6.0f + 4.0f + 2.f + biasValues[1],
-        2.5f + 4.0f + 6.0f + 6.f + 4.f   + biasValues[2]
-    };
-    result.m_ExpectedData = expectedOutput;
+            2.5f + 2.0f + 1.5f + 1.0f + 0.5f + biasValues[0],
+            10.0f + 8.0f + 6.0f + 4.0f + 2.f + biasValues[1],
+            2.5f + 4.0f + 6.0f + 6.f + 4.f   + biasValues[2]
+        })
+    );
 
     return result;
 }

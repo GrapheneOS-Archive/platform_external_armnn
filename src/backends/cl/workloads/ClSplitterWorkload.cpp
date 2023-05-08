@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,8 +9,9 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
+#include <arm_compute/runtime/CL/functions/CLSplit.h>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <armnn/backends/TensorHandle.hpp>
+#include <backendsCommon/CpuTensorHandle.hpp>
 #include <cl/ClTensorHandle.hpp>
 
 
@@ -52,16 +53,9 @@ arm_compute::Status ClSplitterWorkloadValidate(const TensorInfo& input,
     return arm_compute::CLSplit::validate(&aclInputInfo, aclOutputPtr, aclAxis);
 }
 
-ClSplitterWorkload::ClSplitterWorkload(const SplitterQueueDescriptor& descriptor,
-                                       const WorkloadInfo& info,
-                                       const arm_compute::CLCompileContext&)
-        : ClBaseWorkload<SplitterQueueDescriptor>(descriptor, info)
+ClSplitterWorkload::ClSplitterWorkload(const SplitterQueueDescriptor& descriptor, const WorkloadInfo& info)
+        : BaseWorkload<SplitterQueueDescriptor>(descriptor, info)
 {
-    // Report Profiling Details
-    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClSplitterWorkload_Construct",
-                                         descriptor.m_Parameters,
-                                         info,
-                                         this->GetGuid());
     bool allOutputsAreSubtensors = true;
 
     // Check that all outputs are sub-tensors
@@ -102,10 +96,7 @@ ClSplitterWorkload::ClSplitterWorkload(const SplitterQueueDescriptor& descriptor
 
     unsigned int aclAxis = CalcAclAxis(descriptor.m_Parameters.GetNumDimensions(), *splitAxis.begin());
     auto layer = std::make_unique<arm_compute::CLSplit>();
-    {
-        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClSplitterWorkload_configure");
-        layer->configure(&input, aclOutputs, aclAxis);
-    }
+    layer->configure(&input, aclOutputs, aclAxis);
 
     // Prepare
     layer->prepare();
@@ -117,7 +108,7 @@ void ClSplitterWorkload::Execute() const
 {
     if (m_Layer)
     {
-        ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClSplitterWorkload_Execute", this->GetGuid());
+        ARMNN_SCOPED_PROFILING_EVENT_CL("ClSplitterWorkload_Execute");
         m_Layer->run();
     }
 }

@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include <boost/test/unit_test.hpp>
 #include "armnnOnnxParser/IOnnxParser.hpp"
 #include  "ParserPrototxtFixture.hpp"
 
-TEST_SUITE("OnnxParser_FullyConnected")
-{
+BOOST_AUTO_TEST_SUITE(OnnxParser)
+
 // A MatMul in isolation, not connected to an add. Should result in a non-biased FullyConnected layer.
 struct MatMulFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser::IOnnxParser>
 {
@@ -92,7 +93,7 @@ struct MatMulFixture : public armnnUtils::ParserPrototxtFixture<armnnOnnxParser:
     }
 };
 
-TEST_CASE_FIXTURE(MatMulFixture, "MatMul")
+BOOST_FIXTURE_TEST_CASE(MatMul, MatMulFixture)
 {
     RunTest<1>({{"Input", { 2 }}}, {{"Output", { 34 }}});
 }
@@ -224,7 +225,7 @@ struct FullyConnectedFixture : public armnnUtils::ParserPrototxtFixture<armnnOnn
     }
 };
 
-TEST_CASE_FIXTURE(FullyConnectedFixture, "FullyConnected")
+BOOST_FIXTURE_TEST_CASE(FullyConnected, FullyConnectedFixture)
 {
     RunTest<1>({{"Input", { 3 }}}, {{"Output", { 7 }}});
 }
@@ -429,7 +430,7 @@ struct MatMulUsedInTwoFcFixture : public armnnUtils::ParserPrototxtFixture<armnn
     }
 };
 
-TEST_CASE_FIXTURE(MatMulUsedInTwoFcFixture, "MatMulUsedInTwoFc")
+BOOST_FIXTURE_TEST_CASE(MatMulUsedInTwoFc, MatMulUsedInTwoFcFixture)
 {
     RunTest<1>({{"Input", { 3 }}}, {{"Output", { 23 }}});
 }
@@ -592,9 +593,9 @@ struct MatMulUsedInTwoFcStaggeredFixture : public armnnUtils::ParserPrototxtFixt
     }
 };
 
-TEST_CASE_FIXTURE(MatMulUsedInTwoFcStaggeredFixture, "MatMulUsedInTwoFcStaggered")
+BOOST_FIXTURE_TEST_CASE(MatMulUsedInTwoFcStaggered, MatMulUsedInTwoFcStaggeredFixture)
 {
     RunTest<1>({{"Input", { 3 }}}, {{"Output", { 13 }}});
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END()

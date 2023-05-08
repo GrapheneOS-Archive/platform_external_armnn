@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <armnn/backends/WorkloadData.hpp>
-#include <armnn/backends/WorkloadFactory.hpp>
+#include <backendsCommon/WorkloadData.hpp>
+#include <backendsCommon/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> FakeQuantizationLayer::CreateWorkload(const IWorkload
     FakeQuantizationQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateWorkload(LayerType::FakeQuantization, descriptor, PrepInfoAndDesc(descriptor) );
+    return factory.CreateFakeQuantization(descriptor, PrepInfoAndDesc(descriptor) );
 }
 
 FakeQuantizationLayer* FakeQuantizationLayer::Clone(Graph& graph) const
@@ -46,9 +46,9 @@ void FakeQuantizationLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "FakeQuantizationLayer");
 }
 
-void FakeQuantizationLayer::ExecuteStrategy(IStrategy& strategy) const
+void FakeQuantizationLayer::Accept(ILayerVisitor& visitor) const
 {
-    IgnoreUnused(strategy);
+    IgnoreUnused(visitor);
     throw armnn::Exception("FakeQuantizationLayer should not appear in an input graph");
 }
 

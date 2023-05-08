@@ -4,27 +4,29 @@
 //
 
 #include <armnn/IRuntime.hpp>
+#include <armnn/TypesUtils.hpp>
+#include <armnn/utility/IgnoreUnused.hpp>
 
-#include <doctest/doctest.h>
+#include <boost/test/unit_test.hpp>
+#include <boost/test/tools/output_test_stream.hpp>
 
-#include <algorithm>
+#include <memory>
 #include <thread>
+#include <ostream>
 
 #include <Profiling.hpp>
-#include <armnn/Optional.hpp>
-#include <armnnUtils/TensorUtils.hpp>
 
 namespace armnn
 {
 
-size_t GetProfilerEventSequenceSize(armnn::IProfiler* profiler)
+size_t GetProfilerEventSequenceSize(armnn::Profiler* profiler)
 {
     if (!profiler)
     {
         return static_cast<size_t>(-1);
     }
 
-    return profiler->pProfilerImpl->m_EventSequence.size();
+    return profiler->m_EventSequence.size();
 }
 } // namespace armnn
 
@@ -33,7 +35,7 @@ namespace
 
 void RegisterUnregisterProfilerSingleThreadImpl(bool &res)
 {
-    // Important! Don't use CHECK macros in this function as they
+    // Important! Don't use BOOST_TEST macros in this function as they
     // seem to have problems when used in threads
 
     // Get a reference to the profiler manager.
@@ -43,7 +45,7 @@ void RegisterUnregisterProfilerSingleThreadImpl(bool &res)
     res = !profilerManager.GetProfiler();
 
     // Create and register a profiler for this thread.
-    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
     profilerManager.RegisterProfiler(profiler.get());
 
     // Check that on a single thread we get the same profiler we registered.
@@ -60,146 +62,53 @@ void RegisterUnregisterProfilerSingleThreadImpl(bool &res)
 
 } // namespace
 
-TEST_SUITE("Profiler")
+BOOST_AUTO_TEST_SUITE(Profiler)
+
+BOOST_AUTO_TEST_CASE(EnableDisableProfiling)
 {
-TEST_CASE("EnableDisableProfiling")
-{
-    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
 
     // Check that profiling is disabled by default.
-    CHECK(!profiler->IsProfilingEnabled());
+    BOOST_TEST(!profiler->IsProfilingEnabled());
 
     // Enable profiling.
     profiler->EnableProfiling(true);
 
     // Check that profiling is enabled.
-    CHECK(profiler->IsProfilingEnabled());
+    BOOST_TEST(profiler->IsProfilingEnabled());
 
     // Disable profiling.
     profiler->EnableProfiling(false);
 
     // Check that profiling is disabled.
-    CHECK(!profiler->IsProfilingEnabled());
+    BOOST_TEST(!profiler->IsProfilingEnabled());
 }
 
-TEST_CASE("RegisterUnregisterProfilerSingleThread")
+BOOST_AUTO_TEST_CASE(RegisterUnregisterProfilerSingleThread)
 {
     bool res = false;
     RegisterUnregisterProfilerSingleThreadImpl(res);
-    CHECK(res);
+    BOOST_TEST(res);
 }
 
-TEST_CASE("RegisterUnregisterProfilerMultipleThreads")
+BOOST_AUTO_TEST_CASE(RegisterUnregisterProfilerMultipleThreads)
 {
     bool res[3] = {false, false, false};
-    std::vector<std::thread> threads;
-    for (unsigned int i = 0; i < 3; ++i)
-    {
-        threads.push_back(std::thread([&res, i]() { RegisterUnregisterProfilerSingleThreadImpl(res[i]); }));
-    }
-    std::for_each(threads.begin(), threads.end(), [](std::thread& theThread)
-    {
-        theThread.join();
-    });
+    std::thread thread1([&res]() { RegisterUnregisterProfilerSingleThreadImpl(res[0]); });
+    std::thread thread2([&res]() { RegisterUnregisterProfilerSingleThreadImpl(res[1]); });
+    std::thread thread3([&res]() { RegisterUnregisterProfilerSingleThreadImpl(res[2]); });
 
-    for (int i = 0 ; i < 3 ; ++i)
+    thread1.join();
+    thread2.join();
+    thread3.join();
+
+    for (int i = 0 ; i < 3 ; i++)
     {
-        CHECK(res[i]);
+        BOOST_TEST(res[i]);
     }
 }
 
-TEST_CASE("LayerWorkloadConstructorWithEmptyWorkloadInfo")
-{
-    // Calling AddDetailsToString with a descriptor that contains no tensors or parameters results
-    // in an invalid piece of JSON as the function assumes there will be something after the input
-    // and output tensors are printed and leaves a hanging ','
-    // This test validates that the fix for that continues to work.
-    armnn::ProfilingDetails classOnTest;
-    armnn::ArgMinMaxDescriptor descriptor;
-    armnn::WorkloadInfo workloadInfo;
-    arm::pipe::ProfilingGuid guid;
-    classOnTest.AddDetailsToString("NeonArgMinMaxWorkload_Construct", descriptor, workloadInfo, guid);
-    std::string result = classOnTest.GetProfilingDetails();
-    // Make sure the string ends with a "GUID": "0"\n}"
-    REQUIRE(result.find("GUID\": \"0\"\n}") != std::string::npos);
-}
-
-TEST_CASE("LayerWorkloadConstructorWithWorkloadInfoOnlyInputTensor")
-{
-    // Calling AddDetailsToString with a descriptor that contains a single inout tensor and no output
-    // tensor or parameters results in an invalid piece of JSON as the function assumes there will be
-    // something after the input and output tensors are printed and leaves a hanging ','
-    // This test validates that the fix for that continues to work.
-
-    armnn::ProfilingDetails classOnTest;
-    armnn::ArgMinMaxDescriptor descriptor;
-    armnn::WorkloadInfo workloadInfo;
-    arm::pipe::ProfilingGuid guid;
-    armnn::TensorInfo inputTensorInfo =
-        armnnUtils::GetTensorInfo(1, 1, 1, 1, armnn::DataLayout::NCHW, armnn::DataType::Float32);
-    workloadInfo.m_InputTensorInfos.push_back(inputTensorInfo);
-
-    classOnTest.AddDetailsToString("NeonArgMinMaxWorkload_Construct", descriptor, workloadInfo, guid);
-    std::string result = classOnTest.GetProfilingDetails();
-    // Make sure the string ends with a "Num Dims\": \"4\"\n\t}\n}"
-    REQUIRE(result.find("Num Dims\": \"4\"\n\t}\n}") != std::string::npos);
-}
-
-TEST_CASE("LayerWorkloadConstructorWithWorkloadInfoInputAndOutputTensorNoParameters")
-{
-    // Calling AddDetailsToString with a descriptor that contains no tensors or parameters results
-    // in an invalid piece of JSON as the function assumes there will be something after the input
-    // and output tensors are printed and leaves a hanging ','
-    // This test validates that the fix for that continues to work.
-    armnn::ProfilingDetails classOnTest;
-    armnn::ArgMinMaxDescriptor descriptor;
-    armnn::WorkloadInfo workloadInfo;
-    arm::pipe::ProfilingGuid guid;
-    armnn::TensorInfo inputTensorInfo =
-        armnnUtils::GetTensorInfo(1, 1, 1, 1, armnn::DataLayout::NCHW, armnn::DataType::Float32);
-    workloadInfo.m_InputTensorInfos.push_back(inputTensorInfo);
-
-    // We'll make the output tensrinfo have 5 dimensions to make errors easier to detect.
-    armnn::TensorInfo outputTensorInfo =
-        armnnUtils::GetTensorInfo(1, 1, 1, 1, 1, armnn::DataLayout::NCDHW, armnn::DataType::Float32);
-    workloadInfo.m_OutputTensorInfos.push_back(outputTensorInfo);
-
-    classOnTest.AddDetailsToString("NeonArgMinMaxWorkload_Construct", descriptor, workloadInfo, guid);
-    std::string result = classOnTest.GetProfilingDetails();
-    // Make sure the string ends with a "Num Dims\": \"4\"\n\t}\n}"
-    REQUIRE(result.find("Num Dims\": \"5\"\n\t}\n}") != std::string::npos);
-}
-
-TEST_CASE("LayerWorkloadConstructorWithWorkloadInfoMultipleInputAndMultipleOutputTensorNoParameters")
-{
-    // Calling AddDetailsToString with a descriptor that contains multiple input and output tensors. This is
-    // specifically looking at the usage of "addSeparator" parameter in PrintInfos.
-    armnn::ProfilingDetails classOnTest;
-    armnn::ArgMinMaxDescriptor descriptor;
-    armnn::WorkloadInfo workloadInfo;
-    arm::pipe::ProfilingGuid guid;
-    armnn::TensorInfo inputTensorInfo =
-        armnnUtils::GetTensorInfo(1, 1, 1, 1, armnn::DataLayout::NCHW, armnn::DataType::Float32);
-    // Add two inputs.
-    workloadInfo.m_InputTensorInfos.push_back(inputTensorInfo);
-    workloadInfo.m_InputTensorInfos.push_back(inputTensorInfo);
-
-    // We'll make the output tensrinfo have 5 dimensions to make errors easier to detect.
-    armnn::TensorInfo outputTensorInfo =
-        armnnUtils::GetTensorInfo(1, 1, 1, 1, 1, armnn::DataLayout::NCDHW, armnn::DataType::Float32);
-    // and two outputs.
-    workloadInfo.m_OutputTensorInfos.push_back(outputTensorInfo);
-    workloadInfo.m_OutputTensorInfos.push_back(outputTensorInfo);
-
-    classOnTest.AddDetailsToString("NeonArgMinMaxWorkload_Construct", descriptor, workloadInfo, guid);
-    std::string result = classOnTest.GetProfilingDetails();
-    // Look for the piece in the middle between Input 0 and Input 1:
-    REQUIRE(result.find("Dims\": \"4\"\n\t},\n\t\"Input 1\": {\n\t\t\"Shape\": \"[1,1,1,1]\"") != std::string::npos);
-    // Look for the piece in the middle between Output 0and Output 1:
-    REQUIRE(result.find("Dims\": \"5\"\n\t},\n\t\"Output 1\": {\n\t\t\"Shape\": \"[1,1,1,1,1]\"") != std::string::npos);
-}
-
-TEST_CASE("ProfilingMacros")
+BOOST_AUTO_TEST_CASE(ProfilingMacros)
 {
     // Get a reference to the profiler manager.
     armnn::ProfilerManager& profilerManager = armnn::ProfilerManager::GetInstance();
@@ -207,17 +116,17 @@ TEST_CASE("ProfilingMacros")
     { // --- No profiler ---
 
         // Check that there's no profiler registered for this thread.
-        CHECK(!profilerManager.GetProfiler());
+        BOOST_TEST(!profilerManager.GetProfiler());
 
         // Test scoped event.
         { ARMNN_SCOPED_PROFILING_EVENT(armnn::Compute::CpuAcc, "test"); }
 
         // Check that we still cannot get a profiler for this thread.
-        CHECK(!profilerManager.GetProfiler());
+        BOOST_TEST(!profilerManager.GetProfiler());
     }
 
     // Create and register a profiler for this thread.
-    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
     profilerManager.RegisterProfiler(profiler.get());
 
     { // --- Profiler, but profiling disabled ---
@@ -230,7 +139,7 @@ TEST_CASE("ProfilingMacros")
 
         // Check that no profiling event has been added to the sequence.
         size_t eventSequenceSizeAfter = armnn::GetProfilerEventSequenceSize(profiler.get());
-        CHECK(eventSequenceSizeBefore == eventSequenceSizeAfter);
+        BOOST_TEST(eventSequenceSizeBefore == eventSequenceSizeAfter);
     }
 
     // Enable profiling.
@@ -246,7 +155,7 @@ TEST_CASE("ProfilingMacros")
 
         // Check that a profiling event has been added to the sequence.
         size_t eventSequenceSizeAfter = armnn::GetProfilerEventSequenceSize(profiler.get());
-        CHECK(eventSequenceSizeAfter == eventSequenceSizeBefore + 1);
+        BOOST_TEST(eventSequenceSizeAfter == eventSequenceSizeBefore + 1);
     }
 
     // Disable profiling here to not print out anything on stdout.
@@ -257,13 +166,13 @@ TEST_CASE("ProfilingMacros")
 
 // This test unit needs the reference backend, it's not available if the reference backend is not built
 
-TEST_CASE("RuntimeLoadNetwork")
+BOOST_AUTO_TEST_CASE(RuntimeLoadNetwork)
 {
     // Get a reference to the profiler manager.
     armnn::ProfilerManager& profilerManager = armnn::ProfilerManager::GetInstance();
 
     // Check that there's no profiler registered for this thread.
-    CHECK(!profilerManager.GetProfiler());
+    BOOST_TEST(!profilerManager.GetProfiler());
 
     // Build a mock-network and load it into the runtime.
     armnn::IRuntime::CreationOptions options;
@@ -275,24 +184,24 @@ TEST_CASE("RuntimeLoadNetwork")
     runtime->LoadNetwork(networkIdentifier, armnn::Optimize(*mockNetwork, backends, runtime->GetDeviceSpec()));
 
     // Check that now there's a profiler registered for this thread (created and registered by the loading the network).
-    CHECK(profilerManager.GetProfiler());
+    BOOST_TEST(profilerManager.GetProfiler());
 
     // Unload the network.
     runtime->UnloadNetwork(networkIdentifier);
 
     // Check that the profiler has been un-registered for this thread.
-    CHECK(!profilerManager.GetProfiler());
+    BOOST_TEST(!profilerManager.GetProfiler());
 }
 
 #endif
 
-TEST_CASE("WriteEventResults")
+BOOST_AUTO_TEST_CASE(WriteEventResults)
 {
     // Get a reference to the profiler manager.
     armnn::ProfilerManager& profileManager = armnn::ProfilerManager::GetInstance();
 
     // Create and register a profiler for this thread.
-    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
     profileManager.RegisterProfiler(profiler.get());
 
     // Enable profiling.
@@ -308,44 +217,41 @@ TEST_CASE("WriteEventResults")
             // Need to directly create a ScopedProfilingEvent as the one created by the macro falls out of scope
             // immediately causing the Event.Stop() function method to be called immediately after the Event.Start()
             // function resulting in periodic test failures on the Dent and Smith HiKeys
-            armnn::ScopedProfilingEvent testEvent(armnn::Compute::CpuAcc,
-                                                  armnn::EmptyOptional(),
-                                                  "test",
-                                                  armnn::WallClockTimer());
+            armnn::ScopedProfilingEvent testEvent(armnn::Compute::CpuAcc, "test", armnn::WallClockTimer());
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
         // Check that a profiling event has been added to the sequence.
         size_t eventSequenceSizeAfter = armnn::GetProfilerEventSequenceSize(profiler.get());
-        CHECK(eventSequenceSizeAfter == eventSequenceSizeBefore + 1);
+        BOOST_TEST(eventSequenceSizeAfter == eventSequenceSizeBefore + 1);
 
-        std::ostringstream output;
+        boost::test_tools::output_test_stream output;
         profiler->AnalyzeEventsAndWriteResults(output);
-        CHECK(!output.str().empty());
+        BOOST_TEST(!output.is_empty(false));
 
         // output should contain event name 'test'
-        CHECK(output.str().find("test") != std::string::npos);
+        BOOST_CHECK(output.str().find("test") != std::string::npos);
 
         // output should contain headers
-        CHECK(output.str().find("Event Sequence - Name") != std::string::npos);
-        CHECK(output.str().find("Event Stats - Name") != std::string::npos);
-        CHECK(output.str().find("Total") != std::string::npos);
-        CHECK(output.str().find("Device") != std::string::npos);
+        BOOST_CHECK(output.str().find("Event Sequence - Name") != std::string::npos);
+        BOOST_CHECK(output.str().find("Event Stats - Name") != std::string::npos);
+        BOOST_CHECK(output.str().find("Total") != std::string::npos);
+        BOOST_CHECK(output.str().find("Device") != std::string::npos);
         // output should contain compute device 'CpuAcc'
-        CHECK(output.str().find("CpuAcc") != std::string::npos);
+        BOOST_CHECK(output.str().find("CpuAcc") != std::string::npos);
         // output should not contain un-readable numbers
-        CHECK(output.str().find("e+") == std::string::npos);
+        BOOST_CHECK(output.str().find("e+") == std::string::npos);
         // output should not contain un-readable numbers
-        CHECK(output.str().find("+") == std::string::npos);
+        BOOST_CHECK(output.str().find("+") == std::string::npos);
         // output should not contain zero value
-        CHECK(output.str().find(" 0 ") == std::string::npos);
+        BOOST_CHECK(output.str().find(" 0 ") == std::string::npos);
     }
 
     // Disable profiling here to not print out anything on stdout.
     profiler->EnableProfiling(false);
 }
 
-TEST_CASE("ProfilerJsonPrinter")
+BOOST_AUTO_TEST_CASE(ProfilerJsonPrinter)
 {
     class TestInstrument : public armnn::Instrument
     {
@@ -376,78 +282,28 @@ TEST_CASE("ProfilerJsonPrinter")
     armnn::ProfilerManager& profilerManager = armnn::ProfilerManager::GetInstance();
 
     // Create and register a profiler for this thread.
-    std::unique_ptr<armnn::IProfiler> profiler = std::make_unique<armnn::IProfiler>();
+    std::unique_ptr<armnn::Profiler> profiler = std::make_unique<armnn::Profiler>();
     profilerManager.RegisterProfiler(profiler.get());
 
     profiler->EnableProfiling(true);
 
     {
-        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                      armnn::EmptyOptional(),
-                                                      "Optimizer",
-                                                      TestInstrument())
-        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                      armnn::EmptyOptional(),
-                                                      "Level 0",
-                                                      TestInstrument())
-        {
-            {
-                ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                              armnn::EmptyOptional(),
-                                                              "Level 1A",
-                                                              TestInstrument())
-            }
-        }
-    }
-    {
-        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                      armnn::EmptyOptional(),
-                                                      "LoadedNetwork",
-                                                      TestInstrument())
-        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                      armnn::EmptyOptional(),
-                                                      "Level 0",
-                                                      TestInstrument())
-        {
-            {
-                ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                              armnn::EmptyOptional(),
-                                                              "Level 1A",
-                                                              TestInstrument())
-            }
-        }
-    }
-    {
         // Test scoped macro.
-            ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                          armnn::EmptyOptional(),
-                                                          "EnqueueWorkload",
-                                                          TestInstrument())
-            ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                          armnn::EmptyOptional(),
-                                                          "Level 0",
-                                                          TestInstrument())
+        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc, "EnqueueWorkload", TestInstrument())
+        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc, "Level 0", TestInstrument())
+        {
             {
-                {
-                    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                                  armnn::EmptyOptional(),
-                                                                  "Level 1A",
-                                                                  TestInstrument())
-                }
-                {
-                    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                                  armnn::EmptyOptional(),
-                                                                  "Level 1B",
-                                                                  TestInstrument())
+                ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc, "Level 1A", TestInstrument())
+            }
 
-                    {
-                        ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc,
-                                                                      armnn::EmptyOptional(),
-                                                                      "Level 2A",
-                                                                      TestInstrument())
-                    }
+            {
+                ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc, "Level 1B", TestInstrument())
+
+                {
+                    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::CpuAcc, "Level 2A", TestInstrument())
                 }
             }
+        }
     }
 
     std::stringbuf buffer;
@@ -462,65 +318,41 @@ TEST_CASE("ProfilerJsonPrinter")
 
     // blessed output validated by a human eyeballing the output to make sure it's ok and then copying it here.
     // validation also included running the blessed output through an online json validation site
-    std::string blessedOutput("{\n\t\"ArmNN\": {\n\t\t\"optimize_measurements_#1\": {\n\t\t\t\"type\": \"Event\""
-                              ",\n\t\t\t\"Measurement1_#1\": {\n\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\"raw\""
-                              ": [\n\t\t\t\t\t1.000000\n\t\t\t\t],\n\t\t\t\t\"unit\": \"ms\"\n\t\t\t},\n\t\t\t\""
-                              "Measurement2_#1\": {\n\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t"
-                              "\t\t2.000000\n\t\t\t\t],\n\t\t\t\t\"unit\": \"us\"\n\t\t\t},\n\t\t\t\"Level 0_#2\": {\n"
-                              "\t\t\t\t\"type\": \"Event\",\n\t\t\t\t\"Measurement1_#2\": {\n\t\t\t\t\t\"type\": \""
+    std::string blessedOutput("{\n\t\"ArmNN\": {\n\t\t\"inference_measurements_#1\": {\n\t\t\t\"type\": \""
+                              "Event\",\n\t\t\t\"Measurement1_#1\": {\n\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t\t\t1.000000\n\t\t\t\t],\n\t\t\t\t\""
+                              "unit\": \"ms\"\n\t\t\t},\n\t\t\t\"Measurement2_#1\": {\n\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t\t\t2.000000\n\t\t\t\t],\n\t\t\t\t\""
+                              "unit\": \"us\"\n\t\t\t},\n\t\t\t\"Level 0_#2\": {\n\t\t\t\t\"type\": \""
+                              "Event\",\n\t\t\t\t\"Measurement1_#2\": {\n\t\t\t\t\t\"type\": \""
                               "Measurement\",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t1.000000\n\t\t\t\t\t],\n\t\t\t\t\t\""
                               "unit\": \"ms\"\n\t\t\t\t},\n\t\t\t\t\"Measurement2_#2\": {\n\t\t\t\t\t\"type\": \""
                               "Measurement\",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t2.000000\n\t\t\t\t\t],\n\t\t\t\t\t\""
-                              "unit\": \"us\"\n\t\t\t\t},\n\t\t\t\t\"Level 1A_#3\": {\n\t\t\t\t\t\"type\": \"Event\",\n"
-                              "\t\t\t\t\t\"Measurement1_#3\": {\n\t\t\t\t\t\t\"type\": \"Measurement\",\n"
-                              "\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t1.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\""
-                              ": \"ms\"\n\t\t\t\t\t},\n\t\t\t\t\t\"Measurement2_#3\": {\n\t\t\t\t\t\t\"type\": \""
-                              "Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t2.000000\n\t\t\t\t\t\t],\n\t\t\t"
-                              "\t\t\t\"unit\": \"us\"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t},\n\t\t\""
-                              "loaded_network_measurements_#4\": {\n\t\t\t\"type\": \"Event\",\n\t\t\t\""
-                              "Measurement1_#4\": {\n\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t\t"
-                              "\t1.000000\n\t\t\t\t],\n\t\t\t\t\"unit\": \"ms\"\n\t\t\t},\n\t\t\t\"Measurement2_#4\""
-                              ": {\n\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t\t\t2.000000\n"
-                              "\t\t\t\t],\n\t\t\t\t\"unit\": \"us\"\n\t\t\t},\n\t\t\t\"Level 0_#5\": {\n\t\t\t\t\""
-                              "type\": \"Event\",\n\t\t\t\t\"Measurement1_#5\": {\n\t\t\t\t\t\"type\": \"Measurement\""
-                              ",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t1.000000\n\t\t\t\t\t],\n\t\t\t\t\t\"unit\": \""
-                              "ms\"\n\t\t\t\t},\n\t\t\t\t\"Measurement2_#5\": {\n\t\t\t\t\t\"type\": \"Measurement\""
-                              ",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t2.000000\n\t\t\t\t\t],\n\t\t\t\t\t\"unit\": \"us\""
-                              "\n\t\t\t\t},\n\t\t\t\t\"Level 1A_#6\": {\n\t\t\t\t\t\"type\": \"Event\",\n\t\t\t\t\t\""
-                              "Measurement1_#6\": {\n\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t\"raw\": [\n"
-                              "\t\t\t\t\t\t\t1.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\": \"ms\"\n\t\t\t\t\t},\n"
-                              "\t\t\t\t\t\"Measurement2_#6\": {\n\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t\""
-                              "raw\": [\n\t\t\t\t\t\t\t2.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\": \"us\""
-                              "\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t},\n\t\t\"inference_measurements_#7\": {\n"
-                              "\t\t\t\"type\": \"Event\",\n\t\t\t\"Measurement1_#7\": {\n\t\t\t\t\"type\": \""
-                              "Measurement\",\n\t\t\t\t\"raw\": [\n\t\t\t\t\t1.000000\n\t\t\t\t],\n\t\t\t\t\"unit\": \""
-                              "ms\"\n\t\t\t},\n\t\t\t\"Measurement2_#7\": {\n\t\t\t\t\"type\": \"Measurement\",\n"
-                              "\t\t\t\t\"raw\": [\n\t\t\t\t\t2.000000\n\t\t\t\t],\n\t\t\t\t\"unit\": \"us\"\n\t\t\t},\n"
-                              "\t\t\t\"Level 0_#8\": {\n\t\t\t\t\"type\": \"Event\",\n\t\t\t\t\"Measurement1_#8\": {\n"
-                              "\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t1.000000\n"
-                              "\t\t\t\t\t],\n\t\t\t\t\t\"unit\": \"ms\"\n\t\t\t\t},\n\t\t\t\t\"Measurement2_#8\": {\n"
-                              "\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t2.000000\n"
-                              "\t\t\t\t\t],\n\t\t\t\t\t\"unit\": \"us\"\n\t\t\t\t},\n\t\t\t\t\"Level 1A_#9\": {\n"
-                              "\t\t\t\t\t\"type\": \"Event\",\n\t\t\t\t\t\"Measurement1_#9\": {\n\t\t\t\t\t\t\"type\""
-                              ": \"Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t1.000000\n\t\t\t\t\t\t],\n"
-                              "\t\t\t\t\t\t\"unit\": \"ms\"\n\t\t\t\t\t},\n\t\t\t\t\t\"Measurement2_#9\": {\n"
-                              "\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t2.000000\n"
-                              "\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\": \"us\"\n\t\t\t\t\t}\n\t\t\t\t},\n\t\t\t\t\""
-                              "Level 1B_#10\": {\n\t\t\t\t\t\"type\": \"Event\",\n\t\t\t\t\t\"Measurement1_#10\""
-                              ": {\n\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t"
-                              "1.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\": \"ms\"\n\t\t\t\t\t},\n\t\t\t\t\t\""
-                              "Measurement2_#10\": {\n\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t\"raw\""
-                              ": [\n\t\t\t\t\t\t\t2.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\"unit\": \"us\"\n"
-                              "\t\t\t\t\t},\n\t\t\t\t\t\"Level 2A_#11\": {\n\t\t\t\t\t\t\"type\": \"Event\",\n\t\t\t"
-                              "\t\t\t\"Measurement1_#11\": {\n\t\t\t\t\t\t\t\"type\": \"Measurement\",\n\t\t\t\t\t\t"
-                              "\t\"raw\": [\n\t\t\t\t\t\t\t\t1.000000\n\t\t\t\t\t\t\t],\n\t\t\t\t\t\t\t\"unit\": \""
-                              "ms\"\n\t\t\t\t\t\t},\n\t\t\t\t\t\t\"Measurement2_#11\": {\n\t\t\t\t\t\t\t\"type\": \""
-                              "Measurement\",\n\t\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t\t2.000000\n\t\t\t\t\t\t\t],\n"
-                              "\t\t\t\t\t\t\t\"unit\": \"us\"\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n"
-                              "\t}\n}\n");
+                              "unit\": \"us\"\n\t\t\t\t},\n\t\t\t\t\"Level 1A_#3\": {\n\t\t\t\t\t\"type\": \""
+                              "Event\",\n\t\t\t\t\t\"Measurement1_#3\": {\n\t\t\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t"
+                              "1.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\""
+                              "unit\": \"ms\"\n\t\t\t\t\t},\n\t\t\t\t\t\"Measurement2_#3\": {\n\t\t\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t"
+                              "2.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\""
+                              "unit\": \"us\"\n\t\t\t\t\t}\n\t\t\t\t},\n\t\t\t\t\"Level 1B_#4\": {\n\t\t\t\t\t\""
+                              "type\": \"Event\",\n\t\t\t\t\t\"Measurement1_#4\": {\n\t\t\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t"
+                              "1.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\""
+                              "unit\": \"ms\"\n\t\t\t\t\t},\n\t\t\t\t\t\"Measurement2_#4\": {\n\t\t\t\t\t\t\""
+                              "type\": \"Measurement\",\n\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t"
+                              "2.000000\n\t\t\t\t\t\t],\n\t\t\t\t\t\t\""
+                              "unit\": \"us\"\n\t\t\t\t\t},\n\t\t\t\t\t\"Level 2A_#5\": {\n\t\t\t\t\t\t\""
+                              "type\": \"Event\",\n\t\t\t\t\t\t\"Measurement1_#5\": {\n\t\t\t\t\t\t\t\"type\": \""
+                              "Measurement\",\n\t\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t\t"
+                              "1.000000\n\t\t\t\t\t\t\t],\n\t\t\t\t\t\t\t\""
+                              "unit\": \"ms\"\n\t\t\t\t\t\t},\n\t\t\t\t\t\t\"Measurement2_#5\": {\n\t\t\t\t\t\t\t\""
+                              "type\": \"Measurement\",\n\t\t\t\t\t\t\t\"raw\": [\n\t\t\t\t\t\t\t\t"
+                              "2.000000\n\t\t\t\t\t\t\t],\n\t\t\t\t\t\t\t\""
+                              "unit\": \"us\"\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n");
 
-    CHECK(output == blessedOutput);
+    BOOST_CHECK(output == blessedOutput);
     armnn::ProfilerManager::GetInstance().RegisterProfiler(nullptr);
 }
 
-}
+BOOST_AUTO_TEST_SUITE_END();
