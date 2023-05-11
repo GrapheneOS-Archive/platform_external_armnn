@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,7 +29,13 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    /// By default returns inputShapes if the number of inputs are equal to number of outputs,
+    /// otherwise infers the output shapes from given input shapes and layer properties.
+    /// @param [in] inputShapes The input shapes layer has.
+    /// @return A vector to the inferred output shape.
+    std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
+
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a MeanLayer.

@@ -1,15 +1,19 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2018-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
+#include <armnn/BackendId.hpp>
+#include <armnn/Exceptions.hpp>
 #include <armnn/Tensor.hpp>
 #include <armnn/Types.hpp>
 
+#include <stdint.h>
 #include <cmath>
 #include <ostream>
 #include <set>
+#include <type_traits>
 
 namespace armnn
 {
@@ -68,6 +72,20 @@ constexpr char const* GetComparisonOperationAsCString(ComparisonOperation operat
     }
 }
 
+constexpr char const* GetBinaryOperationAsCString(BinaryOperation operation)
+{
+    switch (operation)
+    {
+        case BinaryOperation::Add:      return "Add";
+        case BinaryOperation::Div:      return "Div";
+        case BinaryOperation::Maximum:  return "Maximum";
+        case BinaryOperation::Minimum:  return "Minimum";
+        case BinaryOperation::Mul:      return "Mul";
+        case BinaryOperation::Sub:      return "Sub";
+        default:                        return "Unknown";
+    }
+}
+
 constexpr char const* GetUnaryOperationAsCString(UnaryOperation operation)
 {
     switch (operation)
@@ -77,7 +95,9 @@ constexpr char const* GetUnaryOperationAsCString(UnaryOperation operation)
         case UnaryOperation::Sqrt:       return "Sqrt";
         case UnaryOperation::Rsqrt:      return "Rsqrt";
         case UnaryOperation::Neg:        return "Neg";
+        case UnaryOperation::Log:        return "Log";
         case UnaryOperation::LogicalNot: return "LogicalNot";
+        case UnaryOperation::Sin:        return "Sin";
         default:                         return "Unknown";
     }
 }
@@ -123,6 +143,29 @@ constexpr char const* GetPaddingMethodAsCString(PaddingMethod method)
     }
 }
 
+constexpr char const* GetPaddingModeAsCString(PaddingMode mode)
+{
+    switch (mode)
+    {
+        case PaddingMode::Constant:   return "Exclude";
+        case PaddingMode::Symmetric:  return "Symmetric";
+        case PaddingMode::Reflect:    return "Reflect";
+        default:                      return "Unknown";
+    }
+}
+
+constexpr char const* GetReduceOperationAsCString(ReduceOperation reduce_operation)
+{
+    switch (reduce_operation)
+    {
+        case ReduceOperation::Sum:  return "Sum";
+        case ReduceOperation::Max:  return "Max";
+        case ReduceOperation::Mean: return "Mean";
+        case ReduceOperation::Min:  return "Min";
+        case ReduceOperation::Prod: return "Prod";
+        default:                    return "Unknown";
+    }
+}
 constexpr unsigned int GetDataTypeSize(DataType dataType)
 {
     switch (dataType)
@@ -135,9 +178,6 @@ constexpr unsigned int GetDataTypeSize(DataType dataType)
         case DataType::QAsymmU8:              return 1U;
         case DataType::QAsymmS8:              return 1U;
         case DataType::QSymmS8:               return 1U;
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        case DataType::QuantizedSymm8PerAxis: return 1U;
-        ARMNN_NO_DEPRECATE_WARN_END
         case DataType::QSymmS16:              return 2U;
         case DataType::Boolean:               return 1U;
         default:                              return 0U;
@@ -187,9 +227,6 @@ constexpr const char* GetDataTypeName(DataType dataType)
         case DataType::QAsymmU8:              return "QAsymmU8";
         case DataType::QAsymmS8:              return "QAsymmS8";
         case DataType::QSymmS8:               return "QSymmS8";
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        case DataType::QuantizedSymm8PerAxis: return "QSymm8PerAxis";
-        ARMNN_NO_DEPRECATE_WARN_END
         case DataType::QSymmS16:              return "QSymm16";
         case DataType::Signed32:              return "Signed32";
         case DataType::Boolean:               return "Boolean";
@@ -204,9 +241,11 @@ constexpr const char* GetDataLayoutName(DataLayout dataLayout)
 {
     switch (dataLayout)
     {
-        case DataLayout::NCHW: return "NCHW";
-        case DataLayout::NHWC: return "NHWC";
-        default:               return "Unknown";
+        case DataLayout::NCHW:  return "NCHW";
+        case DataLayout::NHWC:  return "NHWC";
+        case DataLayout::NDHWC: return "NDHWC";
+        case DataLayout::NCDHW: return "NCDHW";
+        default:                return "Unknown";
     }
 }
 
@@ -240,6 +279,16 @@ constexpr const char* GetResizeMethodAsCString(ResizeMethod method)
     }
 }
 
+constexpr const char* GetMemBlockStrategyTypeName(MemBlockStrategyType memBlockStrategyType)
+{
+    switch (memBlockStrategyType)
+    {
+        case MemBlockStrategyType::SingleAxisPacking: return "SingleAxisPacking";
+        case MemBlockStrategyType::MultiAxisPacking:  return "MultiAxisPacking";
+        default:                                      return "Unknown";
+    }
+}
+
 template<typename T>
 struct IsHalfType
     : std::integral_constant<bool, std::is_floating_point<T>::value && sizeof(T) == 2>
@@ -253,12 +302,9 @@ constexpr bool IsQuantizedType()
 
 constexpr bool IsQuantized8BitType(DataType dataType)
 {
-    ARMNN_NO_DEPRECATE_WARN_BEGIN
     return dataType == DataType::QAsymmU8        ||
            dataType == DataType::QAsymmS8        ||
-           dataType == DataType::QSymmS8         ||
-           dataType == DataType::QuantizedSymm8PerAxis;
-    ARMNN_NO_DEPRECATE_WARN_END
+           dataType == DataType::QSymmS8;
 }
 
 constexpr bool IsQuantizedType(DataType dataType)
@@ -273,16 +319,30 @@ inline std::ostream& operator<<(std::ostream& os, Status stat)
 }
 
 
-inline std::ostream & operator<<(std::ostream & os, const armnn::TensorShape & shape)
+inline std::ostream& operator<<(std::ostream& os, const armnn::TensorShape& shape)
 {
     os << "[";
-    for (uint32_t i=0; i<shape.GetNumDimensions(); ++i)
+    if (shape.GetDimensionality() != Dimensionality::NotSpecified)
     {
-        if (i!=0)
+        for (uint32_t i = 0; i < shape.GetNumDimensions(); ++i)
         {
-            os << ",";
+            if (i != 0)
+            {
+                os << ",";
+            }
+            if (shape.GetDimensionSpecificity(i))
+            {
+                os << shape[i];
+            }
+            else
+            {
+                os << "?";
+            }
         }
-        os << shape[i];
+    }
+    else
+    {
+        os << "Dimensionality Not Specified";
     }
     os << "]";
     return os;

@@ -1,40 +1,82 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2020, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include "CounterDirectory.hpp"
-#include "CounterIdMap.hpp"
-#include "Holder.hpp"
-#include "MockBackend.hpp"
+#include "ArmNNProfilingServiceInitialiser.hpp"
 #include "MockBackendId.hpp"
-#include "PeriodicCounterCapture.hpp"
-#include "PeriodicCounterSelectionCommandHandler.hpp"
-#include "ProfilingStateMachine.hpp"
-#include "ProfilingUtils.hpp"
-#include "RequestCounterDirectoryCommandHandler.hpp"
+#include "ProfilingOptionsConverter.hpp"
 
-#include <test/TestUtils.hpp>
+#include <TestUtils.hpp>
 
-#include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/BackendId.hpp>
 #include <armnn/Logging.hpp>
-#include <armnn/profiling/ISendTimelinePacket.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <armnn/profiling/ArmNNProfiling.hpp>
+
+#include <armnn/utility/IgnoreUnused.hpp>
+
+#include <armnnTestUtils/MockBackend.hpp>
+
+#include <client/include/CounterIdMap.hpp>
+#include <client/include/Holder.hpp>
+#include <client/include/ISendTimelinePacket.hpp>
+#include <client/include/ProfilingOptions.hpp>
+
+#include <client/src/PeriodicCounterCapture.hpp>
+#include <client/src/PeriodicCounterSelectionCommandHandler.hpp>
+#include <client/src/ProfilingStateMachine.hpp>
+#include <client/src/ProfilingUtils.hpp>
+#include <client/src/RequestCounterDirectoryCommandHandler.hpp>
+
+#include <client/src/backends/BackendProfiling.hpp>
+
+#include <common/include/CounterDirectory.hpp>
+#include <common/include/PacketVersionResolver.hpp>
+
+#include <doctest/doctest.h>
+
 #include <vector>
-
 #include <cstdint>
 #include <limits>
-#include <backends/BackendProfiling.hpp>
 
-using namespace armnn::profiling;
+namespace arm
+{
+
+namespace pipe
+{
+
+struct LogLevelSwapper
+{
+public:
+    LogLevelSwapper(arm::pipe::LogSeverity severity)
+    {
+        // Set the new log level
+        arm::pipe::ConfigureLogging(true, true, severity);
+    }
+    ~LogLevelSwapper()
+    {
+        // The default log level for unit tests is "Fatal"
+        arm::pipe::ConfigureLogging(true, true, arm::pipe::LogSeverity::Fatal);
+    }
+};
+
+} // namespace pipe
+
+} // namespace arm
+
+using namespace arm::pipe;
 
 class ReadCounterVals : public IReadCounterValues
 {
     virtual bool IsCounterRegistered(uint16_t counterUid) const override
     {
         return (counterUid > 4 && counterUid < 11);
+    }
+    virtual bool IsCounterRegistered(const std::string& counterName) const override
+    {
+        armnn::IgnoreUnused(counterName);
+        return false;
     }
     virtual uint16_t GetCounterCount() const override
     {
@@ -111,40 +153,40 @@ arm::pipe::Packet PacketWriter(uint32_t period, std::vector<uint16_t> counterval
     return {packetId, dataLength, uniqueData};
 }
 
-BOOST_AUTO_TEST_SUITE(BackendProfilingTestSuite)
-
-BOOST_AUTO_TEST_CASE(BackendProfilingCounterRegisterMockBackendTest)
+TEST_SUITE("BackendProfilingTestSuite")
 {
+TEST_CASE("BackendProfilingCounterRegisterMockBackendTest")
+{
+    arm::pipe::LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
+
     // Reset the profiling service to the uninitialized state
     armnn::IRuntime::CreationOptions options;
     options.m_ProfilingOptions.m_EnableProfiling = true;
 
     armnn::MockBackendInitialiser initialiser;
     // Create a runtime
-    armnn::Runtime runtime(options);
+    armnn::RuntimeImpl runtime(options);
 
     unsigned int shiftedId = 0;
 
-#if defined(ETHOSN_SUPPORT_ENABLED)
-    // Shift the id as ETHOSN is enabled.
-    shiftedId = 4;
-#endif
-
     // Check if the MockBackends 3 dummy counters {0, 1, 2-5 (four cores)} are registered
     armnn::BackendId mockId = armnn::MockBackendId();
-    const armnn::profiling::ICounterMappings& counterMap = GetProfilingService(&runtime).GetCounterMappings();
-    BOOST_CHECK(counterMap.GetGlobalId(0, mockId) == 5 + shiftedId);
-    BOOST_CHECK(counterMap.GetGlobalId(1, mockId) == 6 + shiftedId);
-    BOOST_CHECK(counterMap.GetGlobalId(2, mockId) == 7 + shiftedId);
-    BOOST_CHECK(counterMap.GetGlobalId(3, mockId) == 8 + shiftedId);
-    BOOST_CHECK(counterMap.GetGlobalId(4, mockId) == 9 + shiftedId);
-    BOOST_CHECK(counterMap.GetGlobalId(5, mockId) == 10 + shiftedId);
+    const ICounterMappings& counterMap = GetProfilingService(&runtime).GetCounterMappings();
+    CHECK(counterMap.GetGlobalId(0, mockId) == 5 + shiftedId);
+    CHECK(counterMap.GetGlobalId(1, mockId) == 6 + shiftedId);
+    CHECK(counterMap.GetGlobalId(2, mockId) == 7 + shiftedId);
+    CHECK(counterMap.GetGlobalId(3, mockId) == 8 + shiftedId);
+    CHECK(counterMap.GetGlobalId(4, mockId) == 9 + shiftedId);
+    CHECK(counterMap.GetGlobalId(5, mockId) == 10 + shiftedId);
     options.m_ProfilingOptions.m_EnableProfiling = false;
-    GetProfilingService(&runtime).ResetExternalProfilingOptions(options.m_ProfilingOptions, true);
+    GetProfilingService(&runtime).ResetExternalProfilingOptions(
+        ConvertExternalProfilingOptions(options.m_ProfilingOptions), true);
 }
 
-BOOST_AUTO_TEST_CASE(TestBackendCounters)
+TEST_CASE("TestBackendCounters")
 {
+    arm::pipe::LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
+
     Holder holder;
     arm::pipe::PacketVersionResolver packetVersionResolver;
     ProfilingStateMachine stateMachine;
@@ -152,26 +194,32 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     CounterIdMap counterIdMap;
     MockBackendSendCounterPacket sendCounterPacket;
 
-    const armnn::BackendId cpuAccId(armnn::Compute::CpuAcc);
-    const armnn::BackendId gpuAccId(armnn::Compute::GpuAcc);
+    const std::string cpuAccId(GetComputeDeviceAsCString(armnn::Compute::CpuAcc));
+    const std::string gpuAccId(GetComputeDeviceAsCString(armnn::Compute::GpuAcc));
 
-    armnn::IRuntime::CreationOptions options;
-    options.m_ProfilingOptions.m_EnableProfiling = true;
+    ProfilingOptions options;
+    options.m_EnableProfiling = true;
 
-    armnn::profiling::ProfilingService profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    std::unique_ptr<IProfilingService> profilingService = arm::pipe::IProfilingService::CreateProfilingService(
+        arm::pipe::MAX_ARMNN_COUNTER,
+        initialiser,
+        arm::pipe::ARMNN_SOFTWARE_INFO,
+        arm::pipe::ARMNN_SOFTWARE_VERSION,
+        arm::pipe::ARMNN_HARDWARE_VERSION);
 
-    std::unique_ptr<armnn::profiling::IBackendProfiling> cpuBackendProfilingPtr =
-            std::make_unique<BackendProfiling>(options, profilingService, cpuAccId);
-    std::unique_ptr<armnn::profiling::IBackendProfiling> gpuBackendProfilingPtr =
-            std::make_unique<BackendProfiling>(options, profilingService, gpuAccId);
+    std::unique_ptr<IBackendProfiling> cpuBackendProfilingPtr =
+        std::make_unique<BackendProfiling>(options, *profilingService.get(), cpuAccId);
+    std::unique_ptr<IBackendProfiling> gpuBackendProfilingPtr =
+        std::make_unique<BackendProfiling>(options, *profilingService.get(), gpuAccId);
 
-    std::shared_ptr<armnn::profiling::IBackendProfilingContext> cpuProfilingContextPtr =
+    std::shared_ptr<IBackendProfilingContext> cpuProfilingContextPtr =
             std::make_shared<armnn::MockBackendProfilingContext>(cpuBackendProfilingPtr);
-    std::shared_ptr<armnn::profiling::IBackendProfilingContext> gpuProfilingContextPtr =
+    std::shared_ptr<IBackendProfilingContext> gpuProfilingContextPtr =
             std::make_shared<armnn::MockBackendProfilingContext>(gpuBackendProfilingPtr);
 
-    std::unordered_map<armnn::BackendId,
-            std::shared_ptr<armnn::profiling::IBackendProfilingContext>> backendProfilingContexts;
+    std::unordered_map<std::string,
+            std::shared_ptr<IBackendProfilingContext>> backendProfilingContexts;
 
     backendProfilingContexts[cpuAccId] = cpuProfilingContextPtr;
     backendProfilingContexts[gpuAccId] = gpuProfilingContextPtr;
@@ -219,19 +267,19 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterSelectionCommandHandler(PacketWriter(period, gpuCounters));
     periodicCounterCapture.Stop();
 
-    std::set<armnn::BackendId> activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 1);
-    BOOST_CHECK(activeIds.find(gpuAccId) != activeIds.end());
+    std::set<std::string> activeIds = holder.GetCaptureData().GetActiveBackends();
+    CHECK(activeIds.size() == 1);
+    CHECK((activeIds.find(gpuAccId) != activeIds.end()));
 
     std::vector<Timestamp> recievedTimestamp = sendCounterPacket.GetTimestamps();
 
-    BOOST_CHECK(recievedTimestamp[0].timestamp == period);
-    BOOST_CHECK(recievedTimestamp.size() == 1);
-    BOOST_CHECK(recievedTimestamp[0].counterValues.size() == gpuCounters.size());
+    CHECK(recievedTimestamp[0].timestamp == period);
+    CHECK(recievedTimestamp.size() == 1);
+    CHECK(recievedTimestamp[0].counterValues.size() == gpuCounters.size());
     for (unsigned long i=0; i< gpuCounters.size(); ++i)
     {
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterId == gpuCounters[i]);
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
+        CHECK(recievedTimestamp[0].counterValues[i].counterId == gpuCounters[i]);
+        CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
     }
     sendCounterPacket.ClearTimestamps();
 
@@ -240,18 +288,18 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 1);
-    BOOST_CHECK(activeIds.find(cpuAccId) != activeIds.end());
+    CHECK(activeIds.size() == 1);
+    CHECK((activeIds.find(cpuAccId) != activeIds.end()));
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
 
-    BOOST_CHECK(recievedTimestamp[0].timestamp == period);
-    BOOST_CHECK(recievedTimestamp.size() == 1);
-    BOOST_CHECK(recievedTimestamp[0].counterValues.size() == cpuCounters.size());
+    CHECK(recievedTimestamp[0].timestamp == period);
+    CHECK(recievedTimestamp.size() == 1);
+    CHECK(recievedTimestamp[0].counterValues.size() == cpuCounters.size());
     for (unsigned long i=0; i< cpuCounters.size(); ++i)
     {
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterId == cpuCounters[i]);
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
+        CHECK(recievedTimestamp[0].counterValues[i].counterId == cpuCounters[i]);
+        CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
     }
     sendCounterPacket.ClearTimestamps();
 
@@ -262,28 +310,28 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 2);
-    BOOST_CHECK(activeIds.find(cpuAccId) != activeIds.end());
-    BOOST_CHECK(activeIds.find(gpuAccId) != activeIds.end());
+    CHECK(activeIds.size() == 2);
+    CHECK((activeIds.find(cpuAccId) != activeIds.end()));
+    CHECK((activeIds.find(gpuAccId) != activeIds.end()));
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
+//
+    CHECK(recievedTimestamp[0].timestamp == period);
+    CHECK(recievedTimestamp[1].timestamp == period);
 
-    BOOST_CHECK(recievedTimestamp[0].timestamp == period);
-    BOOST_CHECK(recievedTimestamp[1].timestamp == period);
+    CHECK(recievedTimestamp.size() == 2);
+    CHECK(recievedTimestamp[0].counterValues.size() == 2);
+    CHECK(recievedTimestamp[1].counterValues.size() == gpuCounters.size());
 
-    BOOST_CHECK(recievedTimestamp.size() == 2);
-    BOOST_CHECK(recievedTimestamp[0].counterValues.size() == 2);
-    BOOST_CHECK(recievedTimestamp[1].counterValues.size() == gpuCounters.size());
-
-    BOOST_CHECK(recievedTimestamp[0].counterValues[0].counterId == cpuCounters[0]);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[0].counterValue == 1u);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[1].counterId == cpuCounters[1]);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[1].counterValue == 2u);
+    CHECK(recievedTimestamp[0].counterValues[0].counterId == cpuCounters[0]);
+    CHECK(recievedTimestamp[0].counterValues[0].counterValue == 1u);
+    CHECK(recievedTimestamp[0].counterValues[1].counterId == cpuCounters[1]);
+    CHECK(recievedTimestamp[0].counterValues[1].counterValue == 2u);
 
     for (unsigned long i=0; i< gpuCounters.size(); ++i)
     {
-        BOOST_CHECK(recievedTimestamp[1].counterValues[i].counterId == gpuCounters[i]);
-        BOOST_CHECK(recievedTimestamp[1].counterValues[i].counterValue == i + 1u);
+        CHECK(recievedTimestamp[1].counterValues[i].counterId == gpuCounters[i]);
+        CHECK(recievedTimestamp[1].counterValues[i].counterValue == i + 1u);
     }
 
     sendCounterPacket.ClearTimestamps();
@@ -297,24 +345,24 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 2);
-    BOOST_CHECK(activeIds.find(cpuAccId) != activeIds.end());
-    BOOST_CHECK(activeIds.find(gpuAccId) != activeIds.end());
+    CHECK(activeIds.size() == 2);
+    CHECK((activeIds.find(cpuAccId) != activeIds.end()));
+    CHECK((activeIds.find(gpuAccId) != activeIds.end()));
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
 
-    BOOST_CHECK(recievedTimestamp[0].counterValues.size() == cpuCounters.size());
+    CHECK(recievedTimestamp[0].counterValues.size() == cpuCounters.size());
     for (unsigned long i=0; i< cpuCounters.size(); ++i)
     {
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterId == cpuCounters[i]);
-        BOOST_CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
+        CHECK(recievedTimestamp[0].counterValues[i].counterId == cpuCounters[i]);
+        CHECK(recievedTimestamp[0].counterValues[i].counterValue == i + 1u);
     }
 
-    BOOST_CHECK(recievedTimestamp[1].counterValues.size() == gpuCounters.size());
+    CHECK(recievedTimestamp[1].counterValues.size() == gpuCounters.size());
     for (unsigned long i=0; i< gpuCounters.size(); ++i)
     {
-        BOOST_CHECK(recievedTimestamp[1].counterValues[i].counterId == gpuCounters[i]);
-        BOOST_CHECK(recievedTimestamp[1].counterValues[i].counterValue == i + 1u);
+        CHECK(recievedTimestamp[1].counterValues[i].counterId == gpuCounters[i]);
+        CHECK(recievedTimestamp[1].counterValues[i].counterValue == i + 1u);
     }
     sendCounterPacket.ClearTimestamps();
 
@@ -326,27 +374,27 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 2);
-    BOOST_CHECK(activeIds.find(cpuAccId) != activeIds.end());
-    BOOST_CHECK(activeIds.find(gpuAccId) != activeIds.end());
+    CHECK(activeIds.size() == 2);
+    CHECK((activeIds.find(cpuAccId) != activeIds.end()));
+    CHECK((activeIds.find(gpuAccId) != activeIds.end()));
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
 
-    BOOST_CHECK(recievedTimestamp.size() == 2);
+    CHECK(recievedTimestamp.size() == 2);
 
-    BOOST_CHECK(recievedTimestamp[0].counterValues.size() == 2);
+    CHECK(recievedTimestamp[0].counterValues.size() == 2);
 
-    BOOST_CHECK(recievedTimestamp[0].counterValues[0].counterId == cpuCounters[0]);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[0].counterValue == 1u);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[1].counterId == cpuCounters[2]);
-    BOOST_CHECK(recievedTimestamp[0].counterValues[1].counterValue == 3u);
+    CHECK(recievedTimestamp[0].counterValues[0].counterId == cpuCounters[0]);
+    CHECK(recievedTimestamp[0].counterValues[0].counterValue == 1u);
+    CHECK(recievedTimestamp[0].counterValues[1].counterId == cpuCounters[2]);
+    CHECK(recievedTimestamp[0].counterValues[1].counterValue == 3u);
 
-    BOOST_CHECK(recievedTimestamp[1].counterValues.size() == 2);
+    CHECK(recievedTimestamp[1].counterValues.size() == 2);
 
-    BOOST_CHECK(recievedTimestamp[1].counterValues[0].counterId == gpuCounters[0]);
-    BOOST_CHECK(recievedTimestamp[1].counterValues[0].counterValue == 1u);
-    BOOST_CHECK(recievedTimestamp[1].counterValues[1].counterId == gpuCounters[1]);
-    BOOST_CHECK(recievedTimestamp[1].counterValues[1].counterValue == 2u);
+    CHECK(recievedTimestamp[1].counterValues[0].counterId == gpuCounters[0]);
+    CHECK(recievedTimestamp[1].counterValues[0].counterValue == 1u);
+    CHECK(recievedTimestamp[1].counterValues[1].counterId == gpuCounters[1]);
+    CHECK(recievedTimestamp[1].counterValues[1].counterValue == 2u);
 
     sendCounterPacket.ClearTimestamps();
 
@@ -355,10 +403,10 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 0);
+    CHECK(activeIds.size() == 0);
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
-    BOOST_CHECK(recievedTimestamp.size() == 0);
+    CHECK(recievedTimestamp.size() == 0);
 
     sendCounterPacket.ClearTimestamps();
 
@@ -367,13 +415,13 @@ BOOST_AUTO_TEST_CASE(TestBackendCounters)
     periodicCounterCapture.Stop();
 
     activeIds = holder.GetCaptureData().GetActiveBackends();
-    BOOST_CHECK(activeIds.size() == 0);
+    CHECK(activeIds.size() == 0);
 
     recievedTimestamp = sendCounterPacket.GetTimestamps();
-    BOOST_CHECK(recievedTimestamp.size() == 0);
+    CHECK(recievedTimestamp.size() == 0);
 }
 
-BOOST_AUTO_TEST_CASE(TestBackendCounterLogging)
+TEST_CASE("TestBackendCounterLogging")
 {
     std::stringstream ss;
 
@@ -400,22 +448,28 @@ BOOST_AUTO_TEST_CASE(TestBackendCounterLogging)
     CounterIdMap counterIdMap;
     MockBackendSendCounterPacket sendCounterPacket;
 
-    const armnn::BackendId cpuAccId(armnn::Compute::CpuAcc);
-    const armnn::BackendId gpuAccId(armnn::Compute::GpuAcc);
+    const std::string cpuAccId(GetComputeDeviceAsCString(armnn::Compute::CpuAcc));
+    const std::string gpuAccId(GetComputeDeviceAsCString(armnn::Compute::GpuAcc));
 
-    armnn::IRuntime::CreationOptions options;
-    options.m_ProfilingOptions.m_EnableProfiling = true;
+    ProfilingOptions options;
+    options.m_EnableProfiling = true;
 
-    armnn::profiling::ProfilingService profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    std::unique_ptr<IProfilingService> profilingService = arm::pipe::IProfilingService::CreateProfilingService(
+        arm::pipe::MAX_ARMNN_COUNTER,
+        initialiser,
+        arm::pipe::ARMNN_SOFTWARE_INFO,
+        arm::pipe::ARMNN_SOFTWARE_VERSION,
+        arm::pipe::ARMNN_HARDWARE_VERSION);
 
-    std::unique_ptr<armnn::profiling::IBackendProfiling> cpuBackendProfilingPtr =
-            std::make_unique<BackendProfiling>(options, profilingService, cpuAccId);
+    std::unique_ptr<IBackendProfiling> cpuBackendProfilingPtr =
+        std::make_unique<BackendProfiling>(options, *profilingService.get(), cpuAccId);
 
-    std::shared_ptr<armnn::profiling::IBackendProfilingContext> cpuProfilingContextPtr =
+    std::shared_ptr<IBackendProfilingContext> cpuProfilingContextPtr =
             std::make_shared<armnn::MockBackendProfilingContext>(cpuBackendProfilingPtr);
 
-    std::unordered_map<armnn::BackendId,
-            std::shared_ptr<armnn::profiling::IBackendProfilingContext>> backendProfilingContexts;
+    std::unordered_map<std::string,
+            std::shared_ptr<IBackendProfilingContext>> backendProfilingContexts;
 
     uint16_t globalId = 5;
     counterIdMap.RegisterMapping(globalId, 0, cpuAccId);
@@ -444,37 +498,48 @@ BOOST_AUTO_TEST_CASE(TestBackendCounterLogging)
 
     uint32_t period = 15939u;
 
-    armnn::SetAllLoggingSinks(true, false, false);
-    SetLogFilter(armnn::LogSeverity::Warning);
+    arm::pipe::SetAllLoggingSinks(true, false, false);
+    arm::pipe::SetLogFilter(arm::pipe::LogSeverity::Warning);
     periodicCounterSelectionCommandHandler(PacketWriter(period, {5}));
     periodicCounterCapture.Stop();
-    SetLogFilter(armnn::LogSeverity::Fatal);
+    arm::pipe::SetLogFilter(arm::pipe::LogSeverity::Fatal);
 
-    BOOST_CHECK(ss.str().find("ActivateCounters example test error") != std::string::npos);
+    CHECK(ss.str().find("ActivateCounters example test error") != std::string::npos);
 }
 
-BOOST_AUTO_TEST_CASE(BackendProfilingContextGetSendTimelinePacket)
+TEST_CASE("BackendProfilingContextGetSendTimelinePacket")
 {
+    arm::pipe::LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
+
     // Reset the profiling service to the uninitialized state
     armnn::IRuntime::CreationOptions options;
     options.m_ProfilingOptions.m_EnableProfiling = true;
-    armnn::profiling::ProfilingService profilingService;
-    profilingService.ConfigureProfilingService(options.m_ProfilingOptions, true);
+
+    armnn::ArmNNProfilingServiceInitialiser psInitialiser;
+    std::unique_ptr<IProfilingService> profilingService = arm::pipe::IProfilingService::CreateProfilingService(
+        arm::pipe::MAX_ARMNN_COUNTER,
+        psInitialiser,
+        arm::pipe::ARMNN_SOFTWARE_INFO,
+        arm::pipe::ARMNN_SOFTWARE_VERSION,
+        arm::pipe::ARMNN_HARDWARE_VERSION);
+
+    profilingService->ConfigureProfilingService(
+        ConvertExternalProfilingOptions(options.m_ProfilingOptions), true);
 
     armnn::MockBackendInitialiser initialiser;
     // Create a runtime. During this the mock backend will be registered and context returned.
     armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
     armnn::MockBackendProfilingService mockProfilingService = armnn::MockBackendProfilingService::Instance();
-    armnn::MockBackendProfilingContext *mockBackEndProfilingContext = mockProfilingService.GetContext();
+    armnn::MockBackendProfilingContext* mockBackEndProfilingContext = mockProfilingService.GetContext();
     // Check that there is a valid context set.
-    BOOST_CHECK(mockBackEndProfilingContext);
+    CHECK(mockBackEndProfilingContext);
     armnn::IBackendInternal::IBackendProfilingPtr& backendProfilingIface =
         mockBackEndProfilingContext->GetBackendProfiling();
-    BOOST_CHECK(backendProfilingIface);
+    CHECK(backendProfilingIface);
 
     // Now for the meat of the test. We're just going to send a random packet and make sure there
     // are no exceptions or errors. The sending of packets is already tested in SendTimelinePacketTests.
-    std::unique_ptr<armnn::profiling::ISendTimelinePacket> timelinePacket =
+    std::unique_ptr<ISendTimelinePacket> timelinePacket =
         backendProfilingIface->GetSendTimelinePacket();
     // Send TimelineEntityClassBinaryPacket
     const uint64_t entityBinaryPacketProfilingGuid = 123456u;
@@ -483,11 +548,14 @@ BOOST_AUTO_TEST_CASE(BackendProfilingContextGetSendTimelinePacket)
 
     // Reset the profiling servie after the test.
     options.m_ProfilingOptions.m_EnableProfiling = false;
-    profilingService.ResetExternalProfilingOptions(options.m_ProfilingOptions, true);
+    profilingService->ResetExternalProfilingOptions(
+        ConvertExternalProfilingOptions(options.m_ProfilingOptions), true);
 }
 
-BOOST_AUTO_TEST_CASE(GetProfilingGuidGenerator)
+TEST_CASE("GetProfilingGuidGenerator")
 {
+    arm::pipe::LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
+
     // Reset the profiling service to the uninitialized state
     armnn::IRuntime::CreationOptions options;
     options.m_ProfilingOptions.m_EnableProfiling = true;
@@ -498,19 +566,19 @@ BOOST_AUTO_TEST_CASE(GetProfilingGuidGenerator)
     armnn::MockBackendProfilingService mockProfilingService = armnn::MockBackendProfilingService::Instance();
     armnn::MockBackendProfilingContext *mockBackEndProfilingContext = mockProfilingService.GetContext();
     // Check that there is a valid context set.
-    BOOST_CHECK(mockBackEndProfilingContext);
+    CHECK(mockBackEndProfilingContext);
     armnn::IBackendInternal::IBackendProfilingPtr& backendProfilingIface =
         mockBackEndProfilingContext->GetBackendProfiling();
-    BOOST_CHECK(backendProfilingIface);
+    CHECK(backendProfilingIface);
 
     // Get the Guid generator and check the getting two Guid's results in the second being greater than the first.
-    armnn::profiling::IProfilingGuidGenerator& guidGenerator = backendProfilingIface->GetProfilingGuidGenerator();
-    const armnn::profiling::ProfilingDynamicGuid& firstGuid = guidGenerator.NextGuid();
-    const armnn::profiling::ProfilingDynamicGuid& secondGuid = guidGenerator.NextGuid();
-    BOOST_CHECK(secondGuid > firstGuid);
+    IProfilingGuidGenerator& guidGenerator = backendProfilingIface->GetProfilingGuidGenerator();
+    const ProfilingDynamicGuid& firstGuid = guidGenerator.NextGuid();
+    const ProfilingDynamicGuid& secondGuid = guidGenerator.NextGuid();
+    CHECK(secondGuid > firstGuid);
 
     // Reset the profiling servie after the test.
     options.m_ProfilingOptions.m_EnableProfiling = false;
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

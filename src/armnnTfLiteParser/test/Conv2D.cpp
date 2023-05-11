@@ -1,15 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 #include <sstream>
 
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_Conv2D")
+{
 struct SimpleConv2DFixture : public ParserFlatbuffersFixture
 {
     explicit SimpleConv2DFixture()
@@ -87,7 +85,7 @@ struct SimpleConv2DFixture : public ParserFlatbuffersFixture
     }
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseSimpleConv2D, SimpleConv2DFixture )
+TEST_CASE_FIXTURE(SimpleConv2DFixture, "ParseSimpleConv2D")
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -106,18 +104,21 @@ BOOST_FIXTURE_TEST_CASE( ParseSimpleConv2D, SimpleConv2DFixture )
 
 struct Conv2DWithBiasesFixture : public ParserFlatbuffersFixture
 {
-    explicit Conv2DWithBiasesFixture(const std::string & inputShape,
-                                     const std::string & outputShape,
-                                     const std::string & filterShape,
-                                     const std::string & filterData,
-                                     const std::string & biasShape,
-                                     const std::string & biasData,
-                                     const std::string & strides,
-                                     const std::string & activation="NONE",
-                                     const std::string & filterScale="1.0",
-                                     const std::string & filterZeroPoint="0",
-                                     const std::string & outputScale="2.0",
-                                     const std::string & outputZeroPoint="0")
+    explicit Conv2DWithBiasesFixture(const std::string& inputShape,
+                                     const std::string& outputShape,
+                                     const std::string& filterShape,
+                                     const std::string& filterData,
+                                     const std::string& biasShape,
+                                     const std::string& biasData,
+                                     const std::string& strides,
+                                     const std::string& activation="NONE",
+                                     const std::string& filterScale="1.0",
+                                     const std::string& filterZeroPoint="0",
+                                     const std::string& outputScale="2.0",
+                                     const std::string& outputZeroPoint="0",
+                                     const std::string& dataType = "UINT8",
+                                     const std::string& filterDataType = "UINT8",
+                                     const std::string& biasDataType = "INT32")
     {
         m_JsonString = R"(
             {
@@ -127,7 +128,7 @@ struct Conv2DWithBiasesFixture : public ParserFlatbuffersFixture
                     "tensors": [
                         {
                             "shape": )" + inputShape + R"(,
-                            "type": "UINT8",
+                            "type": )" + dataType + R"(,
                             "buffer": 0,
                             "name": "inputTensor",
                             "quantization": {
@@ -139,7 +140,7 @@ struct Conv2DWithBiasesFixture : public ParserFlatbuffersFixture
                         },
                         {
                             "shape": )" + outputShape + R"(,
-                            "type": "UINT8",
+                            "type": )" + dataType + R"(,
                             "buffer": 1,
                             "name": "outputTensor",
                             "quantization": {
@@ -151,7 +152,7 @@ struct Conv2DWithBiasesFixture : public ParserFlatbuffersFixture
                         },
                         {
                             "shape": )" + filterShape + R"( ,
-                            "type": "UINT8",
+                            "type": )" + filterDataType + R"(,
                             "buffer": 2,
                             "name": "filterTensor",
                             "quantization": {
@@ -163,7 +164,7 @@ struct Conv2DWithBiasesFixture : public ParserFlatbuffersFixture
                         },
                         {
                             "shape": )" + biasShape + R"( ,
-                            "type": "INT32",
+                            "type": )" + biasDataType + R"(,
                             "buffer": 3,
                             "name": "biasTensor",
                             "quantization": {
@@ -217,7 +218,7 @@ struct SimpleConv2DWithBiasesFixture : Conv2DWithBiasesFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseConv2DWithBias, SimpleConv2DWithBiasesFixture )
+TEST_CASE_FIXTURE(SimpleConv2DWithBiasesFixture, "ParseConv2DWithBias")
 {
     RunTest<4, armnn::DataType::QAsymmU8>(
         0,
@@ -247,7 +248,7 @@ struct DynamicConv2DWithBiasesFixture : Conv2DWithBiasesFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseDynamicConv2DWithBias, DynamicConv2DWithBiasesFixture )
+TEST_CASE_FIXTURE(DynamicConv2DWithBiasesFixture, "ParseDynamicConv2DWithBias")
 {
     RunTest<4,
         armnn::DataType::QAsymmU8,
@@ -288,7 +289,7 @@ struct Conv2DShapeTestFixture : Conv2DWithBiasesFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseConv2D_112x112_out, Conv2DShapeTestFixture )
+TEST_CASE_FIXTURE(Conv2DShapeTestFixture, "ParseConv2D_112x112_out")
 {
 }
 
@@ -310,7 +311,7 @@ struct ReluConv2DWithBiasesFixture : Conv2DWithBiasesFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseConv2DAndReluWithBias, ReluConv2DWithBiasesFixture )
+TEST_CASE_FIXTURE(ReluConv2DWithBiasesFixture, "ParseConv2DAndReluWithBias")
 {
     uint8_t bias = 16;
     uint8_t outZero = 20;
@@ -353,7 +354,7 @@ struct Relu6Conv2DWithBiasesFixture : Conv2DWithBiasesFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE( ParseConv2DAndRelu6WithBias, Relu6Conv2DWithBiasesFixture )
+TEST_CASE_FIXTURE(Relu6Conv2DWithBiasesFixture, "ParseConv2DAndRelu6WithBias")
 {
     uint8_t relu6Min = 6 / 2; // divide by output scale
 
@@ -374,4 +375,331 @@ BOOST_FIXTURE_TEST_CASE( ParseConv2DAndRelu6WithBias, Relu6Conv2DWithBiasesFixtu
         });
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+
+struct PerChannelConv2DFixture : public ParserFlatbuffersFixture
+{
+    explicit PerChannelConv2DFixture()
+    {
+        m_JsonString = R"(
+        {
+            "version": 3,
+            "operator_codes": [
+                {
+                    "builtin_code": "CONV_2D",
+                    "version": 3
+                }
+            ],
+            "subgraphs": [
+                {
+                    "tensors": [
+                        {
+                            "shape": [
+                                1,
+                                4,
+                                4,
+                                2
+                            ],
+                            "type": "INT8",
+                            "buffer": 1,
+                            "name": "input",
+                            "quantization": {
+                                "min": [
+                                    -50.0
+                                ],
+                                "max": [
+                                    49.0
+                                ],
+                                "scale": [
+                                    0.388235
+                                ],
+                                "zero_point": [
+                                    1
+                                ],
+                                "details_type": "NONE",
+                                "quantized_dimension": 0
+                            },
+                            "is_variable": false
+                        },
+                        {
+                            "shape": [
+                                4
+                            ],
+                            "type": "INT32",
+                            "buffer": 2,
+                            "name": "model/conv2d/Conv2D",
+                            "quantization": {
+                                "scale": [
+                                    0.001523,
+                                    0.001197,
+                                    0.001517,
+                                    0.001364
+                                ],
+                                "zero_point": [
+                                    0,
+                                    0,
+                                    0,
+                                    0
+                                ],
+                                "details_type": "NONE",
+                                "quantized_dimension": 0
+                            },
+                            "is_variable": false
+                        },
+                        {
+                            "shape": [
+                                4,
+                                2,
+                                2,
+                                2
+                            ],
+                            "type": "INT8",
+                            "buffer": 3,
+                            "name": "model/conv2d/Conv2D1",
+                            "quantization": {
+                                "min": [
+                                    -0.498056,
+                                    -0.362561,
+                                    -0.307959,
+                                    -0.207799
+                                ],
+                                "max": [
+                                    0.339136,
+                                    0.391629,
+                                    0.496193,
+                                    0.446191
+                                ],
+                                "scale": [
+                                    0.003922,
+                                    0.003084,
+                                    0.003907,
+                                    0.003513
+                                ],
+                                "zero_point": [
+                                    0,
+                                    0,
+                                    0,
+                                    0
+                                ],
+                                "details_type": "NONE",
+                                "quantized_dimension": 0
+                            },
+                            "is_variable": false
+                        },
+                        {
+                            "shape": [
+                                1,
+                                4,
+                                4,
+                                4
+                            ],
+                            "type": "INT8",
+                            "buffer": 4,
+                            "name": "Identity",
+                            "quantization": {
+                                "min": [
+                                    -66.578751
+                                ],
+                                "max": [
+                                    70.137619
+                                ],
+                                "scale": [
+                                    0.536143
+                                ],
+                                "zero_point": [
+                                    -4
+                                ],
+                                "details_type": "NONE",
+                                "quantized_dimension": 0
+                            },
+                            "is_variable": false
+                        }
+                    ],
+                    "inputs": [
+                      0
+                    ],
+                    "outputs": [
+                      3
+                    ],
+                    "operators": [
+                      {
+                        "opcode_index": 0,
+                        "inputs": [
+                          0,
+                          2,
+                          1
+                        ],
+                        "outputs": [
+                          3
+                        ],
+                        "builtin_options_type": "Conv2DOptions",
+                        "builtin_options": {
+                          "padding": "SAME",
+                          "stride_w": 1,
+                          "stride_h": 1,
+                          "fused_activation_function": "NONE",
+                          "dilation_w_factor": 1,
+                          "dilation_h_factor": 1
+                        },
+                        "custom_options_format": "FLEXBUFFERS"
+                      }
+                    ],
+                    "name": "main"
+                }
+            ],
+            "description": "MLIR Converted.",
+            "buffers": [
+                {
+                },
+                {
+                },
+                {
+                    "data": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                {
+                    "data": [
+                        157,
+                        201,
+                        86,
+                        129,
+                        17,
+                        33,
+                        209,
+                        13,
+                        76,
+                        249,
+                        127,
+                        138,
+                        35,
+                        18,
+                        250,
+                        233,
+                        15,
+                        205,
+                        98,
+                        127,
+                        68,
+                        196,
+                        246,
+                        177,
+                        65,
+                        197,
+                        230,
+                        246,
+                        127,
+                        66,
+                        212,
+                        30
+                    ]
+                },
+                {
+                },
+                {
+                    "data": [
+                        49,
+                        46,
+                        53,
+                        46,
+                        48,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                }
+            ],
+            "metadata": [
+                {
+                    "name": "min_runtime_version",
+                    "buffer": 5
+                }
+            ]
+        }
+        )";
+        SetupSingleInputSingleOutput("input", "Identity");
+    }
+};
+
+TEST_CASE_FIXTURE(PerChannelConv2DFixture, "ParsePerChannelConv2D")
+{
+    RunTest<4, armnn::DataType::QAsymmS8>(
+        0,
+        {
+            -11, 40,-26, 11,-28,  8,  0, -8,
+            -10, 34, 47,  0,-33,-14, 28, 35,
+              6,-28,-26,  8, 13, 33,-31,-41,
+             31,-20,-31,-16,  8,-18,-44,  0
+        },
+        {
+            -21,-17,-23,-14, -1,-14,  1,  9,
+              1,-12,-22,-23,  2, -1, -3, 12,
+              7,  6,  8,-13,-21, -6,-31,  0,
+              9, -6, 24,  0,-22, -4, -7,-22,
+             -7, -9,  9, 11,-11,-16,  9,-27,
+             -1,  0,-26,  0,  9,-12, -8,-18,
+            -11, -3,-15,  7, 16, -2, -8, -7,
+            -14,-15,-14,  3,  9,-12, -6,-11
+        });
+}
+
+struct Conv2FloatWithInt8WeightsAndBiasesFixture : Conv2DWithBiasesFixture
+{
+    Conv2FloatWithInt8WeightsAndBiasesFixture()
+            : Conv2DWithBiasesFixture("[ 1, 2, 2, 1 ]",    // inputShape
+                                      "[ 1, 2, 2, 1 ]",    // outputShape
+                                      "[ 1, 2, 2, 1 ]",    // filterShape
+                                      "[ 2,1, 0,6 ]",      // filterData
+                                      "[ 1 ]",             // biasShape
+                                      "[ 10 ]",            // biasData
+                                      "1",                 // stride w and h
+                                      "NONE",              // activation
+                                      "1.0",               // filterScale
+                                      "0",                 // filterZeroPoint
+                                      "2.0",               // outputScale
+                                      "0",                 // outputZeroPoint
+                                      "FLOAT32",           // dataType
+                                      "INT8",              // filterDataType
+                                      "INT8")              // biasDataType
+    {}
+};
+
+TEST_CASE_FIXTURE(Conv2FloatWithInt8WeightsAndBiasesFixture, "ParseConv2FloatWithInt8WeightsAndBiasesFixture")
+{
+    RunTest<4, armnn::DataType::Float32>(
+            0,
+            {
+                    1, 2,
+                    3, 4,
+            },
+            {
+                    (1*2 + 2*1 + 3*0 + 4*6 + 10),
+                    (2*2 + 0*1 + 4*0 + 0*6 + 10),
+                    (3*2 + 4*1 + 0*0 + 0*6 + 10),
+                    (4*2 + 0*1 + 0*0 + 0*6 + 10)
+            });
+}
+
+}

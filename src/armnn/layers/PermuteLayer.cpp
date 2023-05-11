@@ -11,8 +11,8 @@
 
 #include <armnnUtils/Permute.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -27,7 +27,7 @@ std::unique_ptr<IWorkload> PermuteLayer::CreateWorkload(const IWorkloadFactory& 
     PermuteQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreatePermute(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Permute, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 PermuteLayer* PermuteLayer::Clone(Graph& graph) const
@@ -57,9 +57,9 @@ void PermuteLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "PermuteLayer");
 }
 
-void PermuteLayer::Accept(ILayerVisitor& visitor) const
+void PermuteLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitPermuteLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

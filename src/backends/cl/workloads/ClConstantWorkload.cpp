@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,7 +8,7 @@
 #include <Half.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <cl/ClTensorHandle.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include "ClWorkloadUtils.hpp"
 
@@ -41,15 +41,17 @@ arm_compute::Status ClConstantWorkloadValidate(const TensorInfo& output)
     }
 }
 
-ClConstantWorkload::ClConstantWorkload(const ConstantQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<ConstantQueueDescriptor>(descriptor, info)
+ClConstantWorkload::ClConstantWorkload(const ConstantQueueDescriptor& descriptor,
+                                       const WorkloadInfo& info,
+                                       const arm_compute::CLCompileContext&)
+    : ClBaseWorkload<ConstantQueueDescriptor>(descriptor, info)
     , m_RanOnce(false)
 {
 }
 
 void ClConstantWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClConstantWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClConstantWorkload_Execute", this->GetGuid());
 
     // The intermediate tensor held by the corresponding layer output handler can be initialised with the given data
     // on the first inference, then reused for subsequent inferences.

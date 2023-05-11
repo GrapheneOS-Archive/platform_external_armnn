@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> AdditionLayer::CreateWorkload(const IWorkloadFactory&
     AdditionQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateAddition(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Addition, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 AdditionLayer* AdditionLayer::Clone(Graph& graph) const
@@ -32,9 +32,9 @@ AdditionLayer* AdditionLayer::Clone(Graph& graph) const
     return CloneBase<AdditionLayer>(graph, GetName());
 }
 
-void AdditionLayer::Accept(ILayerVisitor& visitor) const
+void AdditionLayer::ExecuteStrategy(IStrategy &strategy) const
 {
-    visitor.VisitAdditionLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

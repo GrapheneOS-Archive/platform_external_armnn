@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClSubtractionWorkload.hpp"
 
 #include <cl/ClTensorHandle.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
@@ -19,8 +19,9 @@ using namespace armcomputetensorutils;
 static constexpr arm_compute::ConvertPolicy g_AclConvertPolicy = arm_compute::ConvertPolicy::SATURATE;
 
 ClSubtractionWorkload::ClSubtractionWorkload(const SubtractionQueueDescriptor& descriptor,
-                                             const WorkloadInfo& info)
-    : BaseWorkload<SubtractionQueueDescriptor>(descriptor, info)
+                                             const WorkloadInfo& info,
+                                             const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<SubtractionQueueDescriptor>(descriptor, info)
 {
     this->m_Data.ValidateInputsOutputs("ClSubtractionWorkload", 2, 1);
 
@@ -30,12 +31,15 @@ ClSubtractionWorkload::ClSubtractionWorkload(const SubtractionQueueDescriptor& d
 
     const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
 
-    m_Layer.configure(&input0, &input1, &output, g_AclConvertPolicy, activationInfo);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClSubtractionWorkload_configure");
+        m_Layer.configure(clCompileContext, &input0, &input1, &output, g_AclConvertPolicy, activationInfo);
+    }
 }
 
 void ClSubtractionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClSubtractionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClSubtractionWorkload_Execute", this->GetGuid());
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -22,17 +22,28 @@ namespace armnn
 RefL2NormalizationWorkload::RefL2NormalizationWorkload(
         const L2NormalizationQueueDescriptor& descriptor,
         const WorkloadInfo& info)
-    : BaseWorkload<L2NormalizationQueueDescriptor>(descriptor, info) {}
+    : RefBaseWorkload<L2NormalizationQueueDescriptor>(descriptor, info) {}
 
 void RefL2NormalizationWorkload::Execute() const
 {
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefL2NormalizationWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefL2NormalizationWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
+{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefL2NormalizationWorkload_Execute");
 
-    const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
+    const TensorInfo& inputInfo = GetTensorInfo(inputs[0]);
+    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
 
-    auto inputDecoder  = MakeDecoder<float>(inputInfo, m_Data.m_Inputs[0]->Map());
-    auto outputEncoder = MakeEncoder<float>(outputInfo, m_Data.m_Outputs[0]->Map());
+    auto inputDecoder  = MakeDecoder<float>(inputInfo, inputs[0]->Map());
+    auto outputEncoder = MakeEncoder<float>(outputInfo, outputs[0]->Map());
 
     DataLayoutIndexed dataLayout(m_Data.m_Parameters.m_DataLayout);
 

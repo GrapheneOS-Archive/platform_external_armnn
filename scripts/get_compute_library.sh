@@ -1,21 +1,29 @@
 #!/bin/bash
 #
-# Copyright © 2017 Arm Ltd. All rights reserved.
+# Copyright © 2018-2023 Arm Ltd. All rights reserved.
 # SPDX-License-Identifier: MIT
 #
 
-CMD=$( basename $0 )
+CMD=$( basename "$0" )
 
 # For pinning to a ref use this:
-DEFAULT_CLFRAMEWORKREVISION="branches/arm_compute_20_11" # Release 20.11
+#DEFAULT_CLFRAMEWORKREVISION="branches/arm_compute_23_02" # Release 23.02
 #
 # For pinning to a revision use this:
-#DEFAULT_CLFRAMEWORKREVISION="75eea338eb232ebdafa2fb84d22e711b5f964785" #COMPMID-3961: Add Logical OR/AND/NOT operator on CL
+DEFAULT_CLFRAMEWORKREVISION="467daef993fe29cc4319058200b7ad797398e4b0" #9454: Implement CL kernel for a native batched matmul Quantized - LHS transposed, RHS transposed
 
 usage() {
-    echo "Usage: $CMD (Use the default clframework SHA)"
-    echo "Usage: $CMD -s <CLFRAMEWORK_SHA>"
-    echo "Usage: $CMD -p (Print current default clframework SHA)"
+  echo -e "get_compute_library.sh: Clones the Arm Compute Library (ACL) repo from the ML Platform server and checks out
+  the pinned version of ACL based on the SHA string defined at the top of this script (DEFAULT_CLFRAMEWORKREVISION).
+  If the ACL repo already exists, this script will skip cloning and only checkout the relevant SHA.
+  The pinned ACL version is a known version that works correctly with the version of Arm NN being used. This pin is
+  regularly updated by the Arm NN team on the Arm NN 'main' branch.
+  During release periods, the ACL pin will point to an ACL release branch which exists on the ML Platform server.
+  The repo directory will be named 'clframework' unless defined by the '-n' argument to this script.\n"
+  echo "Usage: $CMD (Use the default clframework SHA)"
+  echo "Usage: $CMD -s <CLFRAMEWORK_SHA>"
+  echo "Usage: $CMD -p (Print current default clframework SHA)"
+  echo "Usage: $CMD -n Name of the directory into which the ACL repo will be cloned, default is 'clframework'"
   exit 0
 }
 
@@ -34,11 +42,11 @@ function AssertZeroExitCode {
 }
 
 # process the options given
-while getopts "s:phg:" opt; do
+while getopts "s:n:ph" opt; do
   case "$opt" in
     s) CLFRAMEWORK_SHA="$OPTARG";;
     p) PrintDefaultClframeworkSha;;
-    g) DUMMY="$OPTARG";; # continue to accept -g for backward compatibility
+    n) ACL_REPO_NAME_OPTION="$OPTARG";;
     h|\?) usage;;
   esac
 done
@@ -59,30 +67,47 @@ while [ -h "$SRC" ]; do
   [[ $SRC != /* ]] && SRC="$DIR/$SRC"
 done
 DIR="$( cd -P "$( dirname "$SRC" )" >/dev/null && pwd )"
-pushd ${DIR} > /dev/null
+pushd "${DIR}" > /dev/null
+# shellcheck disable=SC2164
 cd ../..
 
-if [ ! -d clframework ]; then
-  git clone https://review.mlplatform.org/ml/ComputeLibrary clframework
+# Default ACL repo directory name is 'clframework'
+# This can be overwritten by command line option '-n'
+ACL_REPO_NAME="clframework"
+if [ ! -z "$ACL_REPO_NAME_OPTION" ]; then
+  ACL_REPO_NAME="$ACL_REPO_NAME_OPTION"
+fi
+
+if [ ! -d "$ACL_REPO_NAME" ]; then
+  echo "Cloning CL Framework"
+  git clone https://review.mlplatform.org/ml/ComputeLibrary "$ACL_REPO_NAME"
   AssertZeroExitCode "Cloning CL Framework failed"
 fi
-pushd clframework > /dev/null
+pushd "$ACL_REPO_NAME" > /dev/null
 
 CLFRAMEWORKREVISION=$DEFAULT_CLFRAMEWORKREVISION
 if [ ! -z "$CLFRAMEWORK_SHA" ]; then
-    CLFRAMEWORKREVISION=$CLFRAMEWORK_SHA
+  CLFRAMEWORKREVISION=$CLFRAMEWORK_SHA
 fi
 
-git fetch && git fetch https://review.mlplatform.org/ml/ComputeLibrary && git checkout ${CLFRAMEWORKREVISION}
+echo "git fetch && git fetch https://review.mlplatform.org/ml/ComputeLibrary && git checkout $CLFRAMEWORKREVISION"
+git fetch && git fetch https://review.mlplatform.org/ml/ComputeLibrary && git checkout "${CLFRAMEWORKREVISION}"
 AssertZeroExitCode "Fetching and checking out ${CLFRAMEWORKREVISION} failed"
+# If the target ACL revision includes a branch we also need to do a pull.
+# This generally occurs with a release branch.
+if [[ "${CLFRAMEWORKREVISION}" == *"branches"* ]]; then
+  git pull
+  AssertZeroExitCode "ACL reference includes a branch but git pull failed."
+fi
 
 # Set commit hook so we can submit reviews to gerrit
-(curl -Lo `git rev-parse --git-dir`/hooks/commit-msg https://review.mlplatform.org/tools/hooks/commit-msg; chmod +x `git rev-parse --git-dir`/hooks/commit-msg)
+# shellcheck disable=SC2006
+(curl -Lo "$(git rev-parse --git-dir)"/hooks/commit-msg https://review.mlplatform.org/tools/hooks/commit-msg; chmod +x "$(git rev-parse --git-dir)"/hooks/commit-msg)
 AssertZeroExitCode "Setting commit hooks failed"
 
-popd > /dev/null # out of clframework
+popd > /dev/null # out of clframework / "$ACL_REPO_NAME"
 popd > /dev/null # back to wherever we were when called
 # Make sure the SHA of the revision that was checked out is the last line
 # of output from the script... just in case we ever need it.
-echo $CLFRAMEWORKREVISION
+echo "$CLFRAMEWORKREVISION"
 exit 0

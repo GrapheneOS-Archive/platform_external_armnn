@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "FullyConnectedLayer.hpp"
@@ -7,47 +7,28 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
 
 FullyConnectedLayer::FullyConnectedLayer(const FullyConnectedDescriptor& param, const char* name)
-    : LayerWithParameters(1, 1, LayerType::FullyConnected, param, name)
+    : LayerWithParameters(param.GetNumInputs(), 1, LayerType::FullyConnected, param, name)
 {
 }
 
 std::unique_ptr<IWorkload> FullyConnectedLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
-    // on this level constant data should not be released..
-    ARMNN_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
-
     FullyConnectedQueueDescriptor descriptor;
-
-    descriptor.m_Weight = m_Weight.get();
-    if (m_Param.m_BiasEnabled)
-    {
-        ARMNN_ASSERT_MSG(m_Bias != nullptr, "FullyConnectedLayer: Bias data should not be null.");
-        descriptor.m_Bias = m_Bias.get();
-    }
-
     SetAdditionalInfo(descriptor);
-
-    return factory.CreateFullyConnected(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::FullyConnected, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 FullyConnectedLayer* FullyConnectedLayer::Clone(Graph& graph) const
 {
     auto layer = CloneBase<FullyConnectedLayer>(graph, m_Param, GetName());
-
-    layer->m_Weight = m_Weight ? std::make_unique<ScopedCpuTensorHandle>(*m_Weight) : nullptr;
-    if (layer->m_Param.m_BiasEnabled)
-    {
-        layer->m_Bias = m_Bias ? std::make_unique<ScopedCpuTensorHandle>(*m_Bias) : nullptr;
-    }
-
     return std::move(layer);
 }
 
@@ -70,11 +51,9 @@ void FullyConnectedLayer::ValidateTensorShapesFromInputs()
 
     VerifyShapeInferenceType(outputShape, m_ShapeInferenceMethod);
 
-    // check if we m_Weight data is not nullptr
-    ARMNN_ASSERT_MSG(m_Weight != nullptr, "FullyConnectedLayer: Weights data should not be null.");
-
-    auto inferredShapes = InferOutputShapes({GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
-                                             m_Weight->GetTensorInfo().GetShape() });
+    std::vector<TensorShape> inferredShapes = InferOutputShapes(
+            {GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape(),
+             GetInputSlot(1).GetConnection()->GetTensorInfo().GetShape()});
 
     ARMNN_ASSERT(inferredShapes.size() == 1);
     ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified);
@@ -82,23 +61,15 @@ void FullyConnectedLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "FullyConnectedLayer");
 }
 
-Layer::ConstantTensors FullyConnectedLayer::GetConstantTensorsByRef()
+Layer::ImmutableConstantTensors FullyConnectedLayer::GetConstantTensorsByRef() const
 {
-    return {m_Weight, m_Bias};
+    Layer::ImmutableConstantTensors tensors = GetConnectedConstantAsInputTensors();
+    return tensors;
 }
 
-void FullyConnectedLayer::Accept(ILayerVisitor& visitor) const
+void FullyConnectedLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor weightsTensor(m_Weight->GetTensorInfo(), m_Weight->Map(true));
-    Optional<ConstTensor> optionalBiasTensor = EmptyOptional();
-
-    if (GetParameters().m_BiasEnabled)
-    {
-        ConstTensor biasTensor(m_Bias->GetTensorInfo(), m_Bias->GetConstTensor<void>());
-        optionalBiasTensor = Optional<ConstTensor>(biasTensor);
-    }
-
-    visitor.VisitFullyConnectedLayer(this, GetParameters(), weightsTensor, optionalBiasTensor, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

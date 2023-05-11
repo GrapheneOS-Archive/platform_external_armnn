@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,7 +8,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <armnnUtils/TensorUtils.hpp>
 #include <armnn/utility/NumericCast.hpp>
@@ -53,9 +53,16 @@ arm_compute::Status ClArgMinMaxWorkloadValidate(const TensorInfo& input,
 
 
 ClArgMinMaxWorkload::ClArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& descriptor,
-                                         const WorkloadInfo& info)
-        : BaseWorkload<ArgMinMaxQueueDescriptor>(descriptor, info)
+                                         const WorkloadInfo& info,
+                                         const arm_compute::CLCompileContext& clCompileContext)
+        : ClBaseWorkload<ArgMinMaxQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClArgMinMaxWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     arm_compute::ICLTensor& input = static_cast<IClTensorHandle*>(this->m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& output = static_cast<IClTensorHandle*>(this->m_Data.m_Outputs[0])->GetTensor();
 
@@ -63,19 +70,30 @@ ClArgMinMaxWorkload::ClArgMinMaxWorkload(const ArgMinMaxQueueDescriptor& descrip
     auto unsignedAxis = armnnUtils::GetUnsignedAxis(numDims, m_Data.m_Parameters.m_Axis);
     int aclAxis = armnn::numeric_cast<int>(CalcAclAxis(numDims, unsignedAxis));
 
-    if (m_Data.m_Parameters.m_Function == ArgMinMaxFunction::Max)
     {
-        m_ArgMinMaxLayer.configure(&input, aclAxis, &output, arm_compute::ReductionOperation::ARG_IDX_MAX);
-    }
-    else
-    {
-        m_ArgMinMaxLayer.configure(&input, aclAxis, &output, arm_compute::ReductionOperation::ARG_IDX_MIN);
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClArgMinMaxWorkload_configure");
+        if (m_Data.m_Parameters.m_Function == ArgMinMaxFunction::Max)
+        {
+            m_ArgMinMaxLayer.configure(clCompileContext,
+                                       &input,
+                                       aclAxis,
+                                       &output,
+                                       arm_compute::ReductionOperation::ARG_IDX_MAX);
+        }
+        else
+        {
+            m_ArgMinMaxLayer.configure(clCompileContext,
+                                       &input,
+                                       aclAxis,
+                                       &output,
+                                       arm_compute::ReductionOperation::ARG_IDX_MIN);
+        }
     }
 }
 
 void ClArgMinMaxWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClArgMinMaxWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClArgMinMaxWorkload_Execute", this->GetGuid());
     RunClFunction(m_ArgMinMaxLayer, CHECK_LOCATION());
 }
 

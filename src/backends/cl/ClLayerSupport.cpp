@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,6 @@
 #include "ClBackendId.hpp"
 #include "ClBackendModelContext.hpp"
 
-#include <armnn/Descriptors.hpp>
 #include <armnn/BackendRegistry.hpp>
 
 #include <InternalTypes.hpp>
@@ -23,24 +22,30 @@
 #include "workloads/ClAdditionWorkload.hpp"
 #include "workloads/ClActivationWorkload.hpp"
 #include "workloads/ClArgMinMaxWorkload.hpp"
+#include "workloads/ClBatchMatMulWorkload.hpp"
 #include "workloads/ClBatchNormalizationFloatWorkload.hpp"
 #include "workloads/ClBatchToSpaceNdWorkload.hpp"
+#include "workloads/ClCastWorkload.hpp"
+#include "workloads/ClChannelShuffleWorkload.hpp"
 #include "workloads/ClComparisonWorkload.hpp"
 #include "workloads/ClConstantWorkload.hpp"
 #include "workloads/ClConvertFp16ToFp32Workload.hpp"
 #include "workloads/ClConvertFp32ToFp16Workload.hpp"
 #include "workloads/ClConvolution2dWorkload.hpp"
+#include "workloads/ClConvolution3dWorkload.hpp"
 #include "workloads/ClDepthToSpaceWorkload.hpp"
 #include "workloads/ClDepthwiseConvolutionWorkload.hpp"
 #include "workloads/ClDequantizeWorkload.hpp"
-#include "workloads/ClDivisionFloatWorkload.hpp"
+#include "workloads/ClDivisionWorkload.hpp"
 #include "workloads/ClExpWorkload.hpp"
 #include "workloads/ClFillWorkload.hpp"
 #include "workloads/ClFloorFloatWorkload.hpp"
 #include "workloads/ClFullyConnectedWorkload.hpp"
 #include "workloads/ClGatherWorkload.hpp"
+#include "workloads/ClGatherNdWorkload.hpp"
 #include "workloads/ClInstanceNormalizationWorkload.hpp"
 #include "workloads/ClL2NormalizationFloatWorkload.hpp"
+#include "workloads/ClLogWorkload.hpp"
 #include "workloads/ClLogSoftmaxWorkload.hpp"
 #include "workloads/ClLogicalAndWorkload.hpp"
 #include "workloads/ClLogicalNotWorkload.hpp"
@@ -56,23 +61,28 @@
 #include "workloads/ClPadWorkload.hpp"
 #include "workloads/ClPermuteWorkload.hpp"
 #include "workloads/ClPooling2dWorkload.hpp"
+#include "workloads/ClPooling3dWorkload.hpp"
 #include "workloads/ClPreluWorkload.hpp"
 #include "workloads/ClQLstmWorkload.hpp"
 #include "workloads/ClQuantizedLstmWorkload.hpp"
 #include "workloads/ClQuantizeWorkload.hpp"
+#include "workloads/ClReduceWorkload.hpp"
 #include "workloads/ClReshapeWorkload.hpp"
 #include "workloads/ClResizeWorkload.hpp"
 #include "workloads/ClRsqrtWorkload.hpp"
+#include "workloads/ClSinWorkload.hpp"
 #include "workloads/ClSliceWorkload.hpp"
 #include "workloads/ClSoftmaxWorkload.hpp"
 #include "workloads/ClSpaceToBatchNdWorkload.hpp"
 #include "workloads/ClSpaceToDepthWorkload.hpp"
 #include "workloads/ClSplitterWorkload.hpp"
+#include "workloads/ClSqrtWorkload.hpp"
 #include "workloads/ClStackWorkload.hpp"
 #include "workloads/ClStridedSliceWorkload.hpp"
 #include "workloads/ClSubtractionWorkload.hpp"
 #include "workloads/ClTransposeConvolution2dWorkload.hpp"
 #include "workloads/ClTransposeWorkload.hpp"
+#include "workloads/ClUnidirectionalSequenceLstmFloatWorkload.hpp"
 #endif
 
 
@@ -171,12 +181,494 @@ ClLayerSupport::ClLayerSupport()
 {
 }
 
-bool ClLayerSupport::IsAbsSupported(const TensorInfo& input,
-                                    const TensorInfo& output,
-                                    Optional<std::string&> reasonIfUnsupported) const
+bool ClLayerSupport::IsLayerSupported(const LayerType& type,
+                                      const std::vector<TensorInfo>& infos,
+                                      const BaseDescriptor& descriptor,
+                                      const Optional<LstmInputParamsInfo>& lstmParamsInfo,
+                                      const Optional<QuantizedLstmInputParamsInfo>& quantizedLstmParamsInfo,
+                                      Optional<std::string&> reasonIfUnsupported) const
 {
-    ElementwiseUnaryDescriptor descriptor(UnaryOperation::Abs);
-    return IsElementwiseUnarySupported(input, output, descriptor, reasonIfUnsupported);
+    switch (type)
+    {
+        case LayerType::Activation:
+            return IsActivationSupported(infos[0],
+                                         infos[1],
+                                         *(PolymorphicDowncast<const ActivationDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Addition:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsAdditionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::ArgMinMax:
+            return IsArgMinMaxSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const ArgMinMaxDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::BatchMatMul:
+            return IsBatchMatMulSupported(infos[0],
+                                          infos[1],
+                                          infos[2],
+                                          *(PolymorphicDowncast<const BatchMatMulDescriptor*>(&descriptor)),
+                                          reasonIfUnsupported);
+        case LayerType::BatchNormalization:
+            return IsBatchNormalizationSupported(infos[0],
+                                                 infos[1],
+                                                 infos[2],
+                                                 infos[3],
+                                                 infos[4],
+                                                 infos[5],
+                                                 *(PolymorphicDowncast<const BatchNormalizationDescriptor*>
+                                                     (&descriptor)),
+                                                 reasonIfUnsupported);
+        case LayerType::BatchToSpaceNd:
+            return IsBatchToSpaceNdSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const BatchToSpaceNdDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Cast:
+            return IsCastSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::ChannelShuffle:
+            return IsChannelShuffleSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const ChannelShuffleDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Comparison:
+            return IsComparisonSupported(infos[0],
+                                         infos[1],
+                                         infos[2],
+                                         *(PolymorphicDowncast<const ComparisonDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Concat:
+        {
+            std::vector<const TensorInfo*> inputInfos;
+            for (uint32_t i = 0; i < (infos.size() - 1); i++)
+            {
+                inputInfos.push_back(&infos[i]);
+            }
+            return IsConcatSupported(inputInfos,
+                                     infos[infos.size() - 1],
+                                     *(PolymorphicDowncast<const OriginsDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        }
+        case LayerType::Constant:
+            return IsConstantSupported(infos[0], reasonIfUnsupported);
+        case LayerType::ConvertFp16ToFp32:
+            return IsConvertFp16ToFp32Supported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::ConvertFp32ToFp16:
+            return IsConvertFp32ToFp16Supported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Convolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of Convolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const Convolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsConvolution2dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                EmptyOptional(),
+                                                reasonIfUnsupported);
+            }
+            else
+            {
+                return IsConvolution2dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                infos[3],
+                                                reasonIfUnsupported);
+            }
+        }
+        case LayerType::Convolution3d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of Convolution3d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const Convolution3dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsConvolution3dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                EmptyOptional(),
+                                                reasonIfUnsupported);
+            }
+            else
+            {
+                return IsConvolution3dSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                infos[3],
+                                                reasonIfUnsupported);
+            }
+        }
+        case LayerType::DepthToSpace:
+            return IsDepthToSpaceSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const DepthToSpaceDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::DepthwiseConvolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of DepthwiseConvolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const DepthwiseConvolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsDepthwiseConvolutionSupported(infos[0],
+                                                infos[1],
+                                                desc,
+                                                infos[2],
+                                                EmptyOptional(),
+                                                reasonIfUnsupported);
+            }
+            else
+            {
+                return IsDepthwiseConvolutionSupported(infos[0],
+                                                         infos[1],
+                                                         desc,
+                                                         infos[2],
+                                                         infos[3],
+                                                         reasonIfUnsupported);
+            }
+        }
+        case LayerType::Dequantize:
+            return IsDequantizeSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Division:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsDivisionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::ElementwiseBinary:
+        {
+            auto desc = *(PolymorphicDowncast<const ElementwiseBinaryDescriptor *>(&descriptor));
+
+            switch (desc.m_Operation)
+            {
+                case BinaryOperation::Add:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClAdditionValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2],
+                                                   nullptr);
+                case BinaryOperation::Div:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClDivisionWorkloadValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2],
+                                                   nullptr);
+                case BinaryOperation::Minimum:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClMinimumWorkloadValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2]);
+                case BinaryOperation::Maximum:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClMaximumWorkloadValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2]);
+                case BinaryOperation::Mul:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClMultiplicationWorkloadValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2],
+                                                   nullptr);
+                case BinaryOperation::Sub:
+                    FORWARD_WORKLOAD_VALIDATE_FUNC(ClSubtractionValidate,
+                                                   reasonIfUnsupported,
+                                                   infos[0],
+                                                   infos[1],
+                                                   infos[2],
+                                                   nullptr);
+                default:
+                    return false;
+            }
+        }
+        case LayerType::ElementwiseUnary:
+            return IsElementwiseUnarySupported(infos[0],
+                                               infos[1],
+                                               *(PolymorphicDowncast<const ElementwiseUnaryDescriptor*>(&descriptor)),
+                                               reasonIfUnsupported);
+        case LayerType::Fill:
+            return IsFillSupported(infos[0],
+                                   infos[1],
+                                   *(PolymorphicDowncast<const FillDescriptor*>(&descriptor)),
+                                   reasonIfUnsupported);
+        case LayerType::Floor:
+            return IsFloorSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::FullyConnected:
+            return IsFullyConnectedSupported(infos[0],
+                                             infos[1],
+                                             infos[2],
+                                             infos[3],
+                                             *(PolymorphicDowncast<const FullyConnectedDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::Gather:
+            return IsGatherSupported(infos[0],
+                                     infos[1],
+                                     infos[2],
+                                     *(PolymorphicDowncast<const GatherDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::GatherNd:
+            return IsGatherNdSupported(infos[0],
+                                       infos[1],
+                                       infos[2],
+                                       reasonIfUnsupported);
+        case LayerType::Input:
+            return IsInputSupported(infos[0], reasonIfUnsupported);
+        case LayerType::InstanceNormalization:
+            return IsInstanceNormalizationSupported(infos[0],
+                                                    infos[1],
+                                                    *(PolymorphicDowncast<const InstanceNormalizationDescriptor*>
+                                                        (&descriptor)),
+                                                    reasonIfUnsupported);
+        case LayerType::L2Normalization:
+            return IsL2NormalizationSupported(infos[0],
+                                              infos[1],
+                                              *(PolymorphicDowncast<const L2NormalizationDescriptor*>(&descriptor)),
+                                              reasonIfUnsupported);
+        case LayerType::LogicalBinary:
+            return IsLogicalBinarySupported(infos[0],
+                                            infos[1],
+                                            infos[2],
+                                            *(PolymorphicDowncast<const LogicalBinaryDescriptor*>(&descriptor)),
+                                            reasonIfUnsupported);
+        case LayerType::LogSoftmax:
+            return IsLogSoftmaxSupported(infos[0],
+                                         infos[1],
+                                         *(PolymorphicDowncast<const LogSoftmaxDescriptor*>(&descriptor)),
+                                         reasonIfUnsupported);
+        case LayerType::Lstm:
+            return IsLstmSupported(infos[0],
+                                   infos[1],
+                                   infos[2],
+                                   infos[3],
+                                   infos[4],
+                                   infos[5],
+                                   infos[6],
+                                   *(PolymorphicDowncast<const LstmDescriptor*>(&descriptor)),
+                                   lstmParamsInfo.value(),
+                                   reasonIfUnsupported);
+        case LayerType::Map:
+            return true;
+        case LayerType::MemCopy:
+            return LayerSupportBase::IsMemCopySupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::MemImport:
+            return LayerSupportBase::IsMemImportSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::Merge:
+            return LayerSupportBase::IsMergeSupported(infos[0],
+                                                      infos[1],
+                                                      infos[2],
+                                                      reasonIfUnsupported);
+        case LayerType::Maximum:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsMaximumSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::Mean:
+            return IsMeanSupported(infos[0],
+                                   infos[1],
+                                   *(PolymorphicDowncast<const MeanDescriptor*>(&descriptor)),
+                                   reasonIfUnsupported);
+        case LayerType::Minimum:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsMinimumSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::Multiplication:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsMultiplicationSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::Normalization:
+            return IsNormalizationSupported(infos[0],
+                                            infos[1],
+                                            *(PolymorphicDowncast<const NormalizationDescriptor*>(&descriptor)),
+                                            reasonIfUnsupported);
+        case LayerType::Output:
+            return IsOutputSupported(infos[0], reasonIfUnsupported);
+        case LayerType::Pad:
+            return IsPadSupported(infos[0],
+                                  infos[1],
+                                  *(PolymorphicDowncast<const PadDescriptor*>(&descriptor)),
+                                  reasonIfUnsupported);
+        case LayerType::Permute:
+            return IsPermuteSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const PermuteDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::Pooling2d:
+            return IsPooling2dSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const Pooling2dDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::Pooling3d:
+            return IsPooling3dSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const Pooling3dDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::Prelu:
+            return IsPreluSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+        case LayerType::QLstm:
+            return IsQLstmSupported(infos[0],
+                                    infos[1],
+                                    infos[2],
+                                    infos[3],
+                                    infos[4],
+                                    infos[5],
+                                    *(PolymorphicDowncast<const QLstmDescriptor*>(&descriptor)),
+                                    lstmParamsInfo.value(),
+                                    reasonIfUnsupported);
+        case LayerType::Quantize:
+            return IsQuantizeSupported(infos[0], infos[1], reasonIfUnsupported);
+        case LayerType::QuantizedLstm:
+            return IsQuantizedLstmSupported(infos[0],
+                                            infos[1],
+                                            infos[2],
+                                            infos[3],
+                                            infos[4],
+                                            quantizedLstmParamsInfo.value(),
+                                            reasonIfUnsupported);
+        case LayerType::Rank:
+            return true;
+        case LayerType::Reduce:
+            return IsReduceSupported(infos[0],
+                                     infos[1],
+                                     *(PolymorphicDowncast<const ReduceDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::Reshape:
+            return IsReshapeSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const ReshapeDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::Resize:
+            return IsResizeSupported(infos[0],
+                                     infos[1],
+                                     *(PolymorphicDowncast<const ResizeDescriptor*>(&descriptor)),
+                                     reasonIfUnsupported);
+        case LayerType::Shape:
+            return LayerSupportBase::IsShapeSupported(infos[0],
+                                                      infos[1],
+                                                      reasonIfUnsupported);
+        case LayerType::Slice:
+            return IsSliceSupported(infos[0],
+                                    infos[1],
+                                    *(PolymorphicDowncast<const SliceDescriptor*>(&descriptor)),
+                                    reasonIfUnsupported);
+        case LayerType::Softmax:
+            return IsSoftmaxSupported(infos[0],
+                                      infos[1],
+                                      *(PolymorphicDowncast<const SoftmaxDescriptor*>(&descriptor)),
+                                      reasonIfUnsupported);
+        case LayerType::SpaceToBatchNd:
+            return IsSpaceToBatchNdSupported(infos[0],
+                                             infos[1],
+                                             *(PolymorphicDowncast<const SpaceToBatchNdDescriptor*>(&descriptor)),
+                                             reasonIfUnsupported);
+        case LayerType::SpaceToDepth:
+            return IsSpaceToDepthSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const SpaceToDepthDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::Splitter:
+        {
+            std::vector<TensorInfo> outputInfos;
+            for (uint32_t i = 1; i < infos.size(); i++)
+            {
+                outputInfos.push_back(infos[i]);
+            }
+            return IsSplitterSupported(infos[0],
+                                       {outputInfos.begin(), outputInfos.end()},
+                                       *(PolymorphicDowncast<const ViewsDescriptor*>(&descriptor)),
+                                       reasonIfUnsupported);
+        }
+        case LayerType::Stack:
+        {
+            std::vector<const TensorInfo*> inputInfos;
+            for (uint32_t i = 0; i < infos.size() - 1; i++)
+            {
+                inputInfos.push_back(&infos[i]);
+            }
+            return IsStackSupported(inputInfos,
+                                    infos[infos.size() - 1],
+                                    *(PolymorphicDowncast<const StackDescriptor*>(&descriptor)),
+                                    reasonIfUnsupported);
+        }
+        case LayerType::StridedSlice:
+            return IsStridedSliceSupported(infos[0],
+                                           infos[1],
+                                           *(PolymorphicDowncast<const StridedSliceDescriptor*>(&descriptor)),
+                                           reasonIfUnsupported);
+        case LayerType::Subtraction:
+            ARMNN_NO_DEPRECATE_WARN_BEGIN
+            return IsSubtractionSupported(infos[0], infos[1], infos[2], reasonIfUnsupported);
+            ARMNN_NO_DEPRECATE_WARN_END
+        case LayerType::Transpose:
+            return IsTransposeSupported(infos[0],
+                                        infos[1],
+                                        *(PolymorphicDowncast<const TransposeDescriptor*>(&descriptor)),
+                                        reasonIfUnsupported);
+        case LayerType::TransposeConvolution2d:
+        {
+            if (infos.size() != 4)
+            {
+                throw InvalidArgumentException("Invalid number of TransposeConvolution2d TensorInfos. "
+                                               "TensorInfos should be of format: {input, output, weights, biases}.");
+            }
+
+            auto desc = *(PolymorphicDowncast<const TransposeConvolution2dDescriptor*>(&descriptor));
+            if (infos[3] == TensorInfo())
+            {
+                return IsTransposeConvolution2dSupported(infos[0],
+                                                         infos[1],
+                                                         desc,
+                                                         infos[2],
+                                                         EmptyOptional(),
+                                                         reasonIfUnsupported);
+            }
+            else
+            {
+                return IsTransposeConvolution2dSupported(infos[0],
+                                                         infos[1],
+                                                         desc,
+                                                         infos[2],
+                                                         infos[3],
+                                                         reasonIfUnsupported);
+            }
+        }
+        case LayerType::UnidirectionalSequenceLstm:
+            return IsUnidirectionalSequenceLstmSupported(infos[0],
+                                                         infos[1],
+                                                         infos[2],
+                                                         infos[3],
+                                                         infos[4],
+                                                         infos[5],
+                                                         *(PolymorphicDowncast<const
+                                                            UnidirectionalSequenceLstmDescriptor*>(&descriptor)),
+                                                         lstmParamsInfo.value(),
+                                                         reasonIfUnsupported);
+        case LayerType::Unmap:
+            return true;
+        default:
+            // layers not supported in cl by default:
+            // debug, detectionpostprocess, fakequantization,
+            // precompiled, standin, switch, pooling3d
+            return false;
+    }
 }
 
 bool ClLayerSupport::IsActivationSupported(const TensorInfo& input,
@@ -217,6 +709,20 @@ bool ClLayerSupport::IsArgMinMaxSupported(const TensorInfo& input,
                                    descriptor);
 }
 
+bool ClLayerSupport::IsBatchMatMulSupported(const TensorInfo& inputX,
+                                            const TensorInfo& inputY,
+                                            const TensorInfo& output,
+                                            const BatchMatMulDescriptor& descriptor,
+                                            Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClBatchMatMulValidate,
+                                   reasonIfUnsupported,
+                                   inputX,
+                                   inputY,
+                                   output,
+                                   descriptor);
+}
+
 bool ClLayerSupport::IsBatchNormalizationSupported(const TensorInfo& input,
                                                    const TensorInfo& output,
                                                    const TensorInfo& mean,
@@ -250,6 +756,28 @@ bool ClLayerSupport::IsBatchToSpaceNdSupported(const TensorInfo& input,
                                    descriptor);
 }
 
+bool ClLayerSupport::IsCastSupported(const TensorInfo& input,
+                                     const TensorInfo& output,
+                                     Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClCastValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   output);
+}
+
+bool ClLayerSupport::IsChannelShuffleSupported(const TensorInfo& input,
+                                               const TensorInfo& output,
+                                               const ChannelShuffleDescriptor& descriptor,
+                                               Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClChannelShuffleValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   output,
+                                   descriptor);
+}
+
 bool ClLayerSupport::IsComparisonSupported(const TensorInfo& input0,
                                            const TensorInfo& input1,
                                            const TensorInfo& output,
@@ -266,7 +794,7 @@ bool ClLayerSupport::IsComparisonSupported(const TensorInfo& input0,
 
 bool ClLayerSupport::IsConcatSupported(const std::vector<const TensorInfo*> inputs,
                                        const TensorInfo& output,
-                                       const ConcatDescriptor& descriptor,
+                                       const OriginsDescriptor& descriptor,
                                        Optional<std::string&> reasonIfUnsupported) const
 {
     if (descriptor.GetNumDimensions() <= descriptor.GetConcatAxis())
@@ -366,6 +894,39 @@ bool ClLayerSupport::IsConvolution2dSupported(const TensorInfo& input,
                                    nullptr);
 }
 
+bool ClLayerSupport::IsConvolution3dSupported(const TensorInfo& input,
+                                              const TensorInfo& output,
+                                              const Convolution3dDescriptor& descriptor,
+                                              const TensorInfo& weights,
+                                              const Optional<TensorInfo>& biases,
+                                              Optional<std::string&> reasonIfUnsupported) const
+{
+    bool isFastMathEnabled = false;
+#if defined(ARMCOMPUTECL_ENABLED)
+    if (m_ModelContextPtr)
+{
+    if (m_ModelContextPtr.get() != nullptr)
+    {
+        auto modelOptions = dynamic_cast<ClBackendModelContext*>(m_ModelContextPtr.get());
+        if (modelOptions)
+        {
+            isFastMathEnabled = modelOptions->IsFastMathEnabled();
+        }
+    }
+}
+#endif
+
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClConvolution3dWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   output,
+                                   descriptor,
+                                   weights,
+                                   biases,
+                                   isFastMathEnabled,
+                                   nullptr);
+}
+
 bool ClLayerSupport::IsDequantizeSupported(const TensorInfo& input,
                                            const TensorInfo& output,
                                            Optional<std::string&> reasonIfUnsupported) const
@@ -453,6 +1014,16 @@ bool ClLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
                                            reasonIfUnsupported,
                                            input,
                                            output);
+        case UnaryOperation::Log:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClLogWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::LogicalNot:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClLogicalNotWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
         case UnaryOperation::Neg:
             FORWARD_WORKLOAD_VALIDATE_FUNC(ClNegWorkloadValidate,
                                            reasonIfUnsupported,
@@ -463,8 +1034,13 @@ bool ClLayerSupport::IsElementwiseUnarySupported(const TensorInfo& input,
                                            reasonIfUnsupported,
                                            input,
                                            output);
-        case UnaryOperation::LogicalNot:
-            FORWARD_WORKLOAD_VALIDATE_FUNC(ClLogicalNotWorkloadValidate,
+        case UnaryOperation::Sin:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClSinWorkloadValidate,
+                                           reasonIfUnsupported,
+                                           input,
+                                           output);
+        case UnaryOperation::Sqrt:
+            FORWARD_WORKLOAD_VALIDATE_FUNC(ClSqrtWorkloadValidate,
                                            reasonIfUnsupported,
                                            input,
                                            output);
@@ -526,13 +1102,16 @@ bool ClLayerSupport::IsGatherSupported(const TensorInfo& input0,
                                    descriptor);
 }
 
-bool ClLayerSupport::IsGreaterSupported(const TensorInfo& input0,
-                                        const TensorInfo& input1,
-                                        const TensorInfo& output,
-                                        Optional<std::string&> reasonIfUnsupported) const
+bool ClLayerSupport::IsGatherNdSupported(const TensorInfo& input0,
+                                         const TensorInfo& input1,
+                                         const TensorInfo& output,
+                                         Optional<std::string&> reasonIfUnsupported) const
 {
-    ComparisonDescriptor descriptor(ComparisonOperation::Greater);
-    return IsComparisonSupported(input0, input1, output, descriptor, reasonIfUnsupported);
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClGatherNdWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input0,
+                                   input1,
+                                   output);
 }
 
 bool ClLayerSupport::IsInputSupported(const TensorInfo& input,
@@ -653,14 +1232,6 @@ bool ClLayerSupport::IsMeanSupported(const TensorInfo& input,
                                    descriptor);
 }
 
-bool ClLayerSupport::IsMergerSupported(const std::vector<const TensorInfo*> inputs,
-                                       const TensorInfo& output,
-                                       const MergerDescriptor& descriptor,
-                                       Optional<std::string&> reasonIfUnsupported) const
-{
-    return IsConcatSupported(inputs, output, descriptor, reasonIfUnsupported);
-}
-
 bool ClLayerSupport::IsMinimumSupported(const TensorInfo& input0,
                                         const TensorInfo& input1,
                                         const TensorInfo& output,
@@ -726,6 +1297,14 @@ bool ClLayerSupport::IsPooling2dSupported(const TensorInfo& input,
                                           Optional<std::string&> reasonIfUnsupported) const
 {
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClPooling2dWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
+}
+
+bool ClLayerSupport::IsPooling3dSupported(const TensorInfo& input,
+                                          const TensorInfo& output,
+                                          const Pooling3dDescriptor& descriptor,
+                                          Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClPooling3dWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
 }
 
 bool ClLayerSupport::IsPreluSupported(const armnn::TensorInfo &input,
@@ -798,6 +1377,18 @@ bool ClLayerSupport::IsQuantizeSupported(const TensorInfo& input,
                                    output);
 }
 
+bool ClLayerSupport::IsReduceSupported(const TensorInfo& input,
+                                       const TensorInfo& output,
+                                       const ReduceDescriptor& descriptor,
+                                       Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClReduceWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   output,
+                                   descriptor);
+}
+
 bool ClLayerSupport::IsReshapeSupported(const TensorInfo& input,
                                         const TensorInfo& output,
                                         const ReshapeDescriptor& descriptor,
@@ -813,29 +1404,6 @@ bool ClLayerSupport::IsResizeSupported(const TensorInfo& input,
                                        Optional<std::string&> reasonIfUnsupported) const
 {
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClResizeWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
-}
-
-bool ClLayerSupport::IsResizeBilinearSupported(const TensorInfo& input,
-                                               const TensorInfo& output,
-                                               Optional<std::string&> reasonIfUnsupported) const
-{
-    ResizeDescriptor descriptor;
-    descriptor.m_Method     = ResizeMethod::Bilinear;
-    descriptor.m_DataLayout = DataLayout::NCHW;
-
-    const TensorShape& outputShape = output.GetShape();
-    descriptor.m_TargetHeight = outputShape[2];
-    descriptor.m_TargetWidth  = outputShape[3];
-
-    return IsResizeSupported(input, output, descriptor, reasonIfUnsupported);
-}
-
-bool ClLayerSupport::IsRsqrtSupported(const TensorInfo& input,
-                                      const TensorInfo& output,
-                                      Optional<std::string&> reasonIfUnsupported) const
-{
-    ElementwiseUnaryDescriptor descriptor(UnaryOperation::Rsqrt);
-    return IsElementwiseUnarySupported(input, output, descriptor, reasonIfUnsupported);
 }
 
 bool ClLayerSupport::IsSliceSupported(const TensorInfo& input,
@@ -876,17 +1444,6 @@ bool ClLayerSupport::IsSpaceToDepthSupported(const TensorInfo& input,
                                    input,
                                    output,
                                    descriptor);
-}
-
-bool ClLayerSupport::IsSplitterSupported(const TensorInfo& input,
-                                         const ViewsDescriptor& descriptor,
-                                         Optional<std::string&> reasonIfUnsupported) const
-{
-    IgnoreUnused(descriptor);
-    return IsSupportedForDataTypeCl(reasonIfUnsupported,
-                                    input.GetDataType(),
-                                    &TrueFunc<>,
-                                    &TrueFunc<>);
 }
 
 bool ClLayerSupport::IsSplitterSupported(const TensorInfo& input,
@@ -981,6 +1538,28 @@ bool ClLayerSupport::IsTransposeSupported(const TensorInfo& input,
                                           Optional<std::string&> reasonIfUnsupported) const
 {
     FORWARD_WORKLOAD_VALIDATE_FUNC(ClTransposeWorkloadValidate, reasonIfUnsupported, input, output, descriptor);
+}
+
+bool ClLayerSupport::IsUnidirectionalSequenceLstmSupported(const TensorInfo& input,
+                                                           const TensorInfo& outputStateIn,
+                                                           const TensorInfo& cellStateIn,
+                                                           const TensorInfo& outputStateOut,
+                                                           const TensorInfo& cellStateOut,
+                                                           const TensorInfo& output,
+                                                           const UnidirectionalSequenceLstmDescriptor& descriptor,
+                                                           const LstmInputParamsInfo& paramsInfo,
+                                                           Optional<std::string&> reasonIfUnsupported) const
+{
+    FORWARD_WORKLOAD_VALIDATE_FUNC(ClUnidirectionalSequenceLstmFloatWorkloadValidate,
+                                   reasonIfUnsupported,
+                                   input,
+                                   outputStateIn,
+                                   cellStateIn,
+                                   outputStateOut,
+                                   cellStateOut,
+                                   output,
+                                   descriptor,
+                                   paramsInfo);
 }
 
 } // namespace armnn

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "TestUtils.hpp"
+#include <TestUtils.hpp>
 
 #include <Graph.hpp>
 #include <layers/ArgMinMaxLayer.hpp>
@@ -14,7 +14,7 @@
 #include <layers/PreluLayer.hpp>
 #include <layers/StackLayer.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 void ArgMinMaxInferOutputShapeImpl(const armnn::ArgMinMaxDescriptor       descriptor,
                                    const std::vector<armnn::TensorShape>& inputShapes,
@@ -37,11 +37,11 @@ void ArgMinMaxInferOutputShape4dTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape( { 1, 3, 4 } );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void ArgMinMaxInferOutputShape3dTest()
@@ -56,11 +56,11 @@ void ArgMinMaxInferOutputShape3dTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape( { 3, 2 } );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void ArgMinMaxInferOutputShape2dTest()
@@ -75,11 +75,11 @@ void ArgMinMaxInferOutputShape2dTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape( { 3 } );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void ArgMinMaxInferOutputShape1dTest()
@@ -94,11 +94,11 @@ void ArgMinMaxInferOutputShape1dTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(ArgMinMaxInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape( { 1 } );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void BatchToSpaceInferOutputShapeTest()
@@ -121,7 +121,7 @@ void BatchToSpaceInferOutputShapeTest()
     const std::vector<unsigned int> expectedDimSizes = {2, 2, 4, 1};
     armnn::TensorShape expectedShape(4, expectedDimSizes.data());
 
-    BOOST_CHECK(expectedShape == batchToSpaceLayer->InferOutputShapes(shapes).at(0));
+    CHECK(expectedShape == batchToSpaceLayer->InferOutputShapes(shapes).at(0));
 }
 
 void SpaceToDepthInferOutputShapeTest()
@@ -143,7 +143,7 @@ void SpaceToDepthInferOutputShapeTest()
     const std::vector<unsigned int> expectedDimSizes{ 1, 8, 4, 12 };
     armnn::TensorShape expectedShape(4, expectedDimSizes.data());
 
-    BOOST_CHECK(expectedShape == spaceToDepthLayer->InferOutputShapes(shapes).at(0));
+    CHECK(expectedShape == spaceToDepthLayer->InferOutputShapes(shapes).at(0));
 }
 
 void PreluInferOutputShapeImpl(const std::vector<armnn::TensorShape>& inputShapes,
@@ -168,10 +168,10 @@ void PreluInferOutputShapeSameDimsTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
+    CHECK_NOTHROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
 
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShapes[0]);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShapes[0]);
 }
 
 void PreluInferOutputShapeInputBiggerTest()
@@ -188,10 +188,10 @@ void PreluInferOutputShapeInputBiggerTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
+    CHECK_NOTHROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
 
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShapes[0]);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShapes[0]);
 }
 
 void PreluInferOutputShapeAlphaBiggerTest()
@@ -208,10 +208,10 @@ void PreluInferOutputShapeAlphaBiggerTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
+    CHECK_NOTHROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
 
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShapes[0]);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShapes[0]);
 }
 
 void PreluInferOutputShapeNoMatchTest()
@@ -228,10 +228,10 @@ void PreluInferOutputShapeNoMatchTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
+    CHECK_NOTHROW(PreluInferOutputShapeImpl(inputShapes, outputShapes));
 
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] != expectedOutputShapes[0]);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] != expectedOutputShapes[0]);
 }
 
 void CreatePreluLayerHelper(armnn::Graph& graph,
@@ -264,7 +264,7 @@ void PreluValidateTensorShapesFromInputsMatchTest()
     CreatePreluLayerHelper(graph, { 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 4, 3, 2 });
 
     // Graph::InferTensorInfos calls Layer::ValidateTensorShapesFromInputs
-    BOOST_CHECK_NO_THROW(graph.InferTensorInfos());
+    CHECK_NOTHROW(graph.InferTensorInfos());
 }
 
 void PreluValidateTensorShapesFromInputsNoMatchTest()
@@ -275,7 +275,7 @@ void PreluValidateTensorShapesFromInputsNoMatchTest()
     CreatePreluLayerHelper(graph, { 1, 4, 1, 2 }, { 5, 4, 3, 1 }, { 5, 7, 3, 2 });
 
     // Graph::InferTensorInfos calls Layer::ValidateTensorShapesFromInputs
-    BOOST_CHECK_THROW(graph.InferTensorInfos(), armnn::LayerValidationException);
+    CHECK_THROWS_AS(graph.InferTensorInfos(), armnn::LayerValidationException);
 }
 
 void StackInferOutputShapeImpl(const armnn::StackDescriptor           descriptor,
@@ -307,14 +307,14 @@ void StackInferOutputShapeFromInputsMatchTest()
     };
 
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(StackInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(StackInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape
     (
         { 4, 3, 2 }
     );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void StackInferOutputShapeFromInputsNoMatchTest()
@@ -338,14 +338,14 @@ void StackInferOutputShapeFromInputsNoMatchTest()
 
     // Output shape is inferred from the descriptor, so should still be correct despite mismatching input shapes
     std::vector<armnn::TensorShape> outputShapes;
-    BOOST_CHECK_NO_THROW(StackInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
+    CHECK_NOTHROW(StackInferOutputShapeImpl(descriptor, inputShapes, outputShapes));
 
     armnn::TensorShape expectedOutputShape
     (
         { 4, 3, 2 }
     );
-    BOOST_CHECK(outputShapes.size() == 1);
-    BOOST_CHECK(outputShapes[0] == expectedOutputShape);
+    CHECK(outputShapes.size() == 1);
+    CHECK(outputShapes[0] == expectedOutputShape);
 }
 
 void CreateStackLayerHelper(armnn::Graph& graph,
@@ -402,7 +402,7 @@ void StackValidateTensorShapesFromInputsMatchTest()
     CreateStackLayerHelper(graph, descriptor, inputShapes, { 3, 2, 5 });
 
     // Graph::InferTensorInfos calls Layer::ValidateTensorShapesFromInputs
-    BOOST_CHECK_NO_THROW(graph.InferTensorInfos());
+    CHECK_NOTHROW(graph.InferTensorInfos());
 }
 
 void StackValidateTensorShapesFromInputsNoMatchTest()
@@ -428,7 +428,7 @@ void StackValidateTensorShapesFromInputsNoMatchTest()
     CreateStackLayerHelper(graph, descriptor, inputShapes, { 3, 2, 5 });
 
     // Graph::InferTensorInfos calls Layer::ValidateTensorShapesFromInputs
-    BOOST_CHECK_THROW(graph.InferTensorInfos(), armnn::LayerValidationException);
+    CHECK_THROWS_AS(graph.InferTensorInfos(), armnn::LayerValidationException);
 }
 
 void Convolution2dInferOutputShapeTest()
@@ -461,7 +461,44 @@ void Convolution2dInferOutputShapeTest()
     const std::vector<unsigned int> expectedOutputSizes = {1, 1, 4, 4};
     armnn::TensorShape expectedOutputShape(4, expectedOutputSizes.data());
 
-    BOOST_CHECK(expectedOutputShape == convolution2dLayer->InferOutputShapes(shapes).at(0));
+    CHECK(expectedOutputShape == convolution2dLayer->InferOutputShapes(shapes).at(0));
+}
+
+void Convolution3dInferOutputShapeTest()
+{
+    armnn::Graph graph;
+
+    armnn::Convolution3dDescriptor descriptor;
+    descriptor.m_DilationX = 1;
+    descriptor.m_DilationY = 1;
+    descriptor.m_DilationZ = 1;
+    descriptor.m_PadTop = 1;
+    descriptor.m_PadBottom = 1;
+    descriptor.m_PadLeft = 1;
+    descriptor.m_PadRight = 1;
+    descriptor.m_PadFront = 1;
+    descriptor.m_PadBack = 1;
+    descriptor.m_StrideX = 2;
+    descriptor.m_StrideY = 2;
+    descriptor.m_StrideZ = 2;
+    descriptor.m_DataLayout = armnn::DataLayout::NDHWC;
+
+    armnn::Convolution3dLayer* const convolution3dLayer =
+            graph.AddLayer<armnn::Convolution3dLayer>(descriptor, "convolution3d");
+
+    std::vector<armnn::TensorShape> shapes;
+    const std::vector<unsigned int> inputSize = {1, 5, 5, 5, 1};
+    armnn::TensorShape inputShape(5, inputSize.data());
+    shapes.push_back(inputShape);
+
+    const std::vector<unsigned int> filterSize = {3, 3, 3, 1, 1 };
+    armnn::TensorShape filterShape(5, filterSize.data());
+    shapes.push_back(filterShape);
+
+    const std::vector<unsigned int> expectedOutputSizes = {1, 3, 3, 3, 1};
+    armnn::TensorShape expectedOutputShape(5, expectedOutputSizes.data());
+
+    CHECK(expectedOutputShape == convolution3dLayer->InferOutputShapes(shapes).at(0));
 }
 
 void TransposeConvolution2dInferOutputShapeTest()
@@ -492,7 +529,7 @@ void TransposeConvolution2dInferOutputShapeTest()
     const std::vector<unsigned int> expectedOutputSizes = {1, 1, 6, 6};
     armnn::TensorShape expectedOutputShape(4, expectedOutputSizes.data());
 
-    BOOST_CHECK(expectedOutputShape == transposeConvolution2dLayer->InferOutputShapes(shapes).at(0));
+    CHECK(expectedOutputShape == transposeConvolution2dLayer->InferOutputShapes(shapes).at(0));
 }
 
 void DepthwiseConvolution2dInferOutputShapeTest()
@@ -518,14 +555,48 @@ void DepthwiseConvolution2dInferOutputShapeTest()
     armnn::TensorShape inputShape(4, inputSize.data());
     shapes.push_back(inputShape);
 
-    const std::vector<unsigned int> filterSize = { 1, 2, 3, 3};
+    const std::vector<unsigned int> filterSize = { 1, 3, 3, 2 };
     armnn::TensorShape filterShape(4, filterSize.data());
     shapes.push_back(filterShape);
 
     const std::vector<unsigned int> expectedOutputSizes = {1, 2, 4, 4};
     armnn::TensorShape expectedOutputShape(4, expectedOutputSizes.data());
 
-    BOOST_CHECK(expectedOutputShape == depthwiseConvolution2dLayer->InferOutputShapes(shapes).at(0));
+    CHECK(expectedOutputShape == depthwiseConvolution2dLayer->InferOutputShapes(shapes).at(0));
+}
+
+void Pooling3dInferOutputShapeTest()
+{
+    armnn::Graph graph;
+
+    armnn::Pooling3dDescriptor descriptor;
+    descriptor.m_PoolType = armnn::PoolingAlgorithm::Max;
+    descriptor.m_PoolDepth = 2;
+    descriptor.m_PoolHeight = 2;
+    descriptor.m_PoolWidth = 2;
+    descriptor.m_PadTop = 1;
+    descriptor.m_PadBottom = 1;
+    descriptor.m_PadLeft = 1;
+    descriptor.m_PadRight = 1;
+    descriptor.m_PadFront = 1;
+    descriptor.m_PadBack = 1;
+    descriptor.m_StrideX = 2;
+    descriptor.m_StrideY = 2;
+    descriptor.m_StrideZ = 2;
+    descriptor.m_DataLayout = armnn::DataLayout::NDHWC;
+
+    armnn::Pooling3dLayer* const pooling3dLayer =
+            graph.AddLayer<armnn::Pooling3dLayer>(descriptor, "pooling3d");
+
+    std::vector<armnn::TensorShape> shapes;
+    const std::vector<unsigned int> inputSize = {1, 4, 4, 4, 1};
+    armnn::TensorShape inputShape(5, inputSize.data());
+    shapes.push_back(inputShape);
+
+    const std::vector<unsigned int> expectedOutputSizes = {1, 3, 3, 3, 1};
+    armnn::TensorShape expectedOutputShape(5, expectedOutputSizes.data());
+
+    CHECK(expectedOutputShape == pooling3dLayer->InferOutputShapes(shapes).at(0));
 }
 
 // QLstm
@@ -577,12 +648,12 @@ void QLstmInferOutputShapeTest()
     };
 
     std::vector<armnn::TensorShape> actualOutShapes;
-    BOOST_CHECK_NO_THROW(QLstmInferOutputShapeImpl(descriptor, inShapes, actualOutShapes));
+    CHECK_NOTHROW(QLstmInferOutputShapeImpl(descriptor, inShapes, actualOutShapes));
 
-    BOOST_CHECK(actualOutShapes.size() == 3);
-    BOOST_CHECK(expectedOutShapes[0] == actualOutShapes[0]);
-    BOOST_CHECK(expectedOutShapes[1] == actualOutShapes[1]);
-    BOOST_CHECK(expectedOutShapes[2] == actualOutShapes[2]);
+    CHECK(actualOutShapes.size() == 3);
+    CHECK(expectedOutShapes[0] == actualOutShapes[0]);
+    CHECK(expectedOutShapes[1] == actualOutShapes[1]);
+    CHECK(expectedOutShapes[2] == actualOutShapes[2]);
 }
 
 // QuantizedLstm
@@ -624,9 +695,9 @@ void QuantizedLstmInferOutputShapeTest()
     };
 
     std::vector<armnn::TensorShape> actualOutShapes;
-    BOOST_CHECK_NO_THROW(QuantizedLstmInferOutputShapeImpl(inShapes, actualOutShapes));
+    CHECK_NOTHROW(QuantizedLstmInferOutputShapeImpl(inShapes, actualOutShapes));
 
-    BOOST_CHECK(actualOutShapes.size() == 2);
-    BOOST_CHECK(expectedOutShapes[0] == actualOutShapes[0]);
-    BOOST_CHECK(expectedOutShapes[1] == actualOutShapes[1]);
+    CHECK(actualOutShapes.size() == 2);
+    CHECK(expectedOutShapes[0] == actualOutShapes[0]);
+    CHECK(expectedOutShapes[1] == actualOutShapes[1]);
 }

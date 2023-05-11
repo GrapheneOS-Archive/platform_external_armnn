@@ -1,5 +1,5 @@
 //
-// Copyright © 2019 Arm Ltd. All rights reserved.
+// Copyright © 2019 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -30,9 +30,17 @@ arm_compute::Status ClSliceWorkloadValidate(const TensorInfo& input,
     return arm_compute::CLSlice::validate(&aclInput, &aclOutput, starts, ends);
 }
 
-ClSliceWorkload::ClSliceWorkload(const SliceQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<SliceQueueDescriptor>(descriptor, info)
+ClSliceWorkload::ClSliceWorkload(const SliceQueueDescriptor& descriptor,
+                                 const WorkloadInfo& info,
+                                 const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<SliceQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClSliceWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClSliceWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = PolymorphicDowncast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -43,12 +51,15 @@ ClSliceWorkload::ClSliceWorkload(const SliceQueueDescriptor& descriptor, const W
 
     std::tie(starts, ends) = SetClSliceData(m_Data.m_Parameters.m_Begin, m_Data.m_Parameters.m_Size);
 
-    m_SliceFunction.configure(&input, &output, starts, ends);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClSliceWorkload_configure");
+        m_SliceFunction.configure(clCompileContext, &input, &output, starts, ends);
+    }
 }
 
 void ClSliceWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClSliceWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClSliceWorkload_Execute", this->GetGuid());
     RunClFunction(m_SliceFunction, CHECK_LOCATION());
 }
 
