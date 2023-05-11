@@ -339,16 +339,18 @@ void TensorShape::CheckSpecifiedNumDimensions() const
 // ---
 
 TensorInfo::TensorInfo()
-: m_DataType(DataType::Float32)
+: m_DataType(DataType::Float32), m_IsConstant(false)
 {
 }
 
 TensorInfo::TensorInfo(const TensorShape& shape,
                        DataType dataType,
                        float quantizationScale,
-                       int32_t quantizationOffset)
+                       int32_t quantizationOffset,
+                       bool isConstant)
     : m_Shape(shape)
     , m_DataType(dataType)
+    , m_IsConstant(isConstant)
 {
     SetQuantizationScale(quantizationScale);
     SetQuantizationOffset(quantizationOffset);
@@ -358,9 +360,9 @@ TensorInfo::TensorInfo(unsigned int numDimensions,
                        const unsigned int* dimensionSizes,
                        DataType dataType,
                        float quantizationScale,
-                       int32_t quantizationOffset)
-    : m_Shape(numDimensions, dimensionSizes)
-    , m_DataType(dataType)
+                       int32_t quantizationOffset,
+                       bool isConstant)
+    : m_Shape(numDimensions, dimensionSizes), m_DataType(dataType), m_IsConstant(isConstant)
 {
     SetQuantizationScale(quantizationScale);
     SetQuantizationOffset(quantizationOffset);
@@ -369,9 +371,11 @@ TensorInfo::TensorInfo(unsigned int numDimensions,
 TensorInfo::TensorInfo(const TensorShape& shape,
                        DataType dataType,
                        const std::vector<float>& quantizationScales,
-                       unsigned int quantizationDim)
+                       unsigned int quantizationDim,
+                       bool isConstant)
     : m_Shape(shape)
     , m_DataType(dataType)
+    , m_IsConstant(isConstant)
 {
     SetQuantizationScales(quantizationScales);
     SetQuantizationDim(MakeOptional<unsigned int>(quantizationDim));
@@ -381,9 +385,11 @@ TensorInfo::TensorInfo(unsigned int numDimensions,
                        const unsigned int* dimensionSizes,
                        DataType dataType,
                        const std::vector<float>& quantizationScales,
-                       unsigned int quantizationDim)
+                       unsigned int quantizationDim,
+                       bool isConstant)
     : m_Shape(numDimensions, dimensionSizes)
     , m_DataType(dataType)
+    , m_IsConstant(isConstant)
 {
     SetQuantizationScales(quantizationScales);
     SetQuantizationDim(MakeOptional<unsigned int>(quantizationDim));
@@ -392,6 +398,7 @@ TensorInfo::TensorInfo(unsigned int numDimensions,
 TensorInfo::TensorInfo(const TensorInfo& other)
 : m_Shape(other.m_Shape)
 , m_DataType(other.m_DataType)
+, m_IsConstant(other.m_IsConstant)
 , m_Quantization(other.m_Quantization)
 {}
 
@@ -400,6 +407,7 @@ TensorInfo& TensorInfo::operator=(const TensorInfo& other)
     m_Shape = other.m_Shape;
     m_DataType = other.m_DataType;
     m_Quantization = other.m_Quantization;
+    m_IsConstant = other.m_IsConstant;
     return *this;
 }
 
@@ -407,7 +415,8 @@ bool TensorInfo::operator==(const TensorInfo& other) const
 {
     return ((m_Shape == other.m_Shape) &&
             (m_DataType == other.m_DataType) &&
-            (m_Quantization == other.m_Quantization));
+            (m_Quantization == other.m_Quantization) &&
+            (m_IsConstant == other.m_IsConstant));
 }
 
 bool TensorInfo::operator!=(const TensorInfo& other) const
@@ -495,6 +504,16 @@ void TensorInfo::SetQuantizationDim(const Optional<unsigned int>& quantizationDi
 bool TensorInfo::IsQuantized() const
 {
     return IsQuantizedType(m_DataType);
+}
+
+bool TensorInfo::IsConstant() const
+{
+    return m_IsConstant;
+}
+
+void TensorInfo::SetConstant(const bool IsConstant)
+{
+    m_IsConstant = IsConstant;
 }
 
 // ---

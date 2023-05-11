@@ -11,8 +11,8 @@
 
 #include <armnnUtils/DataLayoutIndexed.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 using namespace armnnUtils;
 
@@ -29,7 +29,7 @@ std::unique_ptr<IWorkload> Pooling2dLayer::CreateWorkload(const IWorkloadFactory
     Pooling2dQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreatePooling2d(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Pooling2d, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 Pooling2dLayer* Pooling2dLayer::Clone(Graph& graph) const
@@ -78,7 +78,7 @@ std::vector<TensorShape> Pooling2dLayer::InferOutputShapes(const std::vector<Ten
                 }
 
                 // MakeS sure that border operations will start from inside the input and not the padded area.
-                // This is what both Caffe and CL do...
+                // This is what CL does...
                 if ((size - 1)*stride >= inSize + lowPad)
                 {
                     --size;
@@ -117,9 +117,9 @@ void Pooling2dLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "Pooling2dLayer");
 }
 
-void Pooling2dLayer::Accept(ILayerVisitor& visitor) const
+void Pooling2dLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitPooling2dLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

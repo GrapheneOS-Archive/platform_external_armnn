@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "ReshapeLayer.hpp"
@@ -8,8 +8,8 @@
 
 #include <armnn/utility/IgnoreUnused.hpp>
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> ReshapeLayer::CreateWorkload(const IWorkloadFactory& 
     ReshapeQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateReshape(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Reshape, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ReshapeLayer* ReshapeLayer::Clone(Graph& graph) const
@@ -49,13 +49,14 @@ void ReshapeLayer::ValidateTensorShapesFromInputs()
     auto inferredShapes = InferOutputShapes({ GetInputSlot(0).GetConnection()->GetTensorInfo().GetShape() });
 
     ARMNN_ASSERT(inferredShapes.size() == 1);
+    ARMNN_ASSERT(inferredShapes[0].GetDimensionality() == Dimensionality::Specified);
 
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ReshapeLayer");
 }
 
-void ReshapeLayer::Accept(ILayerVisitor& visitor) const
+void ReshapeLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitReshapeLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

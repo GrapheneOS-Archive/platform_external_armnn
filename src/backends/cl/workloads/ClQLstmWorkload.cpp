@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -14,9 +14,17 @@ namespace armnn
 {
 using namespace armcomputetensorutils;
 
-ClQLstmWorkload::ClQLstmWorkload(const QLstmQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<QLstmQueueDescriptor>(descriptor, info)
+ClQLstmWorkload::ClQLstmWorkload(const QLstmQueueDescriptor& descriptor,
+                                 const WorkloadInfo& info,
+                                 const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<QLstmQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("ClQLstmWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     arm_compute::LSTMParams<arm_compute::ICLTensor> qLstmParams;
 
     // Mandatory params
@@ -150,23 +158,27 @@ ClQLstmWorkload::ClQLstmWorkload(const QLstmQueueDescriptor& descriptor, const W
                                         m_Data.m_Parameters.m_CellIntermediateScale,
                                         m_Data.m_Parameters.m_OutputIntermediateScale);
 
-    // QLSTM NEON configure
-    m_QLstmLayer.configure(&input,
-                           m_InputToForgetWeightsTensor.get(),
-                           m_InputToCellWeightsTensor.get(),
-                           m_InputToOutputWeightsTensor.get(),
-                           m_RecurrentToForgetWeightsTensor.get(),
-                           m_RecurrentToCellWeightsTensor.get(),
-                           m_RecurrentToOutputWeightsTensor.get(),
-                           m_ForgetGateBiasTensor.get(),
-                           m_CellBiasTensor.get(),
-                           m_OutputGateBiasTensor.get(),
-                           &cellStateIn,
-                           &outputStateIn,
-                           &cellStateOut,
-                           &outputStateOut,
-                           &output,
-                           qLstmParams);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClQLstmWorkload_configure");
+        // QLSTM CL configure
+        m_QLstmLayer.configure(clCompileContext,
+                               &input,
+                               m_InputToForgetWeightsTensor.get(),
+                               m_InputToCellWeightsTensor.get(),
+                               m_InputToOutputWeightsTensor.get(),
+                               m_RecurrentToForgetWeightsTensor.get(),
+                               m_RecurrentToCellWeightsTensor.get(),
+                               m_RecurrentToOutputWeightsTensor.get(),
+                               m_ForgetGateBiasTensor.get(),
+                               m_CellBiasTensor.get(),
+                               m_OutputGateBiasTensor.get(),
+                               &cellStateIn,
+                               &outputStateIn,
+                               &cellStateOut,
+                               &outputStateOut,
+                               &output,
+                               qLstmParams);
+    }
 
     // Initialise ACL tensor data for mandatory params
     InitializeArmComputeClTensorData(*m_InputToForgetWeightsTensor, m_Data.m_InputToForgetWeights);
@@ -228,6 +240,7 @@ ClQLstmWorkload::ClQLstmWorkload(const QLstmQueueDescriptor& descriptor, const W
 
 void ClQLstmWorkload::Execute() const
 {
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClQuantizedLstmWorkload_Execute", this->GetGuid());
     m_QLstmLayer.run();
 }
 

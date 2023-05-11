@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -14,7 +14,7 @@
 
 #include <neon/NeonLayerSupport.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <backendsCommon/WorkloadUtils.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEDepthwiseConvolutionLayer.h>
@@ -33,36 +33,48 @@ arm_compute::Status NeonDepthwiseConvolutionWorkloadValidate(const TensorInfo& i
                                                              const Optional<TensorInfo>& biases,
                                                              const ActivationDescriptor* activationDescriptor)
 {
-    const arm_compute::TensorInfo aclInputInfo  = BuildArmComputeTensorInfo(input,  descriptor.m_DataLayout);
-    const arm_compute::TensorInfo aclOutputInfo = BuildArmComputeTensorInfo(output, descriptor.m_DataLayout);
+    const arm_compute::TensorInfo aclInputInfo   = BuildArmComputeTensorInfo(input, descriptor.m_DataLayout);
+    const arm_compute::TensorInfo aclOutputInfo  = BuildArmComputeTensorInfo(output, descriptor.m_DataLayout);
 
-    // ArmNN's weight format is [ M, I, H, W ]
-    const unsigned int aclDepthMultiplier = weights.GetShape()[0];
-
-    // Convert the weight format from ArmNN's [ M, I, H, W ] (does NOT depend on the data layout) to either
-    // [ 1, H, W, I * M ] (if NHWC) or [ 1, I * M, H, W ] (if NCHW), as required by the compute library
-    TensorInfo weightsPermuted = ConvertWeightTensorInfoFromArmnnToAcl(weights, descriptor.m_DataLayout);
+    // ArmNN format for weights for depthwise is [1, H, W, C] independently of the input/output layout
+    //
+    // ACL format for weights for depthwise is:
+    // - [1, H, W, C] for [N, H, W, C] input/output layout (matches with ArmNN)
+    // - [1, C, H, W] for [N, C, H, W] input/output layout
+    //
+    // Therefore ArmNN weights have to be permuted when input/output layout is [N, C, H, W] to pass them to ACL.
+    // The PermuteDepthwiseConv2dWeights backend optimization takes care of this, but it has not been performed yet,
+    // so we do the permute here for the TensorInfo weights.
+    unsigned int aclDepthMultiplier;
+    TensorInfo weightsPermuted;
+    std::tie(weightsPermuted, aclDepthMultiplier) = Convert1HWOTensorInfoToAcl(weights, input, descriptor.m_DataLayout);
 
     // Convert the weights into the compute library format
-    const arm_compute::TensorInfo aclWeightsInfo = BuildArmComputeTensorInfo(weightsPermuted, descriptor.m_DataLayout);
+    arm_compute::TensorInfo aclWeightsInfo = BuildArmComputeTensorInfo(weightsPermuted, descriptor.m_DataLayout);
+    aclWeightsInfo.set_are_values_constant(weights.IsConstant());
 
     arm_compute::TensorInfo aclBiasesInfo;
-    arm_compute::TensorInfo *optionalAclBiasesInfo = nullptr;
-
+    arm_compute::TensorInfo* optionalAclBiasesInfo = nullptr;
     if (descriptor.m_BiasEnabled)
     {
         ARMNN_ASSERT(biases.has_value());
-
+        // Same for bias as weights. We don't currently support non const.
+        if (!biases.value().IsConstant())
+        {
+            return arm_compute::Status{arm_compute::ErrorCode::RUNTIME_ERROR,
+                                       "ArmNN NeonDepthwiseConv2dWorkload does not support non constant bias."};
+        }
         aclBiasesInfo = BuildArmComputeTensorInfo(biases.value(), descriptor.m_DataLayout);
+        aclBiasesInfo.set_are_values_constant(biases.value().IsConstant());
         optionalAclBiasesInfo = &aclBiasesInfo;
     }
 
     arm_compute::PadStrideInfo aclPadStrideInfo = BuildArmComputePadStrideInfo(descriptor);
     const arm_compute::Size2D aclDilationInfo = BuildArmComputeSize2D(
-            descriptor.m_DilationX,descriptor.m_DilationY);
+        descriptor.m_DilationX, descriptor.m_DilationY);
 
     const arm_compute::ActivationLayerInfo activationInfo = ConvertActivationDescriptorToAclActivationLayerInfo(
-            activationDescriptor);
+        activationDescriptor);
 
     return arm_compute::NEDepthwiseConvolutionLayer::validate(&aclInputInfo,
                                                               &aclWeightsInfo,
@@ -77,47 +89,37 @@ arm_compute::Status NeonDepthwiseConvolutionWorkloadValidate(const TensorInfo& i
 NeonDepthwiseConvolutionWorkload::NeonDepthwiseConvolutionWorkload(
     const DepthwiseConvolution2dQueueDescriptor& descriptor,
     const WorkloadInfo& info)
-    : BaseWorkload<DepthwiseConvolution2dQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<DepthwiseConvolution2dQueueDescriptor>(descriptor, info)
 {
-    // ArmNN's weight format is [ M, I, H, W ]
-    auto& weightInfo = m_Data.m_Weight->GetTensorInfo();
-
-    // Allocate a buffer for the swizzling of the weight tensor
-    std::unique_ptr<unsigned char[]> permuteBuffer(new unsigned char[m_Data.m_Weight->GetTensorInfo().GetNumBytes()]);
-
-    // Convert the weight format from ArmNN's [ M, I, H, W ] (does NOT depend on the data layout) to either
-    // [ 1, H, W, I * M ] (if NHWC) or [ 1, I * M, H, W ] (if NCHW), as required by the compute library
-    ConstTensor weightPermuted = ConvertWeightTensorFromArmnnToAcl(m_Data.m_Weight,
-                                                                   m_Data.m_Parameters.m_DataLayout,
-                                                                   permuteBuffer.get());
-
-    // Convert the weights into the compute library format
-    m_KernelTensor = std::make_unique<arm_compute::Tensor>();
-    BuildArmComputeTensor(*m_KernelTensor, weightPermuted.GetInfo(), m_Data.m_Parameters.m_DataLayout);
-
+    arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
+    arm_compute::ITensor& output = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
+    arm_compute::ITensor& weights = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[1])->GetTensor();
+    arm_compute::ITensor* biasesPtr = nullptr;
     if (m_Data.m_Parameters.m_BiasEnabled)
     {
-        m_BiasTensor = std::make_unique<arm_compute::Tensor>();
-        BuildArmComputeTensor(*m_BiasTensor, m_Data.m_Bias->GetTensorInfo(), m_Data.m_Parameters.m_DataLayout);
+        biasesPtr = &PolymorphicDowncast<IAclTensorHandle *>(m_Data.m_Inputs[2])->GetTensor();
     }
 
+    arm_compute::ITensorInfo* weightsInfo = weights.info();
+    arm_compute::ITensorInfo* inputInfo = input.info();
+    auto weightsShape = weightsInfo->tensor_shape();
+    auto inputShape = inputInfo->tensor_shape();
+
+    // The PermuteDepthwiseConv2dWeights backend optimization has been performed,
+    // converting weights to have the same data layout as input.
+    unsigned int depthMultiplier =
+        ComputeDepthwiseConv2dDepthMultiplier(m_Data.m_Parameters.m_DataLayout, weightsShape, inputShape);
+
     const arm_compute::Size2D aclDilationInfo = BuildArmComputeSize2D(
-                m_Data.m_Parameters.m_DilationX, m_Data.m_Parameters.m_DilationY);
+        m_Data.m_Parameters.m_DilationX, m_Data.m_Parameters.m_DilationY);
 
-    m_Data.ValidateInputsOutputs("NeonDepthwiseConvolutionWorkload", 1, 1);
-
-    IAclTensorHandle* inputTensorHandle  = static_cast<IAclTensorHandle*>(m_Data.m_Inputs[0]);
-    IAclTensorHandle* outputTensorHandle = static_cast<IAclTensorHandle*>(m_Data.m_Outputs[0]);
-
-    arm_compute::ITensor& input  = inputTensorHandle->GetTensor();
-    arm_compute::ITensor& output = outputTensorHandle->GetTensor();
+    uint32_t numInputs = m_Data.m_Parameters.m_BiasEnabled ? 3: 2;
+    m_Data.ValidateInputsOutputs("NeonDepthwiseConvolutionWorkload", numInputs, 1);
 
     arm_compute::DataLayout aclDataLayout = ConvertDataLayout(m_Data.m_Parameters.m_DataLayout);
     input.info()->set_data_layout(aclDataLayout);
+    weights.info()->set_data_layout(aclDataLayout);
     output.info()->set_data_layout(aclDataLayout);
-
-    // Get the depth multiplier
-    const unsigned int depthMultiplier = weightInfo.GetShape()[0];
 
     arm_compute::PadStrideInfo padStrideInfo = BuildArmComputePadStrideInfo(m_Data.m_Parameters);
 
@@ -126,40 +128,42 @@ NeonDepthwiseConvolutionWorkload::NeonDepthwiseConvolutionWorkload(
     m_pDepthwiseConvolutionLayer = std::make_unique<arm_compute::NEDepthwiseConvolutionLayer>();
     static_cast<arm_compute::NEDepthwiseConvolutionLayer*>(
         m_pDepthwiseConvolutionLayer.get())->configure(&input,
-                                                       m_KernelTensor.get(),
-                                                       m_BiasTensor.get(),
+                                                       &weights,
+                                                       biasesPtr,
                                                        &output,
                                                        padStrideInfo,
                                                        depthMultiplier,
                                                        activationInfo,
                                                        aclDilationInfo);
 
-    ARMNN_ASSERT(m_pDepthwiseConvolutionLayer);
+    // Add details for profiling output
+    WorkloadInfo detailsInfo;
 
-    ScopedCpuTensorHandle weightsPermutedHandle(weightPermuted);
-    InitializeArmComputeTensorData(*m_KernelTensor, &weightsPermutedHandle);
-
-    if (m_Data.m_Parameters.m_BiasEnabled)
+    detailsInfo.m_InputTensorInfos = info.m_InputTensorInfos;
+    detailsInfo.m_OutputTensorInfos = info.m_OutputTensorInfos;
+    detailsInfo.m_WeightsTensorInfo = armnn::Optional<armnn::TensorInfo>(info.m_InputTensorInfos[1]);
+    if (descriptor.m_Parameters.m_BiasEnabled)
     {
-        InitializeArmComputeTensorData(*m_BiasTensor, m_Data.m_Bias);
+        detailsInfo.m_BiasTensorInfo = armnn::Optional<armnn::TensorInfo>(info.m_InputTensorInfos[2]);
     }
 
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonDepthwiseConvolution2dWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         detailsInfo,
+                                         GetGuid());
+
+    ARMNN_ASSERT(m_pDepthwiseConvolutionLayer);
+
     m_pDepthwiseConvolutionLayer->prepare();
-    FreeUnusedTensors();
 }
 
 void NeonDepthwiseConvolutionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonDepthwiseConvolutionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonDepthwiseConvolutionWorkload_Execute", GetGuid());
     ARMNN_ASSERT(m_pDepthwiseConvolutionLayer);
 
     m_pDepthwiseConvolutionLayer->run();
-}
-
-void NeonDepthwiseConvolutionWorkload::FreeUnusedTensors()
-{
-    FreeTensorIfUnused(m_KernelTensor);
-    FreeTensorIfUnused(m_BiasTensor);
 }
 
 } //namespace armnn

@@ -132,6 +132,8 @@ public:
     }
 
     bool IsCpuRef() const { return m_Id == GetComputeDeviceAsCString(Compute::CpuRef); }
+    bool IsCpuAcc() const { return m_Id == GetComputeDeviceAsCString(Compute::CpuAcc); }
+    bool IsGpuAcc() const { return m_Id == GetComputeDeviceAsCString(Compute::GpuAcc); }
 
     const std::string& Get() const { return m_Id; }
 
@@ -167,8 +169,8 @@ namespace armnn
 
 namespace profiling
 {
-    // Static constant describing ArmNN as a dummy backend
-    static const BackendId BACKEND_ID("ARMNN");
+// Static constant describing ArmNN as a dummy backend
+static const BackendId BACKEND_ID("ARMNN");
 } // profiling
 
 inline std::ostream& operator<<(std::ostream& os, const BackendId& id)
@@ -191,4 +193,3 @@ using BackendIdVector = std::vector<BackendId>;
 using BackendIdSet    = std::unordered_set<BackendId>;
 
 } // namespace armnn
-

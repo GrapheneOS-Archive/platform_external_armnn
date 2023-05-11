@@ -3,20 +3,20 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersSerializeFixture.hpp"
-#include "../Deserializer.hpp"
+#include <armnnDeserializer/IDeserializer.hpp>
 
 #include <string>
 
-BOOST_AUTO_TEST_SUITE(Deserializer)
-
+TEST_SUITE("Deserializer_Pad")
+{
 struct PadFixture : public ParserFlatbuffersSerializeFixture
 {
-    explicit PadFixture(const std::string &inputShape,
-                        const std::string &padList,
-                        const std::string &outputShape,
-                        const std::string &dataType)
+    explicit PadFixture(const std::string& inputShape,
+                        const std::string& padList,
+                        const std::string& outputShape,
+                        const std::string& dataType,
+                        const std::string& paddingMode)
     {
         m_JsonString = R"(
             {
@@ -68,6 +68,7 @@ struct PadFixture : public ParserFlatbuffersSerializeFixture
                             },
                             descriptor: {
                                 padList: )" + padList + R"(,
+                                paddingMode: )" + paddingMode + R"(,
                             }
                         }
                     },
@@ -107,23 +108,108 @@ struct SimplePadFixture : PadFixture
     SimplePadFixture() : PadFixture("[ 2, 2, 2 ]",
                                     "[ 0, 1, 2, 1, 2, 2 ]",
                                     "[ 3, 5, 6 ]",
-                                    "QuantisedAsymm8") {}
+                                    "QuantisedAsymm8",
+                                    "Constant") {}
 };
 
-BOOST_FIXTURE_TEST_CASE(SimplePadQuantisedAsymm8, SimplePadFixture)
+TEST_CASE_FIXTURE(SimplePadFixture, "SimplePadQuantisedAsymm8")
 {
     RunTest<3, armnn::DataType::QAsymmU8>(0,
-                                                 {
-                                                    0, 4, 2, 5, 6, 1, 5, 2
-                                                 },
-                                                 {
-                                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                    4, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6,
-                                                    1, 0, 0, 0, 0, 5, 2, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-                                                 });
+                                         {
+                                            0, 4, 2, 5, 6, 1, 5, 2
+                                         },
+                                         {
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                            4, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0,
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6,
+                                            1, 0, 0, 0, 0, 5, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                                         });
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+struct SimplePadSymmetricFixture : PadFixture
+{
+    SimplePadSymmetricFixture() : PadFixture("[ 2, 2, 2 ]",
+                                             "[ 1, 1, 1, 1, 1, 1 ]",
+                                             "[ 4, 4, 4 ]",
+                                             "QuantisedAsymm8",
+                                             "Symmetric") {}
+};
+
+TEST_CASE_FIXTURE(SimplePadSymmetricFixture, "SimplePadSymmetricQuantisedAsymm8")
+{
+    RunTest<3, armnn::DataType::QAsymmU8>(0,
+                                          {
+                                              1, 2,
+                                              3, 4,
+
+                                              5, 6,
+                                              7, 8
+                                          },
+                                          {
+                                              1, 1, 2, 2,
+                                              1, 1, 2, 2,
+                                              3, 3, 4, 4,
+                                              3, 3, 4, 4,
+
+                                              1, 1, 2, 2,
+                                              1, 1, 2, 2,
+                                              3, 3, 4, 4,
+                                              3, 3, 4, 4,
+
+                                              5, 5, 6, 6,
+                                              5, 5, 6, 6,
+                                              7, 7, 8, 8,
+                                              7, 7, 8, 8,
+
+                                              5, 5, 6, 6,
+                                              5, 5, 6, 6,
+                                              7, 7, 8, 8,
+                                              7, 7, 8, 8
+                                          });
+}
+
+struct SimplePadReflectFixture : PadFixture
+{
+    SimplePadReflectFixture() : PadFixture("[ 2, 2, 2 ]",
+                                           "[ 1, 1, 1, 1, 1, 1 ]",
+                                           "[ 4, 4, 4 ]",
+                                           "QuantisedAsymm8",
+                                           "Reflect") {}
+};
+
+TEST_CASE_FIXTURE(SimplePadReflectFixture, "SimplePadReflectQuantisedAsymm8")
+{
+    RunTest<3, armnn::DataType::QAsymmU8>(0,
+                                          {
+                                              1, 2,
+                                              3, 4,
+
+                                              5, 6,
+                                              7, 8
+                                          },
+                                          {
+                                              8, 7, 8, 7,
+                                              6, 5, 6, 5,
+                                              8, 7, 8, 7,
+                                              6, 5, 6, 5,
+
+                                              4, 3, 4, 3,
+                                              2, 1, 2, 1,
+                                              4, 3, 4, 3,
+                                              2, 1, 2, 1,
+
+                                              8, 7, 8, 7,
+                                              6, 5, 6, 5,
+                                              8, 7, 8, 7,
+                                              6, 5, 6, 5,
+
+                                              4, 3, 4, 3,
+                                              2, 1, 2, 1,
+                                              4, 3, 4, 3,
+                                              2, 1, 2, 1
+                                          });
+}
+
+}

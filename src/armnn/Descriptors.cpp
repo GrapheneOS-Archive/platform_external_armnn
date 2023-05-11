@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "armnn/Descriptors.hpp"
@@ -423,6 +423,117 @@ int StridedSliceDescriptor::GetStopForAxis(const TensorShape& inputShape,
     return m_Stride[axis] > 0 ? std::max(0, std::min(stop, axisSize)) :
                                 std::max(-1, std::min(stop, axisSize - 1));
 
+}
+
+uint32_t GetNumInputs(bool biasEnabled)
+{
+    unsigned int numInputs = 2;
+    if (biasEnabled)
+    {
+        numInputs = 3;
+    }
+    return numInputs;
+}
+
+uint32_t Convolution3dDescriptor::GetNumInputs() const
+{
+    return armnn::GetNumInputs(m_BiasEnabled);
+}
+
+uint32_t Convolution2dDescriptor::GetNumInputs() const
+{
+    return armnn::GetNumInputs(m_BiasEnabled);
+}
+
+uint32_t FullyConnectedDescriptor::GetNumInputs() const
+{
+    return armnn::GetNumInputs(m_BiasEnabled);
+}
+
+uint32_t DepthwiseConvolution2dDescriptor::GetNumInputs() const
+{
+    return armnn::GetNumInputs(m_BiasEnabled);
+}
+
+std::pair<std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>>
+BatchMatMulDescriptor::GetAxesToMul(
+    const BatchMatMulDescriptor& desc,
+    const TensorShape& tensorXShape,
+    const TensorShape& tensorYShape)
+{
+    return { GetAxesToMul(desc.m_DataLayoutX, tensorXShape),
+             GetAxesToMul(desc.m_DataLayoutY, tensorYShape) };
+}
+std::pair<std::vector<unsigned int>, std::vector<unsigned int>> BatchMatMulDescriptor::GetAxesNotMul(
+    const BatchMatMulDescriptor& desc,
+    const TensorShape& inputXShape,
+    const TensorShape& inputYShape)
+{
+    return { GetAxesNotMul(desc.m_DataLayoutX, inputXShape),
+             GetAxesNotMul(desc.m_DataLayoutY, inputYShape) };
+}
+
+std::pair<unsigned int, unsigned int> BatchMatMulDescriptor::GetAxesToMul(
+    DataLayout dataLayout,
+    const TensorShape& tensorShape)
+{
+    auto numDims = tensorShape.GetNumDimensions();
+    std::pair<unsigned int, unsigned int> axes = { numDims-2, numDims-1 };
+    switch(dataLayout)
+    {
+        case DataLayout::NDHWC:
+        case DataLayout::NHWC:
+            axes.first -= 1;
+            axes.second -= 1;
+            break;
+        case DataLayout::NCDHW:
+        case DataLayout::NCHW:
+        default:
+            break;
+    }
+    return axes;
+}
+
+std::vector<unsigned int> BatchMatMulDescriptor::GetAxesNotMul(
+    DataLayout dataLayout,
+    const TensorShape& tensorShape)
+{
+    auto axesToMul = BatchMatMulDescriptor::GetAxesToMul(dataLayout, tensorShape);
+    std::vector<unsigned int> axesNotMul;
+    for(unsigned int i = 0; i < tensorShape.GetNumDimensions(); i++)
+    {
+        if(i == axesToMul.first || i == axesToMul.second)
+        {
+            continue;
+        }
+        axesNotMul.push_back(i);
+    }
+    return axesNotMul;
+}
+
+PermutationVector BatchMatMulDescriptor::GetPermuteVec(
+    DataLayout dataLayout,
+    const TensorShape& tensorShape)
+{
+    std::vector<unsigned int> vec;
+    auto axesToMul = BatchMatMulDescriptor::GetAxesToMul(dataLayout, tensorShape);
+    for(unsigned int i = 0; i < tensorShape.GetNumDimensions(); i++)
+    {
+        if(i == axesToMul.first)
+        {
+            vec.push_back(i+1);
+        }
+        else if(i == axesToMul.second)
+        {
+            vec.push_back(i-1);
+        }
+        else
+        {
+            vec.push_back(i);
+        }
+    }
+    return PermutationVector(vec.data(),
+                             static_cast<unsigned int>(vec.size()));
 }
 
 }

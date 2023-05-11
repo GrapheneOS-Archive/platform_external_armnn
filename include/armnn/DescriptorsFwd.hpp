@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,15 +7,20 @@
 
 namespace armnn
 {
+struct BaseDescriptor;
 
 struct ActivationDescriptor;
 struct ArgMinMaxDescriptor;
+struct BatchMatMulDescriptor;
 struct BatchNormalizationDescriptor;
 struct BatchToSpaceNdDescriptor;
+struct ChannelShuffleDescriptor;
 struct ComparisonDescriptor;
 struct Convolution2dDescriptor;
+struct Convolution3dDescriptor;
 struct DepthwiseConvolution2dDescriptor;
 struct DetectionPostProcessDescriptor;
+struct ElementwiseBinaryDescriptor;
 struct ElementwiseUnaryDescriptor;
 struct FakeQuantizationDescriptor;
 struct FillDescriptor;
@@ -31,15 +36,16 @@ struct OriginsDescriptor;
 struct PadDescriptor;
 struct PermuteDescriptor;
 struct Pooling2dDescriptor;
+struct Pooling3dDescriptor;
 struct PreCompiledDescriptor;
 struct QLstmDescriptor;
 struct ReshapeDescriptor;
-struct ResizeBilinearDescriptor;
 struct ResizeDescriptor;
+struct ReduceDescriptor;
+struct SliceDescriptor;
 struct SoftmaxDescriptor;
 struct SpaceToBatchNdDescriptor;
 struct SpaceToDepthDescriptor;
-struct SliceDescriptor;
 struct StackDescriptor;
 struct StandInDescriptor;
 struct StridedSliceDescriptor;
@@ -53,5 +59,6 @@ using LogSoftmaxDescriptor   = SoftmaxDescriptor;
 /// MergerDescriptor is deprecated, use ConcatDescriptor instead
 using MergerDescriptor       = OriginsDescriptor;
 using SplitterDescriptor     = ViewsDescriptor;
+using UnidirectionalSequenceLstmDescriptor = LstmDescriptor;
 
 } // namespace armnn

@@ -6,24 +6,35 @@
 #include "ProfilingMocks.hpp"
 #include "ProfilingTestUtils.hpp"
 
-#include <SendTimelinePacket.hpp>
-#include <TimelineUtilityMethods.hpp>
-#include <LabelsAndEventClasses.hpp>
-#include <ProfilingService.hpp>
+#include <ArmNNProfilingServiceInitialiser.hpp>
+
+#include <armnn/profiling/ArmNNProfiling.hpp>
+
+#include <client/include/TimelineUtilityMethods.hpp>
+
+#include <client/src/SendTimelinePacket.hpp>
+#include <client/src/ProfilingService.hpp>
+
+#include <common/include/LabelsAndEventClasses.hpp>
 
 #include <memory>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 using namespace armnn;
-using namespace armnn::profiling;
+using namespace arm::pipe;
 
-BOOST_AUTO_TEST_SUITE(TimelineUtilityMethodsTests)
-
-BOOST_AUTO_TEST_CASE(CreateTypedLabelTest)
+TEST_SUITE("TimelineUtilityMethodsTests")
+{
+TEST_CASE("CreateTypedLabelTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
 
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
@@ -35,18 +46,18 @@ BOOST_AUTO_TEST_CASE(CreateTypedLabelTest)
     const std::string entityName = "some entity";
     ProfilingStaticGuid labelTypeGuid(456);
 
-    BOOST_CHECK_NO_THROW(timelineUtilityMethods.MarkEntityWithLabel(entityGuid, entityName, labelTypeGuid));
+    CHECK_NOTHROW(timelineUtilityMethods.MarkEntityWithLabel(entityGuid, entityName, labelTypeGuid));
 
     // Commit all packets at once
     timelineUtilityMethods.Commit();
 
     // Get the readable buffer
     auto readableBuffer = mockBufferManager.GetReadableBuffer();
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
     unsigned int size = readableBuffer->GetSize();
-    BOOST_CHECK(size == 76);
+    CHECK(size == 76);
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     // Utils
     unsigned int offset = 0;
@@ -55,13 +66,13 @@ BOOST_AUTO_TEST_CASE(CreateTypedLabelTest)
     VerifyTimelineHeaderBinary(readableData, offset, 68);
 
     // First dataset sent: TimelineLabelBinaryPacket
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), entityName, readableData, offset);
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), entityName, readableData, offset);
 
     // Second dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                entityGuid,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                labelTypeGuid,
                                                readableData,
                                                offset);
@@ -70,21 +81,26 @@ BOOST_AUTO_TEST_CASE(CreateTypedLabelTest)
     mockBufferManager.MarkRead(readableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(SendWellKnownLabelsAndEventClassesTest)
+TEST_CASE("SendWellKnownLabelsAndEventClassesTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     SendTimelinePacket sendTimelinePacket(mockBufferManager);
 
-    BOOST_CHECK_NO_THROW(TimelineUtilityMethods::SendWellKnownLabelsAndEventClasses(sendTimelinePacket));
+    CHECK_NOTHROW(TimelineUtilityMethods::SendWellKnownLabelsAndEventClasses(sendTimelinePacket));
 
     // Get the readable buffer
     auto readableBuffer = mockBufferManager.GetReadableBuffer();
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
     unsigned int size = readableBuffer->GetSize();
-    BOOST_TEST(size == 460);
+    CHECK(size == 460);
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     // Utils
     unsigned int offset = 0;
@@ -197,10 +213,15 @@ BOOST_AUTO_TEST_CASE(SendWellKnownLabelsAndEventClassesTest)
     mockBufferManager.MarkRead(readableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(CreateNamedTypedChildEntityTest)
+TEST_CASE("CreateNamedTypedChildEntityTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
 
@@ -212,30 +233,30 @@ BOOST_AUTO_TEST_CASE(CreateNamedTypedChildEntityTest)
     // Generate first guid to ensure that the named typed entity guid is not 0 on local single test.
     profilingService.NextGuid();
 
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid, "", entityType),
-                      InvalidArgumentException);
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid, entityName, ""),
-                      InvalidArgumentException);
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedChildEntity(
-        childEntityGuid, parentEntityGuid, "", entityType), InvalidArgumentException);
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedChildEntity(
-        childEntityGuid, parentEntityGuid, entityName, ""), InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid, "", entityType),
+                      arm::pipe::InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid, entityName, ""),
+                    arm::pipe::InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedChildEntity(
+        childEntityGuid, parentEntityGuid, "", entityType), arm::pipe::InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedChildEntity(
+        childEntityGuid, parentEntityGuid, entityName, ""), arm::pipe::InvalidArgumentException);
 
-    BOOST_CHECK_NO_THROW(childEntityGuid = timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid,
+    CHECK_NOTHROW(childEntityGuid = timelineUtilityMethods.CreateNamedTypedChildEntity(parentEntityGuid,
                                                                                               entityName,
                                                                                               entityType));
-    BOOST_CHECK(childEntityGuid != ProfilingGuid(0));
+    CHECK(childEntityGuid != ProfilingGuid(0));
 
-    // Commit all packets at once
+    // Commit all packets at onceTimelineUtilityMethodsTests.cpp
     timelineUtilityMethods.Commit();
 
     // Get the readable buffer
     auto readableBuffer = mockBufferManager.GetReadableBuffer();
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
     unsigned int size = readableBuffer->GetSize();
-    BOOST_CHECK(size == 196);
+    CHECK(size == 196);
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     // Utils
     unsigned int offset = 0;
@@ -244,28 +265,28 @@ BOOST_AUTO_TEST_CASE(CreateNamedTypedChildEntityTest)
     VerifyTimelineHeaderBinary(readableData, offset, 188);
 
     // First dataset sent: TimelineEntityBinaryPacket
-    VerifyTimelineEntityBinaryPacketData(EmptyOptional(), readableData, offset);
+    VerifyTimelineEntityBinaryPacketData(arm::pipe::EmptyOptional(), readableData, offset);
 
     // Second dataset sent: TimelineLabelBinaryPacket
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), entityName, readableData, offset);
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), entityName, readableData, offset);
 
     // Third dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
-                                               EmptyOptional(),
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                LabelsAndEventClasses::NAME_GUID,
                                                readableData,
                                                offset);
 
     // Fifth dataset sent: TimelineLabelBinaryPacket
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), entityType, readableData, offset);
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), entityType, readableData, offset);
 
     // Sixth dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
-                                               EmptyOptional(),
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
@@ -273,10 +294,10 @@ BOOST_AUTO_TEST_CASE(CreateNamedTypedChildEntityTest)
 
     // Eighth dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                parentEntityGuid,
-                                               EmptyOptional(),
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                readableData,
                                                offset);
 
@@ -284,10 +305,15 @@ BOOST_AUTO_TEST_CASE(CreateNamedTypedChildEntityTest)
     mockBufferManager.MarkRead(readableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(DeclareLabelTest)
+TEST_CASE("DeclareLabelTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
 
@@ -295,53 +321,63 @@ BOOST_AUTO_TEST_CASE(DeclareLabelTest)
     profilingService.NextGuid();
 
     // Try declaring an invalid (empty) label
-    BOOST_CHECK_THROW(timelineUtilityMethods.DeclareLabel(""), InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.DeclareLabel(""), arm::pipe::InvalidArgumentException);
 
     // Try declaring an invalid (wrong SWTrace format) label
-    BOOST_CHECK_THROW(timelineUtilityMethods.DeclareLabel("inv@lid lab€l"), RuntimeException);
+    CHECK_THROWS_AS(timelineUtilityMethods.DeclareLabel("inv@lid lab€l"), arm::pipe::ProfilingException);
 
     // Declare a valid label
     const std::string labelName = "valid label";
     ProfilingGuid labelGuid = 0;
-    BOOST_CHECK_NO_THROW(labelGuid = timelineUtilityMethods.DeclareLabel(labelName));
-    BOOST_CHECK(labelGuid != ProfilingGuid(0));
+    CHECK_NOTHROW(labelGuid = timelineUtilityMethods.DeclareLabel(labelName));
+    CHECK(labelGuid != ProfilingGuid(0));
 
     // Try adding the same label as before
     ProfilingGuid newLabelGuid = 0;
-    BOOST_CHECK_NO_THROW(newLabelGuid = timelineUtilityMethods.DeclareLabel(labelName));
-    BOOST_CHECK(newLabelGuid != ProfilingGuid(0));
-    BOOST_CHECK(newLabelGuid == labelGuid);
+    CHECK_NOTHROW(newLabelGuid = timelineUtilityMethods.DeclareLabel(labelName));
+    CHECK(newLabelGuid != ProfilingGuid(0));
+    CHECK(newLabelGuid == labelGuid);
 }
 
-BOOST_AUTO_TEST_CASE(CreateNameTypeEntityInvalidTest)
+TEST_CASE("CreateNameTypeEntityInvalidTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
 
     // Invalid name
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedEntity("", "Type"), InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedEntity("", "Type"), arm::pipe::InvalidArgumentException);
 
     // Invalid type
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedEntity("Name", ""), InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedEntity("Name", ""), arm::pipe::InvalidArgumentException);
 
     ProfilingDynamicGuid guid = profilingService.NextGuid();
 
     // CreatedNamedTypedEntity with Guid - Invalid name
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedEntity(guid, "", "Type"),
-                      InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedEntity(guid, "", "Type"),
+                    arm::pipe::InvalidArgumentException);
 
     // CreatedNamedTypedEntity with Guid - Invalid type
-    BOOST_CHECK_THROW(timelineUtilityMethods.CreateNamedTypedEntity(guid, "Name", ""),
-                      InvalidArgumentException);
+    CHECK_THROWS_AS(timelineUtilityMethods.CreateNamedTypedEntity(guid, "Name", ""),
+                    arm::pipe::InvalidArgumentException);
 
 }
 
-BOOST_AUTO_TEST_CASE(CreateNameTypeEntityTest)
+TEST_CASE("CreateNameTypeEntityTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
 
@@ -352,18 +388,18 @@ BOOST_AUTO_TEST_CASE(CreateNameTypeEntityTest)
     profilingService.NextGuid();
 
     ProfilingDynamicGuid guid = timelineUtilityMethods.CreateNamedTypedEntity(entityName, entityType);
-    BOOST_CHECK(guid != ProfilingGuid(0));
+    CHECK(guid != ProfilingGuid(0));
 
     // Commit all packets at once
     timelineUtilityMethods.Commit();
 
     // Get the readable buffer
     auto readableBuffer = mockBufferManager.GetReadableBuffer();
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
     unsigned int size = readableBuffer->GetSize();
-    BOOST_CHECK(size == 148);
+    CHECK(size == 148);
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     // Utils
     unsigned int offset = 0;
@@ -376,26 +412,26 @@ BOOST_AUTO_TEST_CASE(CreateNameTypeEntityTest)
 
     // Packets for Name Entity
     // First dataset sent: TimelineLabelBinaryPacket
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), entityName, readableData, offset);
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), entityName, readableData, offset);
 
     // Second dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
-                                               EmptyOptional(),
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                LabelsAndEventClasses::NAME_GUID,
                                                readableData,
                                                offset);
 
     // Packets for Type Entity
     // First dataset sent: TimelineLabelBinaryPacket
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), entityType, readableData, offset);
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), entityType, readableData, offset);
 
     // Second dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
-                                               EmptyOptional(),
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
@@ -405,10 +441,15 @@ BOOST_AUTO_TEST_CASE(CreateNameTypeEntityTest)
     mockBufferManager.MarkRead(readableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(RecordEventTest)
+TEST_CASE("RecordEventTest")
 {
     MockBufferManager mockBufferManager(1024);
-    ProfilingService  profilingService;
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingService profilingService(arm::pipe::MAX_ARMNN_COUNTER,
+                                      initialiser,
+                                      arm::pipe::ARMNN_SOFTWARE_INFO,
+                                      arm::pipe::ARMNN_SOFTWARE_VERSION,
+                                      arm::pipe::ARMNN_HARDWARE_VERSION);
     std::unique_ptr<ISendTimelinePacket> sendTimelinePacket = std::make_unique<SendTimelinePacket>(mockBufferManager);
     TimelineUtilityMethods timelineUtilityMethods(sendTimelinePacket);
     // Generate first guid to ensure that the named typed entity guid is not 0 on local single test.
@@ -417,21 +458,21 @@ BOOST_AUTO_TEST_CASE(RecordEventTest)
     ProfilingGuid entityGuid(123);
     ProfilingStaticGuid eventClassGuid(456);
     ProfilingDynamicGuid eventGuid(0);
-    BOOST_CHECK_NO_THROW(eventGuid = timelineUtilityMethods.RecordEvent(entityGuid, eventClassGuid));
-    BOOST_CHECK(eventGuid != ProfilingGuid(0));
+    CHECK_NOTHROW(eventGuid = timelineUtilityMethods.RecordEvent(entityGuid, eventClassGuid));
+    CHECK(eventGuid != ProfilingGuid(0));
 
     // Commit all packets at once
     timelineUtilityMethods.Commit();
 
     // Get the readable buffer
     auto readableBuffer = mockBufferManager.GetReadableBuffer();
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
     unsigned int size = readableBuffer->GetSize();
 
-    BOOST_CHECK(size == 68 + ThreadIdSize);
+    CHECK(size == 68 + ThreadIdSize);
 
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     // Utils
     unsigned int offset = 0;
@@ -440,11 +481,12 @@ BOOST_AUTO_TEST_CASE(RecordEventTest)
     VerifyTimelineHeaderBinary(readableData, offset, 60 + ThreadIdSize);
 
     // First dataset sent: TimelineEntityBinaryPacket
-    VerifyTimelineEventBinaryPacket(EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
+    VerifyTimelineEventBinaryPacket(
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Second dataset sent: TimelineRelationshipBinaryPacket
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                entityGuid,
                                                eventGuid,
                                                eventClassGuid,
@@ -455,4 +497,4 @@ BOOST_AUTO_TEST_CASE(RecordEventTest)
     mockBufferManager.MarkRead(readableBuffer);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

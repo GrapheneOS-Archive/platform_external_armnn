@@ -24,7 +24,6 @@ public:
     /// @param [in] registry Contains all the registered tensor handle factories available for use.
     /// @param [in] factory The workload factory which will create the workload.
     /// @param [in] IsMemoryManaged Determine whether or not to assign a memory manager during creation
-    //virtual void CreateTensorHandles(Graph& graph, const IWorkloadFactory& factory) override;
     virtual void CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
                                      const IWorkloadFactory& factory,
                                      const bool IsMemoryManaged = true) override;
@@ -44,7 +43,8 @@ public:
     /// @return A vector to the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
+
 
 protected:
     /// Constructor to create a SplitterLayer.

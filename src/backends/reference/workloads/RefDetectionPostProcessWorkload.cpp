@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -15,30 +15,42 @@ namespace armnn
 
 RefDetectionPostProcessWorkload::RefDetectionPostProcessWorkload(
         const DetectionPostProcessQueueDescriptor& descriptor, const WorkloadInfo& info)
-        : BaseWorkload<DetectionPostProcessQueueDescriptor>(descriptor, info),
-          m_Anchors(std::make_unique<ScopedCpuTensorHandle>(*(descriptor.m_Anchors))) {}
+        : RefBaseWorkload<DetectionPostProcessQueueDescriptor>(descriptor, info),
+          m_Anchors(std::make_unique<ScopedTensorHandle>(*(descriptor.m_Anchors))) {}
 
 void RefDetectionPostProcessWorkload::Execute() const
 {
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefDetectionPostProcessWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefDetectionPostProcessWorkload::Execute(std::vector<ITensorHandle*> inputs,
+                                              std::vector<ITensorHandle*> outputs) const
+{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefDetectionPostProcessWorkload_Execute");
 
-    const TensorInfo& boxEncodingsInfo = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& scoresInfo       = GetTensorInfo(m_Data.m_Inputs[1]);
+    const TensorInfo& boxEncodingsInfo = GetTensorInfo(inputs[0]);
+    const TensorInfo& scoresInfo       = GetTensorInfo(inputs[1]);
     const TensorInfo& anchorsInfo      = m_Anchors->GetTensorInfo();
 
-    const TensorInfo& detectionBoxesInfo   = GetTensorInfo(m_Data.m_Outputs[0]);
-    const TensorInfo& detectionClassesInfo = GetTensorInfo(m_Data.m_Outputs[1]);
-    const TensorInfo& detectionScoresInfo  = GetTensorInfo(m_Data.m_Outputs[2]);
-    const TensorInfo& numDetectionsInfo    = GetTensorInfo(m_Data.m_Outputs[3]);
+    const TensorInfo& detectionBoxesInfo   = GetTensorInfo(outputs[0]);
+    const TensorInfo& detectionClassesInfo = GetTensorInfo(outputs[1]);
+    const TensorInfo& detectionScoresInfo  = GetTensorInfo(outputs[2]);
+    const TensorInfo& numDetectionsInfo    = GetTensorInfo(outputs[3]);
 
-    auto boxEncodings = MakeDecoder<float>(boxEncodingsInfo, m_Data.m_Inputs[0]->Map());
-    auto scores       = MakeDecoder<float>(scoresInfo, m_Data.m_Inputs[1]->Map());
+    auto boxEncodings = MakeDecoder<float>(boxEncodingsInfo, inputs[0]->Map());
+    auto scores       = MakeDecoder<float>(scoresInfo, inputs[1]->Map());
     auto anchors      = MakeDecoder<float>(anchorsInfo, m_Anchors->Map(false));
 
-    float* detectionBoxes   = GetOutputTensorData<float>(0, m_Data);
-    float* detectionClasses = GetOutputTensorData<float>(1, m_Data);
-    float* detectionScores  = GetOutputTensorData<float>(2, m_Data);
-    float* numDetections    = GetOutputTensorData<float>(3, m_Data);
+    float* detectionBoxes   = reinterpret_cast<float*>(outputs[0]->Map());
+    float* detectionClasses = reinterpret_cast<float*>(outputs[1]->Map());
+    float* detectionScores  = reinterpret_cast<float*>(outputs[2]->Map());
+    float* numDetections    = reinterpret_cast<float*>(outputs[3]->Map());
 
     DetectionPostProcess(boxEncodingsInfo, scoresInfo, anchorsInfo,
                          detectionBoxesInfo, detectionClassesInfo,

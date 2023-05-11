@@ -6,9 +6,9 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> ConstantLayer::CreateWorkload(const IWorkloadFactory&
     descriptor.m_LayerOutput = m_LayerOutput.get();
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateConstant(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Constant, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ConstantLayer* ConstantLayer::Clone(Graph& graph) const
@@ -32,7 +32,7 @@ ConstantLayer* ConstantLayer::Clone(Graph& graph) const
     // Cloned layers share the same layer output object.
     auto layer = CloneBase<ConstantLayer>(graph, GetName());
 
-    layer->m_LayerOutput = m_LayerOutput ? std::make_unique<ScopedCpuTensorHandle>(*m_LayerOutput) : nullptr;
+    layer->m_LayerOutput = m_LayerOutput ? m_LayerOutput : nullptr;
 
     return std::move(layer);
 }
@@ -62,10 +62,11 @@ void ConstantLayer::ValidateTensorShapesFromInputs()
                outShape);
 }
 
-void ConstantLayer::Accept(ILayerVisitor& visitor) const
+void ConstantLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    ConstTensor layerOutputTensor(m_LayerOutput->GetTensorInfo(), m_LayerOutput->Map(true)) ;
-    visitor.VisitConstantLayer(this, layerOutputTensor, GetName());
+    ManagedConstTensorHandle managedLayerOutput(m_LayerOutput);
+    ConstTensor layerOutputTensor(managedLayerOutput.GetTensorInfo(), managedLayerOutput.Map());
+    strategy.ExecuteStrategy(this, BaseDescriptor(), { layerOutputTensor }, GetName());
 }
 
 } // namespace armnn

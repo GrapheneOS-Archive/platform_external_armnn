@@ -4,14 +4,15 @@
 //
 
 #include "TimelineModel.hpp"
-#include <LabelsAndEventClasses.hpp>
+
+#include <common/include/LabelsAndEventClasses.hpp>
 
 #include <algorithm>
 
-namespace armnn
+namespace arm
 {
 
-namespace profiling
+namespace pipe
 {
 
 void TimelineModel::AddLabel(const arm::pipe::ITimelineDecoder::Label& label)
@@ -57,20 +58,20 @@ void TimelineModel::AddRelationship(const arm::pipe::ITimelineDecoder::Relations
     {
         HandleLabelLink(relationship);
     }
-    else if (relationship.m_RelationshipType == arm::pipe::ITimelineDecoder::RelationshipType::RetentionLink)
+    else if (relationship.m_RelationshipType == ITimelineDecoder::RelationshipType::RetentionLink)
     {
         // Take care of the special case of a connection between layers in ArmNN
         // modelled by a retention link between two layer entities with an attribute GUID
         // of connection
-        if (relationship.m_AttributeGuid == armnn::profiling::LabelsAndEventClasses::CONNECTION_GUID)
+        if (relationship.m_AttributeGuid == LabelsAndEventClasses::CONNECTION_GUID)
         {
             HandleConnection(relationship);
         }
-        else if (relationship.m_AttributeGuid == armnn::profiling::LabelsAndEventClasses::CHILD_GUID)
+        else if (relationship.m_AttributeGuid == LabelsAndEventClasses::CHILD_GUID)
         {
             HandleChild(relationship);
         }
-        else if (relationship.m_AttributeGuid == armnn::profiling::LabelsAndEventClasses::EXECUTION_OF_GUID)
+        else if (relationship.m_AttributeGuid == LabelsAndEventClasses::EXECUTION_OF_GUID)
         {
             HandleExecutionOf(relationship);
         }
@@ -127,8 +128,8 @@ void TimelineModel::HandleLabelLink(const arm::pipe::ITimelineDecoder::Relations
         entity->AddAttribute(*attribute, *value);
         // if the attribute is 'type' and the value is 'inference'
         // we need to cache the entity guid as an inference
-        if (armnn::profiling::LabelsAndEventClasses::TYPE_LABEL.compare(*attribute) == 0 &&
-            armnn::profiling::LabelsAndEventClasses::INFERENCE.compare(*value) == 0)
+        if (LabelsAndEventClasses::TYPE_LABEL.compare(*attribute) == 0 &&
+            LabelsAndEventClasses::INFERENCE.compare(*value) == 0)
         {
             m_InferenceGuids.push_back(relationship.m_HeadGuid);
         }
@@ -359,7 +360,7 @@ std::string GetEntityDescription(const Entity& entity)
     ss << "Entity [" << entity.GetGuid() << "]";
     for (auto& attributeEntry : entity.GetAttributes())
     {
-        if (profiling::LabelsAndEventClasses::PROCESS_ID_LABEL == attributeEntry.second.first)
+        if (LabelsAndEventClasses::PROCESS_ID_LABEL == attributeEntry.second.first)
         {
             ss << " " << attributeEntry.second.first << " = [processId]";
         }
@@ -399,6 +400,6 @@ std::string GetEventDescription(EventObj* event)
     return ss.str();
 }
 
-} // namespace profiling
+} // namespace pipe
 
-} // namespace armnn
+} // namespace arm

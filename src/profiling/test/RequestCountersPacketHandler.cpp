@@ -5,17 +5,16 @@
 
 #include "RequestCountersPacketHandler.hpp"
 
-#include "DirectoryCaptureCommandHandler.hpp"
-
-#include <armnn/utility/NumericCast.hpp>
-
+#include <common/include/NumericCast.hpp>
 #include <common/include/PacketVersionResolver.hpp>
 #include <common/include/ProfilingException.hpp>
 
-namespace armnn
+#include <server/include/timelineDecoder/DirectoryCaptureCommandHandler.hpp>
+
+namespace arm
 {
 
-namespace profiling
+namespace pipe
 {
 
 std::vector<uint32_t> RequestCountersPacketHandler::GetHeadersAccepted()
@@ -33,7 +32,7 @@ void RequestCountersPacketHandler::HandlePacket(const arm::pipe::Packet& packet)
     }
     arm::pipe::PacketVersionResolver packetVersionResolver;
     DirectoryCaptureCommandHandler directoryCaptureCommandHandler(
-            0, 2, packetVersionResolver.ResolvePacketVersion(0, 2).GetEncodedValue());
+        "ARMNN", 0, 2, packetVersionResolver.ResolvePacketVersion(0, 2).GetEncodedValue());
     directoryCaptureCommandHandler.operator()(packet);
     const ICounterDirectory& counterDirectory = directoryCaptureCommandHandler.GetCounterDirectory();
     for (auto& category : counterDirectory.GetCategories())
@@ -55,7 +54,7 @@ void RequestCountersPacketHandler::SendCounterSelectionPacket()
     uint32_t uint32_t_size = sizeof(uint32_t);
 
     uint32_t offset   = 0;
-    uint32_t bodySize = uint32_t_size + armnn::numeric_cast<uint32_t>(m_IdList.size()) * uint16_t_size;
+    uint32_t bodySize = uint32_t_size + arm::pipe::numeric_cast<uint32_t>(m_IdList.size()) * uint16_t_size;
 
     auto uniqueData     = std::make_unique<unsigned char[]>(bodySize);
     auto data = reinterpret_cast<unsigned char*>(uniqueData.get());
@@ -75,6 +74,6 @@ void RequestCountersPacketHandler::SendCounterSelectionPacket()
     m_Connection->ReturnPacket(packet);
 }
 
-} // namespace profiling
+} // namespace pipe
 
-} // namespace armnn
+} // namespace arm

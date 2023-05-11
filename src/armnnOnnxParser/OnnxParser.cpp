@@ -1,12 +1,15 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #include "OnnxParser.hpp"
 
+#include "armnnOnnxParser/Version.hpp"
+
 #include <armnn/Descriptors.hpp>
 #include <armnn/utility/Assert.hpp>
 #include <armnn/utility/NumericCast.hpp>
+#include <ParserHelper.hpp>
 #include <VerificationHelpers.hpp>
 
 #include <fmt/format.h>
@@ -14,12 +17,89 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
+#include <iostream>
 #include <numeric>
+#include <armnnUtils/Permute.hpp>
 
 using namespace armnn;
 
 namespace armnnOnnxParser
 {
+
+IOnnxParser::IOnnxParser() : pOnnxParserImpl(new OnnxParserImpl()) {}
+
+IOnnxParser::~IOnnxParser() = default;
+
+IOnnxParser* IOnnxParser::CreateRaw()
+{
+    return new IOnnxParser();
+}
+
+IOnnxParserPtr IOnnxParser::Create()
+{
+    return IOnnxParserPtr(CreateRaw(), &IOnnxParser::Destroy);
+}
+
+void IOnnxParser::Destroy(IOnnxParser* parser)
+{
+    delete parser;
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromBinaryFile(const char* graphFile)
+{
+    return pOnnxParserImpl->CreateNetworkFromBinaryFile(graphFile);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent)
+{
+    return pOnnxParserImpl->CreateNetworkFromBinary(binaryContent);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent,
+                                                        const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    return pOnnxParserImpl->CreateNetworkFromBinary(binaryContent, inputShapes);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromTextFile(const char* graphFile)
+{
+    return pOnnxParserImpl->CreateNetworkFromTextFile(graphFile);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromString(const std::string& protoText)
+{
+    return pOnnxParserImpl->CreateNetworkFromString(protoText);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromBinaryFile(
+    const char* graphFile,
+    const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    return pOnnxParserImpl->CreateNetworkFromBinaryFile(graphFile, inputShapes);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromTextFile(const char* graphFile,
+                                                          const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    return pOnnxParserImpl->CreateNetworkFromTextFile(graphFile, inputShapes);
+}
+
+armnn::INetworkPtr IOnnxParser::CreateNetworkFromString(const std::string& protoText,
+                                                        const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    return pOnnxParserImpl->CreateNetworkFromString(protoText, inputShapes);
+}
+
+BindingPointInfo IOnnxParser::GetNetworkInputBindingInfo(const std::string& name) const
+{
+    return pOnnxParserImpl->GetNetworkInputBindingInfo(name);
+}
+
+BindingPointInfo IOnnxParser::GetNetworkOutputBindingInfo(const std::string& name) const
+{
+    return pOnnxParserImpl->GetNetworkOutputBindingInfo(name);
+}
+
 namespace
 {
 void CheckValidDataType(std::initializer_list<onnx::TensorProto::DataType> validInputTypes,
@@ -117,6 +197,18 @@ void ReadOptionalNodeAttributeImpl(const onnx::NodeProto& node,
     }
 }
 
+int ReadMandatoryNodeIntAttribute(const onnx::NodeProto& node,
+                                    const std::string& name)
+{
+    int attribValue = 0;
+    ReadMandatoryNodeAttributeImpl(node, name, onnx::AttributeProto::INT,
+                                  [&attribValue](const onnx::AttributeProto& attrValue)
+                                      {
+                                          attribValue = CHECKED_INT32(attrValue.i());
+                                      });
+    return attribValue;
+}
+
 int64_t ReadOptionalNodeInt64Attribute(const onnx::NodeProto& node,
                                        const std::string& name,
                                        const int64_t defaultValue = 0)
@@ -200,38 +292,44 @@ std::string ReadOptionalNodeStringAttribute(const onnx::NodeProto& node, const s
 
 armnn::TensorInfo ToTensorInfo(const std::string& name, std::vector<unsigned int>& shape, int data_type)
 {
-  DataType type;
-  switch(data_type)
-  {
-      case onnx::TensorProto::FLOAT:
-      {
-        type = DataType::Float32;
-        break;
-      }
-      case onnx::TensorProto::INT32:
-      case onnx::TensorProto::INT64:
-      {
-          type = DataType::Signed32;
+    DataType type;
+    switch(data_type)
+    {
+        case onnx::TensorProto::FLOAT:
+        {
+          type = DataType::Float32;
           break;
-      }
-      default:
-      {
-          throw ParseException(
-              fmt::format("'{}' is not a currently supported datatype for tensor {}."
-                          " Supported dataTypes are FLOAT, INT32 and INT64.  {}",
-                          onnx::TensorProto::DataType_Name(static_cast<onnx::TensorProto::DataType>(data_type)),
-                          name,
-                          CHECK_LOCATION().AsString() ));
-      }
-  }
+        }
+        case onnx::TensorProto::INT32:
+        case onnx::TensorProto::INT64:
+        {
+            type = DataType::Signed32;
+            break;
+        }
+        default:
+        {
+            throw ParseException(
+                fmt::format("'{}' is not a currently supported datatype for tensor {}."
+                            " Supported dataTypes are FLOAT, INT32 and INT64.  {}",
+                            onnx::TensorProto::DataType_Name(static_cast<onnx::TensorProto::DataType>(data_type)),
+                            name,
+                            CHECK_LOCATION().AsString() ));
+        }
+    }
 
-  // To avoid crashes by trivial tensors
-  if (shape.empty())
-  {
-      return TensorInfo(TensorShape(), type);
-  }
+    // Scalar Tensor
+    if (shape.empty())
+    {
+        return TensorInfo(TensorShape(Dimensionality::Scalar), type);
+    }
 
-  return TensorInfo(TensorShape(static_cast<unsigned int>(shape.size()), shape.data()), type);
+    // Dynamic Tensor
+    if(std::find(shape.begin(), shape.end(), 0) != shape.end())
+    {
+        return TensorInfo(TensorShape(Dimensionality::NotSpecified), type);
+    }
+
+    return TensorInfo(TensorShape(static_cast<unsigned int>(shape.size()), shape.data()), type);
 }
 
 armnn::TensorInfo ToTensorInfo(const onnx::ValueInfoProto& info)
@@ -241,11 +339,6 @@ armnn::TensorInfo ToTensorInfo(const onnx::ValueInfoProto& info)
   for (int i = 0; i < onnxShape.dim_size(); ++i)
   {
       shapeDims.push_back(CHECKED_NON_NEGATIVE(CHECKED_INT32(onnxShape.dim(i).dim_value())));
-  }
-
-  if (shapeDims.empty())
-  {
-      shapeDims.push_back(1);
   }
 
   return ToTensorInfo(info.name(), shapeDims, info.type().tensor_type().elem_type());
@@ -258,11 +351,6 @@ armnn::TensorInfo ToTensorInfo(const onnx::TensorProto& tensor)
   for (auto dim: tensor.dims())
   {
       shapeDims.push_back(CHECKED_NON_NEGATIVE(CHECKED_INT32(dim)));
-  }
-
-  if (shapeDims.empty())
-  {
-      shapeDims.push_back(1);
   }
 
   return ToTensorInfo(tensor.name(), shapeDims, tensor.data_type());
@@ -286,29 +374,36 @@ std::string TensorInfoAsString(const TensorInfo& info,
     return ss.str();
 }
 
-void CalcPadding(uint32_t inputSize, uint32_t filterSize, uint32_t stride, uint32_t* paddingFront,
-                 uint32_t* paddingBack, bool isUpper)
+void CalcPadding(uint32_t inputSize,
+                 uint32_t filterSize,
+                 uint32_t stride,
+                 uint32_t dilation,
+                 uint32_t* paddingFront,
+                 uint32_t* paddingBack,
+                 bool isUpper)
 {
     uint32_t outputSize = (inputSize + stride - 1) / stride;
-    uint32_t temp = (outputSize - 1) * stride + filterSize;
+    uint32_t dilatedSize = filterSize + (dilation - 1) * (filterSize - 1);
+    uint32_t temp = (outputSize - 1) * stride + dilatedSize;
     *paddingFront = (temp - inputSize) / 2;
     *paddingBack = *paddingFront;
     if((temp - inputSize) % 2 == 1)
     {
         if (isUpper)
         {
-          *paddingBack += 1;
+            *paddingBack += 1;
         }
         else
         {
-          *paddingFront += 1;
+            *paddingFront += 1;
         }
     }
 }
 
 TensorInfo ComputeReshapeInfo(const TensorShape& targetShapeTensor,
                               const TensorShape& inShape,
-                              const std::string& outName)
+                              const std::string& outName,
+                              DataType dataType = DataType::Float32)
 {
     std::vector<int> targetDims;
     for(uint i = 0; i < targetShapeTensor.GetNumDimensions(); ++i)
@@ -352,30 +447,35 @@ TensorInfo ComputeReshapeInfo(const TensorShape& targetShapeTensor,
         outDims[stretchIndex] = inShape.GetNumElements() / targetNumElements;
     }
     TensorShape outShape = TensorShape{static_cast<unsigned int>(outDims.size()), outDims.data()};
-    return TensorInfo(outShape, DataType::Float32);
+    return TensorInfo(outShape, dataType);
 }
 
 } //namespace
 
-const std::map<std::string, OnnxParser::OperationParsingFunction> OnnxParser::m_ParserFunctions = {
-    { "BatchNormalization",    &OnnxParser::ParseBatchNormalization},
-    { "GlobalAveragePool",     &OnnxParser::ParseGlobalAveragePool},
-    { "AveragePool",           &OnnxParser::ParseAveragePool },
-    { "Clip",                  &OnnxParser::ParseClip },
-    { "Constant",              &OnnxParser::ParseConstant },
-    { "MaxPool",               &OnnxParser::ParseMaxPool },
-    { "Reshape",               &OnnxParser::ParseReshape },
-    { "Sigmoid",               &OnnxParser::ParseSigmoid },
-    { "Tanh",                  &OnnxParser::ParseTanh },
-    { "Relu",                  &OnnxParser::ParseRelu },
-    { "LeakyRelu",             &OnnxParser::ParseLeakyRelu },
-    { "Conv",                  &OnnxParser::ParseConv },
-    { "Add",                   &OnnxParser::ParseAdd },
-    { "Flatten",               &OnnxParser::ParseFlatten},
+const std::map<std::string, OnnxParserImpl::OperationParsingFunction> OnnxParserImpl::m_ParserFunctions = {
+    { "BatchNormalization",    &OnnxParserImpl::ParseBatchNormalization},
+    { "GlobalAveragePool",     &OnnxParserImpl::ParseGlobalAveragePool},
+    { "AveragePool",           &OnnxParserImpl::ParseAveragePool },
+    { "Clip",                  &OnnxParserImpl::ParseClip },
+    { "Constant",              &OnnxParserImpl::ParseConstant },
+    { "MaxPool",               &OnnxParserImpl::ParseMaxPool },
+    { "Reshape",               &OnnxParserImpl::ParseReshape },
+    { "Sigmoid",               &OnnxParserImpl::ParseSigmoid },
+    { "Tanh",                  &OnnxParserImpl::ParseTanh },
+    { "Relu",                  &OnnxParserImpl::ParseRelu },
+    { "LeakyRelu",             &OnnxParserImpl::ParseLeakyRelu },
+    { "Conv",                  &OnnxParserImpl::ParseConv },
+    { "Add",                   &OnnxParserImpl::ParseAdd },
+    { "Flatten",               &OnnxParserImpl::ParseFlatten },
+    { "Shape",                 &OnnxParserImpl::ParseShape },
+    { "Gather",                &OnnxParserImpl::ParseGather },
+    { "Unsqueeze",             &OnnxParserImpl::ParseUnsqueeze },
+    { "Concat",                &OnnxParserImpl::ParseConcat },
+    { "Gemm",                  &OnnxParserImpl::ParseGemm }
 };
 
 template<typename TypePair, typename Location>
-void OnnxParser::ValidateInputs(const onnx::NodeProto& node,
+void OnnxParserImpl::ValidateInputs(const onnx::NodeProto& node,
                                 TypePair validInputs,
                                 const Location& location)
 {
@@ -391,84 +491,135 @@ void OnnxParser::ValidateInputs(const onnx::NodeProto& node,
 }
 
 #define VALID_INPUTS(NODE, VALID_INPUTS) \
-    OnnxParser::ValidateInputs(NODE, \
+    OnnxParserImpl::ValidateInputs(NODE, \
                                VALID_INPUTS, \
                                CHECK_LOCATION())
 
-std::vector<TensorInfo> OnnxParser::ComputeOutputInfo(std::vector<std::string> outNames,
-                                                       const IConnectableLayer* layer,
-                                                       std::vector<TensorShape> inputShapes)
+std::vector<TensorInfo> OnnxParserImpl::ComputeOutputInfo(std::vector<std::string> outNames,
+                                                          const IConnectableLayer* layer,
+                                                          std::vector<TensorShape> inputShapes,
+                                                          const onnx::TensorProto::DataType& dataType)
 {
     ARMNN_ASSERT(! outNames.empty());
     bool needCompute = std::any_of(outNames.begin(),
                                    outNames.end(),
                                    [this](std::string name)
                                    {
-                                       return (m_TensorsInfo.count(name) == 0 || m_TensorsInfo[name].m_info == nullptr);
+                                       return (m_TensorsInfo.count(name) == 0 ||
+                                               m_TensorsInfo[name].m_info == nullptr ||
+                                               m_TensorsInfo[name].m_info->GetShape().GetDimensionality() ==
+                                               Dimensionality::NotSpecified);
                                    });
-     std::vector<TensorInfo> outInfo;
-     //if the output info(s) are not here, we need to compute them
-     std::vector<TensorShape> inferredShapes;
-     if(needCompute)
-     {
-         inferredShapes = layer->InferOutputShapes(inputShapes);
-         ARMNN_ASSERT(inferredShapes.size() == outNames.size());
-     }
-     for (uint i = 0; i < outNames.size(); ++i)
-     {
-         if(needCompute)
-         {
-             m_TensorsInfo[outNames[i]] = OnnxTensor();
-             m_TensorsInfo[outNames[i]].m_info = std::make_unique<TensorInfo>(
-                TensorInfo(inferredShapes[i], DataType::Float32));
-         }
+    std::vector<TensorInfo> outInfo;
+    //if the output info(s) are not here, we need to compute them
+    std::vector<TensorShape> inferredShapes;
+    DataType armnnType = DataType::Float32;
+    if(needCompute) {
+        inferredShapes = layer->InferOutputShapes(inputShapes);
+        ARMNN_ASSERT(inferredShapes.size() == outNames.size());
+        switch (dataType) {
+            case onnx::TensorProto::FLOAT: {
+                armnnType = DataType::Float32;
+                break;
+            }
+            case onnx::TensorProto::INT32:
+            case onnx::TensorProto::INT64: {
+                armnnType = DataType::Signed32;
+                break;
+            }
+            default: {
+                throw ParseException(
+                    fmt::format("'{}' is not a currently supported datatype for {}."
+                                " Supported dataTypes are FLOAT, INT32 and INT64.  {}",
+                                onnx::TensorProto::DataType_Name(static_cast<onnx::TensorProto::DataType>(dataType)),
+                                layer->GetName(),
+                                CHECK_LOCATION().AsString()));
+            }
+        }
+    }
+    for (uint i = 0; i < outNames.size(); ++i)
+    {
+        if(needCompute)
+        {
+            m_TensorsInfo[outNames[i]] = OnnxTensor();
+            m_TensorsInfo[outNames[i]].m_info = std::make_unique<TensorInfo>(
+                TensorInfo(inferredShapes[i], armnnType));
+            m_TensorsInfo[outNames[i]].m_dtype = dataType;
+        }
         outInfo.push_back(*m_TensorsInfo[outNames[i]].m_info);
-     }
-     return outInfo;
+    }
+    return outInfo;
 }
 
-IOnnxParser* IOnnxParser::CreateRaw()
-{
-    return new OnnxParser();
-}
-
-IOnnxParserPtr IOnnxParser::Create()
-{
-    return IOnnxParserPtr(CreateRaw(), &IOnnxParser::Destroy);
-}
-
-void IOnnxParser::Destroy(IOnnxParser* parser)
-{
-    delete parser;
-}
-
-OnnxParser::OnnxParser()
+OnnxParserImpl::OnnxParserImpl()
     : m_Network(nullptr, nullptr)
 {
 }
 
-void OnnxParser::ResetParser()
+void OnnxParserImpl::ResetParser()
 {
     m_Network = armnn::INetworkPtr(nullptr, nullptr);
     m_Graph = nullptr;
+    m_InputInfos.clear();
+    m_OutputInfos.clear();
 }
 
-void OnnxParser::Cleanup()
+void OnnxParserImpl::Cleanup()
 {
     m_TensorConnections.clear();
     m_TensorsInfo.clear();
     m_OutputsMap.clear();
     m_OutputsFusedAndUsed.clear();
+    m_InputShapes.clear();
 }
 
-std::pair<ConstTensor, std::unique_ptr<float[]>> OnnxParser::CreateConstTensor(const std::string name)
+template<typename T>
+std::pair<armnn::ConstTensor, std::unique_ptr<T[]>>
+CreateConstTensorImpl(const T* bufferPtr,
+                      armnn::TensorInfo& tensorInfo,
+                      const armnn::Optional<armnn::PermutationVector&> permutationVector)
 {
-    const TensorInfo tensorInfo = *m_TensorsInfo[name].m_info;
+    ARMNN_ASSERT_MSG(bufferPtr != nullptr, fmt::format("Buffer for permutation is null").c_str());
+
+    std::unique_ptr<T[]> data(new T[tensorInfo.GetNumElements()]);
+
+    if (permutationVector.has_value() && permutationVector.value().GetSize() > 0)
+    {
+        tensorInfo = armnnUtils::Permuted(tensorInfo, permutationVector.value());
+        armnnUtils::Permute(tensorInfo.GetShape(), permutationVector.value(),
+                            reinterpret_cast<const T*>(bufferPtr), data.get(), sizeof(T));
+    }
+    else
+    {
+        ::memcpy(data.get(), bufferPtr, tensorInfo.GetNumBytes());
+    }
+
+    return std::make_pair(ConstTensor(tensorInfo, data.get()), std::move(data));
+}
+
+std::pair<ConstTensor, std::unique_ptr<float[]>>
+OnnxParserImpl::CreateConstTensor(const std::string name,
+                                  armnn::Optional<armnn::PermutationVector&> permutationVector)
+{
+    TensorInfo tensorInfo = *m_TensorsInfo[name].m_info;
     onnx::TensorProto onnxTensor = *m_TensorsInfo[name].m_tensor;
 
+    //ONNX can have Float16 and double constant nodes but ArmNN only supports float32
+    CHECK_VALID_DATATYPE(name, onnxTensor.name(),
+                         static_cast<onnx::TensorProto::DataType>(onnxTensor.data_type()), onnx::TensorProto::FLOAT);
+
+    // Makes sure IsConstant flag is set.
+    tensorInfo.SetConstant();
+
+    // Const tensors requires at least a list of values
+    if (tensorInfo.GetNumElements() == 0)
+    {
+        throw ParseException(fmt::format("No tensor data found for Const tensor '{}' {}",
+                                         name,
+                                         CHECK_LOCATION().AsString()));
+    }
+
     auto srcData = onnxTensor.float_data().data();
-    std::unique_ptr<float[]> tensorData(new float[tensorInfo.GetNumElements()]);
-    const size_t tensorSizeInBytes = tensorInfo.GetNumBytes();
     // Copy the value list entries into the destination
     if (!onnxTensor.has_raw_data())
     {
@@ -482,24 +633,76 @@ std::pair<ConstTensor, std::unique_ptr<float[]>> OnnxParser::CreateConstTensor(c
                             tensorInfo.GetNumElements(),
                             CHECK_LOCATION().AsString()));
         }
-        ::memcpy(tensorData.get(), srcData, tensorSizeInBytes);
+        return CreateConstTensorImpl<float>(srcData, tensorInfo, permutationVector);
     }
     else
     {
-        ::memcpy(tensorData.get(), onnxTensor.raw_data().c_str(), tensorSizeInBytes);
+        return CreateConstTensorImpl<float>(reinterpret_cast<const float*>(onnxTensor.raw_data().c_str()),
+                                            tensorInfo,
+                                            permutationVector);
     }
+}
+
+std::pair<ConstTensor, std::unique_ptr<int32_t[]>>
+OnnxParserImpl::CreateInt64ConstTensor(const std::string name,
+                                       armnn::Optional<armnn::PermutationVector&> permutationVector)
+{
+    TensorInfo tensorInfo = *m_TensorsInfo[name].m_info;
+    onnx::TensorProto onnxTensor = *m_TensorsInfo[name].m_tensor;
+
+    CHECK_VALID_DATATYPE(name, onnxTensor.name(),
+                         static_cast<onnx::TensorProto::DataType>(onnxTensor.data_type()), onnx::TensorProto::INT64);
+
+    // Makes sure IsConstant flag is set.
+    tensorInfo.SetConstant();
+    uint numElements = tensorInfo.GetNumElements();
 
     // Const tensors requires at least a list of values
-    if (tensorInfo.GetNumElements() == 0)
+    if (numElements == 0)
     {
         throw ParseException(fmt::format("No tensor data found for Const tensor '{}' {}",
                                          name,
                                          CHECK_LOCATION().AsString()));
     }
-    return std::make_pair(ConstTensor(tensorInfo, tensorData.get()), std::move(tensorData));
+
+    // Copy the value list entries into the destination
+    if (!onnxTensor.has_raw_data())
+    {
+        auto srcData = onnxTensor.int64_data().data();
+        if(numElements != static_cast<uint>(onnxTensor.int64_data_size()))
+        {
+            throw ParseException(
+                fmt::format("The number of data provided ({}) does not match the tensor '{}' number of "
+                            "elements ({}) {}",
+                            onnxTensor.int64_data_size(),
+                            name,
+                            tensorInfo.GetNumElements(),
+                            CHECK_LOCATION().AsString()));
+        }
+
+        std::vector<int32_t> int32Data;
+        for(uint i = 0; i < numElements; i++)
+        {
+            int32_t int32Value = CHECKED_INT32(srcData[i]);
+            int32Data.push_back(int32Value);
+        }
+
+        return CreateConstTensorImpl<int32_t>(int32Data.data(), tensorInfo, permutationVector);
+    }
+    else
+    {
+        auto srcData = reinterpret_cast<const int64_t*>(onnxTensor.raw_data().c_str());
+        std::vector<int32_t> int32Data;
+        for(uint i = 0; i < numElements; i++)
+        {
+            int32_t int32Value = CHECKED_INT32(srcData[i]);
+            int32Data.push_back(int32Value);
+        }
+        return CreateConstTensorImpl<int32_t>(int32Data.data(), tensorInfo, permutationVector);
+    }
 }
 
-ModelPtr OnnxParser::LoadModelFromTextFile(const char* graphFile)
+ModelPtr OnnxParserImpl::LoadModelFromTextFile(const char* graphFile)
 {
     FILE* fd = fopen(graphFile, "r");
 
@@ -524,15 +727,61 @@ ModelPtr OnnxParser::LoadModelFromTextFile(const char* graphFile)
     return modelProto;
 }
 
-INetworkPtr OnnxParser::CreateNetworkFromTextFile(const char* graphFile)
+INetworkPtr OnnxParserImpl::CreateNetworkFromTextFile(const char* graphFile)
 {
     ResetParser();
     ModelPtr modelProto = LoadModelFromTextFile(graphFile);
     return CreateNetworkFromModel(*modelProto);
 }
 
+INetworkPtr OnnxParserImpl::CreateNetworkFromTextFile(const char* graphFile,
+                                                      const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    ResetParser();
+    m_InputShapes = inputShapes;
+    ModelPtr modelProto = LoadModelFromTextFile(graphFile);
+    return CreateNetworkFromModel(*modelProto);
+}
 
-ModelPtr OnnxParser::LoadModelFromBinaryFile(const char* graphFile)
+INetworkPtr OnnxParserImpl::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent)
+{
+    ResetParser();
+    ModelPtr modelProto = LoadModelFromBinary(binaryContent);
+    return CreateNetworkFromModel(*modelProto);
+}
+
+INetworkPtr OnnxParserImpl::CreateNetworkFromBinary(const std::vector<uint8_t>& binaryContent,
+                                                    const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    ResetParser();
+    m_InputShapes = inputShapes;
+    ModelPtr modelProto = LoadModelFromBinary(binaryContent);
+    return CreateNetworkFromModel(*modelProto);
+}
+
+ModelPtr OnnxParserImpl::LoadModelFromBinary(const std::vector<uint8_t>& binaryContent)
+{
+    if (binaryContent.size() == 0)
+    {
+        throw ParseException(fmt::format("Missing binary content", CHECK_LOCATION().AsString()));
+    }
+    // Parse the file into a message
+    ModelPtr modelProto = std::make_unique<onnx::ModelProto>();
+
+    google::protobuf::io::CodedInputStream codedStream(binaryContent.data(), static_cast<int>(binaryContent.size()));
+    codedStream.SetTotalBytesLimit(INT_MAX);
+    bool success = modelProto.get()->ParseFromCodedStream(&codedStream);
+
+    if (!success)
+    {
+        std::stringstream error;
+        error << "Failed to parse graph";
+        throw ParseException(fmt::format("{} {}", error.str(), CHECK_LOCATION().AsString()));
+    }
+    return modelProto;
+}
+
+ModelPtr OnnxParserImpl::LoadModelFromBinaryFile(const char* graphFile)
 {
     FILE* fd = fopen(graphFile, "rb");
 
@@ -560,14 +809,23 @@ ModelPtr OnnxParser::LoadModelFromBinaryFile(const char* graphFile)
 
 }
 
-INetworkPtr OnnxParser::CreateNetworkFromBinaryFile(const char* graphFile)
+INetworkPtr OnnxParserImpl::CreateNetworkFromBinaryFile(const char* graphFile)
 {
     ResetParser();
     ModelPtr modelProto = LoadModelFromBinaryFile(graphFile);
     return CreateNetworkFromModel(*modelProto);
 }
 
-ModelPtr OnnxParser::LoadModelFromString(const std::string& protoText)
+INetworkPtr OnnxParserImpl::CreateNetworkFromBinaryFile(const char* graphFile,
+                                                        const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    ResetParser();
+    m_InputShapes = inputShapes;
+    ModelPtr modelProto = LoadModelFromBinaryFile(graphFile);
+    return CreateNetworkFromModel(*modelProto);
+}
+
+ModelPtr OnnxParserImpl::LoadModelFromString(const std::string& protoText)
 {
     if (protoText == "")
     {
@@ -586,14 +844,23 @@ ModelPtr OnnxParser::LoadModelFromString(const std::string& protoText)
     return modelProto;
 }
 
-INetworkPtr OnnxParser::CreateNetworkFromString(const std::string& protoText)
+INetworkPtr OnnxParserImpl::CreateNetworkFromString(const std::string& protoText)
 {
     ResetParser();
     ModelPtr modelProto = LoadModelFromString(protoText);
     return CreateNetworkFromModel(*modelProto);
 }
 
-INetworkPtr OnnxParser::CreateNetworkFromModel(onnx::ModelProto& model)
+INetworkPtr OnnxParserImpl::CreateNetworkFromString(const std::string& protoText,
+                                                    const std::map<std::string, armnn::TensorShape>& inputShapes)
+{
+    ResetParser();
+    m_InputShapes = inputShapes;
+    ModelPtr modelProto = LoadModelFromString(protoText);
+    return CreateNetworkFromModel(*modelProto);
+}
+
+INetworkPtr OnnxParserImpl::CreateNetworkFromModel(onnx::ModelProto& model)
 {
     m_Network = INetwork::Create();
     try
@@ -610,7 +877,7 @@ INetworkPtr OnnxParser::CreateNetworkFromModel(onnx::ModelProto& model)
     return std::move(m_Network);
 }
 
-void OnnxParser::LoadGraph()
+void OnnxParserImpl::LoadGraph()
 {
     ARMNN_ASSERT(m_Graph.get() != nullptr);
 
@@ -682,9 +949,16 @@ void OnnxParser::LoadGraph()
             }
         }
     }
+
+    // Get output info.
+    for(int outputIndex = 0; outputIndex < m_Graph->output_size(); ++outputIndex)
+    {
+        auto output = m_Graph->output(outputIndex);
+        m_OutputInfos[output.name()] = *m_TensorsInfo[output.name()].m_info;
+    }
 }
 
-void OnnxParser::SetupInfo(const google::protobuf::RepeatedPtrField<onnx::ValueInfoProto >* list)
+void OnnxParserImpl::SetupInfo(const google::protobuf::RepeatedPtrField<onnx::ValueInfoProto >* list)
 {
     for (auto tensor : *list)
     {
@@ -695,7 +969,7 @@ void OnnxParser::SetupInfo(const google::protobuf::RepeatedPtrField<onnx::ValueI
     }
 }
 
-void OnnxParser::DetectFullyConnected()
+void OnnxParserImpl::DetectFullyConnected()
 {
     m_OutputsFusedAndUsed = std::vector<UsageSummary> (static_cast<size_t>(m_Graph->node_size()), UsageSummary());
     auto matmulAndConstant = [&](const std::string& constInput,
@@ -753,10 +1027,10 @@ void OnnxParser::DetectFullyConnected()
 }
 
 template<typename Location>
-void OnnxParser::GetInputAndParam(const onnx::NodeProto& node,
-                                  std::string* inputName,
-                                  std::string* constName,
-                                  const Location& location)
+void OnnxParserImpl::GetInputAndParam(const onnx::NodeProto& node,
+                                      std::string* inputName,
+                                      std::string* constName,
+                                      const Location& location)
 {
     int cstIndex;
     if (m_TensorsInfo[node.input(0)].isConstant())
@@ -786,7 +1060,7 @@ void OnnxParser::GetInputAndParam(const onnx::NodeProto& node,
 }
 
 template<typename Location>
-void OnnxParser::To1DTensor(const std::string& name, const Location& location)
+void OnnxParserImpl::To1DTensor(const std::string& name, const Location& location)
 {
     TensorShape shape = m_TensorsInfo[name].m_info->GetShape();
     std::vector<uint32_t> newShape;
@@ -805,7 +1079,7 @@ void OnnxParser::To1DTensor(const std::string& name, const Location& location)
     m_TensorsInfo[name].m_info->SetShape(TensorShape(static_cast<unsigned int>(newShape.size()), newShape.data()));
 }
 
-void OnnxParser::AddConvLayerWithDepthwiseConv(const onnx::NodeProto& node, const Convolution2dDescriptor& convDesc)
+void OnnxParserImpl::AddConvLayerWithDepthwiseConv(const onnx::NodeProto& node, const Convolution2dDescriptor& convDesc)
 {
     ARMNN_ASSERT(node.op_type() == "Conv");
 
@@ -818,12 +1092,25 @@ void OnnxParser::AddConvLayerWithDepthwiseConv(const onnx::NodeProto& node, cons
     desc.m_StrideY      = convDesc.m_StrideY;
     desc.m_BiasEnabled  = convDesc.m_BiasEnabled;
 
-    armnn::IConnectableLayer* layer;
+    armnn::IConnectableLayer* layer = m_Network->AddDepthwiseConvolution2dLayer(desc, node.name().c_str());
+    std::string permuteStr = "permute_" + node.input(1);
+    std::vector<std::string> tensorIndexes= {node.input(0), permuteStr};
+
     auto weightTensor = CreateConstTensor(node.input(1));
-    TensorShape& weightShape = weightTensor.first.GetShape();
-    weightShape[1] = weightShape[0];
-    weightShape[0] = 1;
-    m_TensorsInfo[node.input(1)].m_info->SetShape(weightShape);
+    IConnectableLayer* weightsLayer = m_Network->AddConstantLayer(weightTensor.first);
+
+    // weights come in as [O,1,H,W] from ONNX and need to be converted to ArmNNs depthwise weights layout [1,H,W,O]
+    armnn::PermutationVector perVec {3, 0, 1, 2};
+    TensorInfo weightsPermuted = armnnUtils::Permuted(weightTensor.first.GetInfo(), perVec);
+
+    // Inserts NewLayer so layers don't need to be re-sorted.
+    IConnectableLayer* permuteLayer = m_Network->AddPermuteLayer(PermuteDescriptor(perVec),
+                                                                 "permute_layer");
+    permuteLayer->GetOutputSlot(0).SetTensorInfo(weightsPermuted);
+    permuteLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
+
+    weightsLayer->GetOutputSlot(0).SetTensorInfo(weightTensor.first.GetInfo());
+    weightsLayer->GetOutputSlot(0).Connect(permuteLayer->GetInputSlot(0u));
 
     if (node.input_size() == 3)
     {
@@ -834,47 +1121,50 @@ void OnnxParser::AddConvLayerWithDepthwiseConv(const onnx::NodeProto& node, cons
                                              node.name(),
                                              CHECK_LOCATION().AsString()));
         }
+
         desc.m_BiasEnabled = true;
         auto biasTensor = CreateConstTensor(node.input(2));
-        layer = m_Network->AddDepthwiseConvolution2dLayer(desc,
-                                                          weightTensor.first,
-                                                          Optional<ConstTensor>(biasTensor.first),
-                                                          node.name().c_str());
+        tensorIndexes.emplace_back(node.input(2));
+
+        IConnectableLayer* biasLayer = m_Network->AddConstantLayer(biasTensor.first);
+        biasLayer->GetOutputSlot(0).SetTensorInfo(biasTensor.first.GetInfo());
+        biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
     }
-    else
-    {
-        layer = m_Network->AddDepthwiseConvolution2dLayer(desc,
-                                                          weightTensor.first,
-                                                          EmptyOptional(),
-                                                          node.name().c_str());
-    }
+
     ARMNN_ASSERT(layer != nullptr);
 
     auto outputInfo = ComputeOutputInfo({ node.output(0) }, layer,
                                         { m_TensorsInfo[node.input(0)].m_info->GetShape(),
-                                          m_TensorsInfo[node.input(1)].m_info->GetShape() });
+                                          weightsPermuted.GetShape() });
 
     layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
 
     // register the input connection slots for the layer, connections are made after all layers have been created
     // only the tensors for the inputs are relevant, exclude the const tensors
-    RegisterInputSlots(layer, {node.input(0)});
+    RegisterInputSlots(layer, tensorIndexes);
 
     // register the output connection slots for the layer, connections are made after all layers have been created
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::AddFullyConnected(const onnx::NodeProto& matmulNode, const onnx::NodeProto* addNode)
+void OnnxParserImpl::AddFullyConnected(const onnx::NodeProto& matmulNode, const onnx::NodeProto* addNode)
 {
-
     // find matmul inputs
-    std::string weightName;
     std::string inputName;
+    std::string weightName;
+    std::string biasName;
+    std::string outputName;
     CHECK_VALID_SIZE(static_cast<size_t>(matmulNode.input_size()), 2);
     CHECK_VALID_SIZE(static_cast<size_t>(matmulNode.output_size()), 1);
     VALID_INPUTS(matmulNode, STR_LIST(onnx::TensorProto::FLOAT));
 
     GetInputAndParam(matmulNode, &inputName, &weightName, CHECK_LOCATION());
+
+    TensorInfo inputInfo = *m_TensorsInfo[inputName].m_info;
+    TensorInfo weightInfo = *m_TensorsInfo[weightName].m_info;
+    TensorInfo biasInfo;
+
+    std::vector<std::string> inputNames;
 
     FullyConnectedDescriptor desc;
     desc.m_BiasEnabled = addNode != nullptr;
@@ -883,7 +1173,6 @@ void OnnxParser::AddFullyConnected(const onnx::NodeProto& matmulNode, const onnx
     if(desc.m_BiasEnabled)
     {
         // find bias const
-        std::string biasName;
         CHECK_VALID_SIZE(static_cast<size_t>(addNode->input_size()), 2);
         CHECK_VALID_SIZE(static_cast<size_t>(addNode->output_size()), 1);
         VALID_INPUTS(*addNode, STR_LIST(onnx::TensorProto::FLOAT));
@@ -892,8 +1181,7 @@ void OnnxParser::AddFullyConnected(const onnx::NodeProto& matmulNode, const onnx
 
         //Output shape is [1, weights[1]] and 1d vec in ONNX can be [1,X] so we convert biases to "armnn" 1D
         To1DTensor(biasName, CHECK_LOCATION());
-        TensorInfo weightInfo = *m_TensorsInfo[weightName].m_info;
-        TensorInfo biasInfo = *m_TensorsInfo[biasName].m_info;
+        biasInfo = *m_TensorsInfo[biasName].m_info;
 
         if (weightInfo.GetShape()[1] != biasInfo.GetShape()[0])
         {
@@ -908,40 +1196,118 @@ void OnnxParser::AddFullyConnected(const onnx::NodeProto& matmulNode, const onnx
                                                m_TensorsInfo[biasName].m_dtype ),
                             CHECK_LOCATION().AsString()));
         }
-        layer = m_Network->AddFullyConnectedLayer(desc,
-                                                  CreateConstTensor(weightName).first,
-                                                  Optional<ConstTensor>(CreateConstTensor(biasName).first),
-                                                  matmulNode.name().c_str());
-        ARMNN_ASSERT(layer != nullptr);
 
-        auto outputInfo = ComputeOutputInfo({addNode->output(0)}, layer,
-                                            {m_TensorsInfo[inputName].m_info->GetShape(),
-                                             m_TensorsInfo[weightName].m_info->GetShape()});
-
-        layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
-
-        RegisterInputSlots(layer, {inputName});
-        RegisterOutputSlots(layer, {addNode->output(0)});
+        inputNames = { inputName, weightName, biasName };
+        outputName = addNode->output(0);
     }
     else
     {
-        layer = m_Network->AddFullyConnectedLayer(desc,
-                                                  CreateConstTensor(weightName).first,
-                                                  EmptyOptional(),
-                                                  matmulNode.name().c_str());
-        ARMNN_ASSERT(layer != nullptr);
-
-        auto outputInfo = ComputeOutputInfo({matmulNode.output(0)}, layer,
-                                            {m_TensorsInfo[inputName].m_info->GetShape(),
-                                             m_TensorsInfo[weightName].m_info->GetShape()});
-        layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
-
-        RegisterInputSlots(layer, {inputName});
-        RegisterOutputSlots(layer, {matmulNode.output(0)});
+        inputNames = { inputName, weightName };
+        outputName = matmulNode.output(0);
     }
+
+    // Just add a FullyConnected layer, weights and biases are handled as inputs now.
+    layer = m_Network->AddFullyConnectedLayer(desc, matmulNode.name().c_str());
+    ARMNN_ASSERT(layer != nullptr);
+
+    if (inputInfo.GetNumDimensions() > 2)
+    {
+        // Add reshape to flatten to 2D [batch_size, input_size],
+        // where "input_size" corresponds to the number of inputs to the layer,
+        // matching the second dimension of weights,
+        // and "batch_size" is calculated by dividing the number of elements by "input_size".
+        std::vector<unsigned int> reshapedDimensions(2);
+        reshapedDimensions[1] = weightInfo.GetShape()[0];
+        reshapedDimensions[0] = inputInfo.GetNumElements() / reshapedDimensions[1];
+
+        if (inputInfo.GetNumElements() % reshapedDimensions[1] != 0)
+        {
+            throw ParseException(
+                    fmt::format("Failed to deduce input tensor shape from filter size {} {}",
+                                reshapedDimensions[1],
+                                CHECK_LOCATION().AsString()));
+        }
+
+        TensorInfo reshapedTensorInfo = inputInfo;
+        reshapedTensorInfo.SetShape(armnn::TensorShape{ 2, reshapedDimensions.data() });
+        inputInfo = reshapedTensorInfo;
+
+        ReshapeDescriptor reshapeDescriptor;
+        reshapeDescriptor.m_TargetShape = reshapedTensorInfo.GetShape();
+
+        std::string reshapeLayerName = fmt::format("Reshape_for:{}", layer->GetName());
+        IConnectableLayer* reshapeLayer = m_Network->AddReshapeLayer(reshapeDescriptor, reshapeLayerName.c_str());
+
+        reshapeLayer->GetOutputSlot(0).SetTensorInfo(reshapedTensorInfo);
+        reshapeLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0));
+
+        RegisterInputSlots(reshapeLayer, {inputName});
+        inputNames[0] = reshapeLayerName;
+    }
+
+    auto outputInfo = ComputeOutputInfo({ outputName },
+                                        layer,
+                                        { inputInfo.GetShape(),
+                                          weightInfo.GetShape() });
+    layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+    RegisterInputSlots(layer, inputNames);
+
+    // Add constant layer to store weights/biases and connect to FullyConnected layer..
+    if(m_TensorsInfo[weightName].isConstant())
+    {
+        IConnectableLayer* weightsLayer = m_Network->AddConstantLayer(CreateConstTensor(weightName).first);
+
+        weightInfo.SetConstant();
+        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightInfo);
+        weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
+    }
+
+    if(desc.m_BiasEnabled && m_TensorsInfo[biasName].isConstant())
+    {
+        IConnectableLayer* biasLayer = m_Network->AddConstantLayer(CreateConstTensor(biasName).first);
+
+        biasInfo.SetConstant();
+        biasLayer->GetOutputSlot(0).SetTensorInfo(biasInfo);
+        biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
+    }
+
+    if (outputInfo[0].GetNumDimensions() > 2)
+    {
+        // Calculate reshape to flatten to 2D [batch_size, input_size]
+        std::vector<unsigned int> reshapedDimensions(2);
+        reshapedDimensions[1] = weightInfo.GetShape()[1];
+        reshapedDimensions[0] = outputInfo[0].GetNumElements() / reshapedDimensions[1];
+
+        if (outputInfo[0].GetNumElements() % reshapedDimensions[1] != 0)
+        {
+            throw ParseException(
+                    fmt::format("Failed to deduce output tensor shape from filter size {} {}",
+                                reshapedDimensions[1],
+                                CHECK_LOCATION().AsString()));
+        }
+
+        armnn::TensorInfo reshapedOutputTensorInfo = outputInfo[0];
+        reshapedOutputTensorInfo.SetShape(armnn::TensorShape{ 2, reshapedDimensions.data() });
+        layer->GetOutputSlot(0).SetTensorInfo(reshapedOutputTensorInfo);
+
+        ReshapeDescriptor desc;
+        desc.m_TargetShape = outputInfo[0].GetShape();
+
+        std::string reshapeLayerName = fmt::format("ExpandDims_for:{}", layer->GetName());
+        IConnectableLayer* reshapeLayer = m_Network->AddReshapeLayer(desc, reshapeLayerName.c_str());
+
+        layer->GetOutputSlot(0).Connect(reshapeLayer->GetInputSlot(0));
+        reshapeLayer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+        RegisterInputSlots(reshapeLayer, {layer->GetName()});
+        layer = reshapeLayer;
+    }
+
+    RegisterOutputSlots(layer, { outputName });
 }
 
-void OnnxParser::AddPoolingLayer(const onnx::NodeProto& node, Pooling2dDescriptor& desc)
+void OnnxParserImpl::AddPoolingLayer(const onnx::NodeProto& node, Pooling2dDescriptor& desc)
 {
 
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 1);
@@ -995,8 +1361,20 @@ void OnnxParser::AddPoolingLayer(const onnx::NodeProto& node, Pooling2dDescripto
             auto inputInfo = *m_TensorsInfo[node.input(0)].m_info;
             uint32_t inputHeight = inputInfo.GetShape()[2];
             uint32_t inputWidth  = inputInfo.GetShape()[3];
-            CalcPadding(inputHeight, desc.m_PoolHeight, desc.m_StrideY, &desc.m_PadTop, &desc.m_PadBottom, isUpper);
-            CalcPadding(inputWidth, desc.m_PoolWidth, desc.m_StrideX, &desc.m_PadLeft, &desc.m_PadRight, isUpper);
+            CalcPadding(inputHeight,
+                        desc.m_PoolHeight,
+                        desc.m_StrideY,
+                        1u,
+                        &desc.m_PadTop,
+                        &desc.m_PadBottom,
+                        isUpper);
+            CalcPadding(inputWidth,
+                        desc.m_PoolWidth,
+                        desc.m_StrideX,
+                        1u,
+                        &desc.m_PadLeft,
+                        &desc.m_PadRight,
+                        isUpper);
         }
     }
     else
@@ -1021,8 +1399,8 @@ void OnnxParser::AddPoolingLayer(const onnx::NodeProto& node, Pooling2dDescripto
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-std::pair<std::string, std::string> OnnxParser::AddPrepareBroadcast(const std::string& input0,
-                                                                    const std::string& input1)
+std::pair<std::string, std::string> OnnxParserImpl::AddPrepareBroadcast(const std::string& input0,
+                                                                        const std::string& input1)
 {
     std::pair<std::string, std::string> inputs = std::make_pair(input0, input1);
 
@@ -1044,18 +1422,25 @@ std::pair<std::string, std::string> OnnxParser::AddPrepareBroadcast(const std::s
     return inputs;
 }
 
-void OnnxParser::CreateConstantLayer(const std::string& tensorName, const std::string& layerName)
+void OnnxParserImpl::CreateConstantLayer(const std::string& tensorName, const std::string& layerName)
 {
     auto armnnTensor = CreateConstTensor(tensorName);
-
     IConnectableLayer* layer = m_Network->AddConstantLayer(armnnTensor.first, layerName.c_str());
     layer->GetOutputSlot(0).SetTensorInfo(armnnTensor.first.GetInfo());
     RegisterOutputSlots(layer, {tensorName});
 }
 
-void OnnxParser::CreateReshapeLayer(const std::string& inputName,
-                                    const std::string& outputName,
-                                    const std::string& layerName)
+void OnnxParserImpl::CreateInt64ConstantLayer(const std::string& tensorName, const std::string& layerName)
+{
+    auto armnnTensor = CreateInt64ConstTensor(tensorName);
+    IConnectableLayer* layer = m_Network->AddConstantLayer(armnnTensor.first, layerName.c_str());
+    layer->GetOutputSlot(0).SetTensorInfo(armnnTensor.first.GetInfo());
+    RegisterOutputSlots(layer, {tensorName});
+}
+
+void OnnxParserImpl::CreateReshapeLayer(const std::string& inputName,
+                                        const std::string& outputName,
+                                        const std::string& layerName)
 {
     const TensorInfo outputTensorInfo = *m_TensorsInfo[outputName].m_info;
     ReshapeDescriptor reshapeDesc;
@@ -1073,7 +1458,7 @@ void OnnxParser::CreateReshapeLayer(const std::string& inputName,
     RegisterOutputSlots(layer, {outputName});
 }
 
-void OnnxParser::ParseActivation(const onnx::NodeProto& node, const armnn::ActivationFunction func)
+void OnnxParserImpl::ParseActivation(const onnx::NodeProto& node, const armnn::ActivationFunction func)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 1, 3);
     CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
@@ -1085,8 +1470,16 @@ void OnnxParser::ParseActivation(const onnx::NodeProto& node, const armnn::Activ
 
     if (func == ActivationFunction::BoundedReLu)
     {
-        desc.m_A = node.input(2).empty() ? std::numeric_limits<float>::max() : std::stof(node.input(2));
-        desc.m_B = node.input(1).empty() ? std::numeric_limits<float>::lowest() : std::stof(node.input(1));
+        if (node.input_size() == 1 && node.attribute_size() > 0)
+        {
+            desc.m_A = ReadOptionalNodeFloatAttribute(node, "max", std::numeric_limits<float>::max());
+            desc.m_B = ReadOptionalNodeFloatAttribute(node, "min", std::numeric_limits<float>::lowest());
+        }
+        else
+        {
+            desc.m_A = node.input(2).empty() ? std::numeric_limits<float>::max() : std::stof(node.input(2));
+            desc.m_B = node.input(1).empty() ? std::numeric_limits<float>::lowest() : std::stof(node.input(1));
+        }
     }
 
     IConnectableLayer* const layer = m_Network->AddActivationLayer(desc, node.name().c_str());
@@ -1103,32 +1496,32 @@ void OnnxParser::ParseActivation(const onnx::NodeProto& node, const armnn::Activ
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::ParseClip(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseClip(const onnx::NodeProto& node)
 {
     ParseActivation(node, ActivationFunction::BoundedReLu);
 }
 
-void OnnxParser::ParseSigmoid(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseSigmoid(const onnx::NodeProto& node)
 {
     ParseActivation(node, ActivationFunction::Sigmoid);
 }
 
-void OnnxParser::ParseTanh(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseTanh(const onnx::NodeProto& node)
 {
     ParseActivation(node, ActivationFunction::TanH);
 }
 
-void OnnxParser::ParseRelu(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseRelu(const onnx::NodeProto& node)
 {
     ParseActivation(node, ActivationFunction::ReLu);
 }
 
-void OnnxParser::ParseLeakyRelu(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseLeakyRelu(const onnx::NodeProto& node)
 {
     ParseActivation(node, ActivationFunction::LeakyReLu);
 }
 
-void OnnxParser::ParseAdd(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseAdd(const onnx::NodeProto& node)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 2);
     CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
@@ -1165,7 +1558,7 @@ void OnnxParser::ParseAdd(const onnx::NodeProto& node)
     }
 
 
-    IConnectableLayer* layer = m_Network->AddAdditionLayer(node.name().c_str());
+    IConnectableLayer* layer = m_Network->AddElementwiseBinaryLayer(BinaryOperation::Add, node.name().c_str());
     ARMNN_ASSERT(layer != nullptr);
 
     auto outputInfo = ComputeOutputInfo({ node.output(0) }, layer,
@@ -1186,7 +1579,7 @@ void OnnxParser::ParseAdd(const onnx::NodeProto& node)
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::ParseAveragePool(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseAveragePool(const onnx::NodeProto& node)
 {
     Pooling2dDescriptor desc;
     desc.m_PoolType = PoolingAlgorithm::Average;
@@ -1199,7 +1592,7 @@ void OnnxParser::ParseAveragePool(const onnx::NodeProto& node)
     AddPoolingLayer(node, desc);
 }
 
-void OnnxParser::ParseBatchNormalization(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseBatchNormalization(const onnx::NodeProto& node)
 {
     //IGNORE momentum parameter and spatial parameters
 
@@ -1246,7 +1639,54 @@ void OnnxParser::ParseBatchNormalization(const onnx::NodeProto& node)
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::ParseConstant(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseConcat(const onnx::NodeProto& node)
+{
+    CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
+
+    uint32_t numConcatView = static_cast<uint32_t>(node.input_size());
+    uint32_t inputRank = m_TensorsInfo[node.input(0)].m_info->GetNumDimensions();
+
+    int axisInt = ReadMandatoryNodeIntAttribute(node, "axis");
+
+    unsigned int concatDimInput = static_cast<unsigned int>(
+        (static_cast<int>(inputRank) + axisInt) % static_cast<int>(inputRank));
+
+    OriginsDescriptor concatDescriptor(numConcatView, inputRank);
+    concatDescriptor.SetConcatAxis(concatDimInput);
+
+    unsigned int mergeDimOrigin = 0;
+
+    std::vector<TensorShape> inputShapes;
+    std::vector<std::string> tensorIds;
+
+    for (unsigned int viewIndex = 0; viewIndex < numConcatView; ++viewIndex)
+    {
+        std::string nodeName = node.input(static_cast<int>(viewIndex));
+        auto inputTensorInfo = *m_TensorsInfo[nodeName].m_info;
+        inputShapes.push_back(inputTensorInfo.GetShape());
+        tensorIds.push_back(nodeName);
+
+        // Set up concatDescriptor view origin
+        armnnUtils::ProcessConcatInputTensorInfo(
+            inputTensorInfo, concatDescriptor, concatDimInput, viewIndex, mergeDimOrigin);
+    }
+
+    IConnectableLayer* layer = m_Network->AddConcatLayer(concatDescriptor, node.name().c_str());
+    ARMNN_ASSERT(layer != nullptr);
+
+    auto outputInfo = ComputeOutputInfo({node.output(0)}, layer, inputShapes,
+                                        m_TensorsInfo[node.input(0)].m_dtype);
+
+    layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+    // register the input connection slots for the layer, connections are made after all layers have been created
+    RegisterInputSlots(layer, tensorIds);
+
+    // register the output connection slots for the layer, connections are made after all layers have been created
+    RegisterOutputSlots(layer, { node.output(0) });
+}
+
+void OnnxParserImpl::ParseConstant(const onnx::NodeProto& node)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.attribute_size()), 1);
     if (!node.attribute(0).has_t())
@@ -1257,19 +1697,28 @@ void OnnxParser::ParseConstant(const onnx::NodeProto& node)
     }
     const onnx::TensorProto& onnxTensor = node.attribute(0).t();
 
-    //ONNX can have Float16 and double constant nodes but ArmNN only supports float32
-    CHECK_VALID_DATATYPE(node.name(), onnxTensor.name(),
-                         static_cast<onnx::TensorProto::DataType>(onnxTensor.data_type()), onnx::TensorProto::FLOAT);
-
     //Register this as a m_ConstParam so we know we can use it as a constant param in future layers.
     m_TensorsInfo[node.output(0)].m_tensor = std::make_unique<const onnx::TensorProto>(onnxTensor);
     m_TensorsInfo[node.output(0)].m_info = std::make_unique<TensorInfo>(ToTensorInfo(onnxTensor));
     m_TensorsInfo[node.output(0)].m_dtype = static_cast<onnx::TensorProto::DataType>(onnxTensor.data_type());
 
-    CreateConstantLayer(node.output(0), node.name());
+    if (m_TensorsInfo[node.output(0)].m_dtype == onnx::TensorProto_DataType_FLOAT)
+    {
+        CreateConstantLayer(node.output(0), node.name());
+    }
+    else if (m_TensorsInfo[node.output(0)].m_dtype == onnx::TensorProto_DataType_INT64)
+    {
+        CreateInt64ConstantLayer(node.output(0), node.name());
+    }
+    else
+    {
+        throw ParseException(fmt::format("Data type not support for Constant node '{}' {}",
+                                         node.name(),
+                                         CHECK_LOCATION().AsString()));
+    }
 }
 
-void OnnxParser::ParseConv(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseConv(const onnx::NodeProto& node)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 2, 3); //input, weight, (bias)
     CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
@@ -1297,25 +1746,6 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
 
     auto inputInfo = *m_TensorsInfo[node.input(0)].m_info;
 
-    std::vector<uint32_t> dilations = ReadOptionalNodeUint32ListAttribute(node, "dilations");
-    if (!dilations.empty())
-    {
-        std::stringstream ss;
-        ss << "[ ";
-        for (auto dilation : dilations)
-        {
-            ss << dilation << ", ";
-            if (dilation != 1u)
-            {
-                ss << "... ]";
-                throw ParseException(
-                    fmt::format("ArmNN only supports Convolution layers with dilations [1,1], and node '{}' "
-                                "has dilatation {} {}",
-                                node.name(), ss.str(), CHECK_LOCATION().AsString()));
-            }
-        }
-    }
-
     Convolution2dDescriptor desc;
     desc.m_BiasEnabled = false;
 
@@ -1329,6 +1759,13 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
     {
         desc.m_StrideX    = strides[1];
         desc.m_StrideY    = strides[0];
+    }
+
+    std::vector<uint32_t> dilations = ReadOptionalNodeUint32ListAttribute(node, "dilations");
+    if(!dilations.empty())
+    {
+        desc.m_DilationX = dilations[1];
+        desc.m_DilationY = dilations[0];
     }
 
     std::vector<uint32_t> pads = ReadOptionalNodeUint32ListAttribute(node, "pads");
@@ -1374,8 +1811,20 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
                 weightHeight = kernel_shape[0];
                 weightWidth = kernel_shape[1];
             }
-            CalcPadding(inputHeight, weightHeight, desc.m_StrideY, &desc.m_PadTop, &desc.m_PadBottom, isUpper);
-            CalcPadding(inputWidth, weightWidth, desc.m_StrideX, &desc.m_PadLeft, &desc.m_PadRight, isUpper);
+            CalcPadding(inputHeight,
+                        weightHeight,
+                        desc.m_StrideY,
+                        desc.m_DilationY,
+                        &desc.m_PadTop,
+                        &desc.m_PadBottom,
+                        isUpper);
+            CalcPadding(inputWidth,
+                        weightWidth,
+                        desc.m_StrideX,
+                        desc.m_DilationX,
+                        &desc.m_PadLeft,
+                        &desc.m_PadRight,
+                        isUpper);
         }
     }
     else
@@ -1421,8 +1870,15 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
         }
     }
 
-    armnn::IConnectableLayer* layer;
+    node.input_size() == 3 ? desc.m_BiasEnabled = true : desc.m_BiasEnabled = false;
+    armnn::IConnectableLayer* layer = m_Network->AddConvolution2dLayer(desc, node.name().c_str());
+    std::vector<std::string> tensorIndexes= {node.input(0), node.input(1)};
+
     auto weightTensor = CreateConstTensor(node.input(1));
+
+    IConnectableLayer* weightsLayer = m_Network->AddConstantLayer(weightTensor.first);
+    weightsLayer->GetOutputSlot(0).SetTensorInfo(weightTensor.first.GetInfo());
+    weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
 
     if (node.input_size() == 3)
     {
@@ -1435,18 +1891,14 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
         }
         desc.m_BiasEnabled = true;
         auto biasTensor = CreateConstTensor(node.input(2));
-        layer = m_Network->AddConvolution2dLayer(desc,
-                                                 weightTensor.first,
-                                                 Optional<ConstTensor>(biasTensor.first),
-                                                 node.name().c_str());
+
+        IConnectableLayer* biasLayer = m_Network->AddConstantLayer(biasTensor.first);
+        biasLayer->GetOutputSlot(0).SetTensorInfo(biasTensor.first.GetInfo());
+        biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
+
+        tensorIndexes.emplace_back(node.input(2));
     }
-    else
-    {
-        layer = m_Network->AddConvolution2dLayer(desc,
-                                                 weightTensor.first,
-                                                 EmptyOptional(),
-                                                 node.name().c_str());
-    }
+
     ARMNN_ASSERT(layer != nullptr);
 
     auto outputInfo = ComputeOutputInfo({ node.output(0) }, layer,
@@ -1456,13 +1908,13 @@ void OnnxParser::ParseConv(const onnx::NodeProto& node)
 
     // register the input connection slots for the layer, connections are made after all layers have been created
     // only the tensors for the inputs are relevant, exclude the const tensors
-    RegisterInputSlots(layer, {node.input(0)});
+    RegisterInputSlots(layer, tensorIndexes);
 
     // register the output connection slots for the layer, connections are made after all layers have been created
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::ParseFlatten(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseFlatten(const onnx::NodeProto& node)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 1);
     CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
@@ -1509,7 +1961,200 @@ void OnnxParser::ParseFlatten(const onnx::NodeProto& node)
     CreateReshapeLayer(node.input(0), node.output(0), node.name());
 }
 
-void OnnxParser::ParseGlobalAveragePool(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseGather(const onnx::NodeProto& node)
+{
+    CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 2);
+    CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
+
+    armnn::GatherDescriptor gatherDescriptor;
+    gatherDescriptor.m_Axis = static_cast<int>(ReadOptionalNodeInt64Attribute(node, "axis", 0));
+
+    IConnectableLayer* layer = m_Network->AddGatherLayer(gatherDescriptor, node.name().c_str());
+    ARMNN_ASSERT(layer != nullptr);
+
+    const TensorShape& inputShape = m_TensorsInfo[node.input(0)].m_info->GetShape();
+    const TensorShape& indicesShape = m_TensorsInfo[node.input(1)].m_info->GetShape();
+    auto outputInfo = ComputeOutputInfo({node.output(0)}, layer, { inputShape, indicesShape },
+                                        m_TensorsInfo[node.input(0)].m_dtype);
+    layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+    // register the input connection slots for the layer, connections are made after all layers have been created
+    RegisterInputSlots(layer, { node.input(0), node.input(1) });
+
+    // register the output connection slots for the layer, connections are made after all layers have been created
+    RegisterOutputSlots(layer, { node.output(0) });
+}
+
+void OnnxParserImpl::ParseGemm(const onnx::NodeProto& node)
+{
+    CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 2, 3);
+    CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
+
+    int transA = static_cast<int>(ReadOptionalNodeUint32Attribute(node, "transA", 0));
+    int transB = static_cast<int>(ReadOptionalNodeUint32Attribute(node, "transB", 0));
+    float alpha = ReadOptionalNodeFloatAttribute(node, "alpha", 1.0);
+    float beta = ReadOptionalNodeFloatAttribute(node, "beta", 1.0);
+    bool biasEnabled = node.input_size() == 3;
+
+    TensorShape input0Shape = m_TensorsInfo[node.input(0)].m_info->GetShape();
+    TensorShape input1Shape = m_TensorsInfo[node.input(1)].m_info->GetShape();
+
+    // if transB != 0, add transpose to the input1 (tanspose weight matrix in FullyConnected)
+    armnn::FullyConnectedDescriptor fullyConnectedDescriptor;
+    fullyConnectedDescriptor.m_BiasEnabled = biasEnabled;
+    fullyConnectedDescriptor.m_TransposeWeightMatrix = transB;
+
+    IConnectableLayer* layer = nullptr;
+
+    // Just add a FullyConnected layer, weights and biases are handled as inputs now.
+    layer = m_Network->AddFullyConnectedLayer(fullyConnectedDescriptor, node.name().c_str());
+    ARMNN_ASSERT(layer != nullptr);
+
+    // if transA != 0, add transpose to the input0
+    if (transA != 0)
+    {
+        std::string transAName = "transpose_" + node.input(0);
+        armnn::TransposeDescriptor transposeADescriptor;
+        transposeADescriptor.m_DimMappings = { 1, 0 };
+        IConnectableLayer* transALayer = m_Network->AddTransposeLayer(transposeADescriptor, transAName.c_str());
+        ARMNN_ASSERT(transALayer != nullptr);
+        auto transAInfo = ComputeOutputInfo({ transAName }, transALayer, { input0Shape });
+        transALayer->GetOutputSlot(0).SetTensorInfo(transAInfo[0]);
+        transALayer->GetOutputSlot(0).Connect(layer->GetInputSlot(0u));
+        // register the input connection slots for the layer, connections are made after all layers have been created
+        RegisterInputSlot(transALayer, node.input(0), 0);
+        input0Shape = transAInfo[0].GetShape();
+    }
+    else
+    {
+        RegisterInputSlot(layer, node.input(0), 0);
+    }
+
+    // Add constant layer to store weights/biases and connect to FullyConnected layer.
+    if(m_TensorsInfo[node.input(1)].isConstant())
+    {
+        IConnectableLayer* weightsLayer = m_Network->AddConstantLayer(CreateConstTensor(node.input(1)).first);
+        TensorInfo weightInfo = *m_TensorsInfo[node.input(1)].m_info;
+        weightInfo.SetConstant();
+        weightsLayer->GetOutputSlot(0).SetTensorInfo(weightInfo);
+
+        // if alpha != 1, multiply to the weight
+        if (alpha != 1)
+        {
+            std::string activationName = "activation_" + node.input(1);
+            armnn::ActivationDescriptor activationDescriptor;
+            activationDescriptor.m_A = alpha;
+            activationDescriptor.m_Function = ActivationFunction::Linear;
+            IConnectableLayer* actLayer = m_Network->AddActivationLayer(activationDescriptor, activationName.c_str());
+            ARMNN_ASSERT(actLayer != nullptr);
+
+            auto actInfo = ComputeOutputInfo({ activationName }, actLayer, { weightInfo.GetShape() });
+            actLayer->GetOutputSlot(0).SetTensorInfo(actInfo[0]);
+            actLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
+            weightsLayer->GetOutputSlot(0).Connect(actLayer->GetInputSlot(0u));
+            input1Shape = actInfo[0].GetShape();
+        }
+        else
+        {
+            weightsLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
+            input1Shape = weightInfo.GetShape();
+        }
+    }
+    else
+    {
+        // if alpha != 1, multiply to the weight
+        if (alpha != 1)
+        {
+            std::string activationName = "activation_" + node.input(1);
+            armnn::ActivationDescriptor activationDescriptor;
+            activationDescriptor.m_A = alpha;
+            activationDescriptor.m_Function = ActivationFunction::Linear;
+            IConnectableLayer* actLayer = m_Network->AddActivationLayer(activationDescriptor, activationName.c_str());
+            ARMNN_ASSERT(actLayer != nullptr);
+
+            auto actInfo = ComputeOutputInfo({ activationName }, actLayer, { input1Shape });
+            actLayer->GetOutputSlot(0).SetTensorInfo(actInfo[0]);
+            actLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(1u));
+            RegisterInputSlot(actLayer, node.input(1), 0);
+            input1Shape = actInfo[0].GetShape();
+        }
+        else
+        {
+            RegisterInputSlot(layer, node.input(1), 1);
+        }
+    }
+
+    if(biasEnabled && m_TensorsInfo[node.input(2)].isConstant())
+    {
+        To1DTensor(node.input(2), CHECK_LOCATION());
+        IConnectableLayer* biasLayer = m_Network->AddConstantLayer(CreateConstTensor(node.input(2)).first);
+        TensorInfo biasInfo = *m_TensorsInfo[node.input(2)].m_info;
+        biasInfo.SetConstant();
+        biasLayer->GetOutputSlot(0).SetTensorInfo(biasInfo);
+
+        // if beta != 1, multiply to the bias
+        if (beta != 1)
+        {
+            std::string activationName = "activation_" + node.input(2);
+            armnn::ActivationDescriptor activationDescriptor;
+            activationDescriptor.m_A = beta;
+            activationDescriptor.m_Function = ActivationFunction::Linear;
+            IConnectableLayer* actLayer = m_Network->AddActivationLayer(activationDescriptor, activationName.c_str());
+            ARMNN_ASSERT(actLayer != nullptr);
+
+            auto actInfo = ComputeOutputInfo({ activationName }, actLayer, { biasInfo.GetShape() });
+            actLayer->GetOutputSlot(0).SetTensorInfo(actInfo[0]);
+            actLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
+            biasLayer->GetOutputSlot(0).Connect(actLayer->GetInputSlot(0u));
+        }
+        else
+        {
+            biasLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
+        }
+    }
+    else if (biasEnabled)
+    {
+        // Currently we support non-constant tensor of input C (bias) of Gemm when the dimension is 1
+        if (m_TensorsInfo[node.input(2)].m_info->GetNumDimensions() != 1)
+        {
+            throw ParseException(fmt::format("The parser supports constant or non-constant with 1 dimension for "
+                                             "Input C of Gemm. Input '{}' in '{}' is not supported '{}'",
+                                             node.input(2),
+                                             node.name(),
+                                             CHECK_LOCATION().AsString()));
+        }
+        // if beta != 1, multiply to the bias
+        if (beta != 1)
+        {
+            std::string activationName = "activation_" + node.input(2);
+            armnn::ActivationDescriptor activationDescriptor;
+            activationDescriptor.m_A = beta;
+            activationDescriptor.m_Function = ActivationFunction::Linear;
+            IConnectableLayer* actLayer = m_Network->AddActivationLayer(activationDescriptor, activationName.c_str());
+            ARMNN_ASSERT(actLayer != nullptr);
+
+            auto actInfo = ComputeOutputInfo({ activationName },
+                                             actLayer,
+                                             { m_TensorsInfo[node.input(2)].m_info->GetShape() });
+            actLayer->GetOutputSlot(0).SetTensorInfo(actInfo[0]);
+            actLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(2u));
+            RegisterInputSlot(actLayer, node.input(2), 0);
+        }
+        else
+        {
+            RegisterInputSlot(layer, node.input(2), 2);
+        }
+    }
+
+    // Set final output of the FullyConnected layer
+    auto outputInfo = ComputeOutputInfo({ node.output(0) }, layer,
+                                        { input0Shape, input1Shape });
+    layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+    RegisterOutputSlots(layer, {node.output(0)});
+}
+
+void OnnxParserImpl::ParseGlobalAveragePool(const onnx::NodeProto& node)
 {
     Pooling2dDescriptor desc = Pooling2dDescriptor();
     desc.m_PoolType = PoolingAlgorithm::Average;
@@ -1533,7 +2178,7 @@ void OnnxParser::ParseGlobalAveragePool(const onnx::NodeProto& node)
     RegisterOutputSlots(layer, {node.output(0)});
 }
 
-void OnnxParser::ParseMaxPool(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseMaxPool(const onnx::NodeProto& node)
 {
     Pooling2dDescriptor desc;
     desc.m_PoolType = PoolingAlgorithm::Max;
@@ -1541,7 +2186,26 @@ void OnnxParser::ParseMaxPool(const onnx::NodeProto& node)
     AddPoolingLayer(node, desc);
 }
 
-void OnnxParser::ParseReshape(const onnx::NodeProto& node)
+void OnnxParserImpl::ParseShape(const onnx::NodeProto& node)
+{
+    CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 1);
+    CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
+
+    IConnectableLayer* layer = m_Network->AddShapeLayer(node.name().c_str());
+    ARMNN_ASSERT(layer != nullptr);
+
+    TensorShape inputShape = m_TensorsInfo[node.input(0)].m_info->GetShape();
+    auto outputInfo = ComputeOutputInfo({node.output(0)}, layer, {inputShape}, onnx::TensorProto::INT64);
+    layer->GetOutputSlot(0).SetTensorInfo(outputInfo[0]);
+
+    // register the input connection slots for the layer, connections are made after all layers have been created
+    RegisterInputSlots(layer, {node.input(0)});
+
+    // register the output connection slots for the layer, connections are made after all layers have been created
+    RegisterOutputSlots(layer, {node.output(0)});
+}
+
+void OnnxParserImpl::ParseReshape(const onnx::NodeProto& node)
 {
     CHECK_VALID_SIZE(static_cast<size_t>(node.input_size()), 2);
     CHECK_VALID_SIZE(static_cast<size_t>(node.output_size()), 1);
@@ -1553,12 +2217,42 @@ void OnnxParser::ParseReshape(const onnx::NodeProto& node)
                          m_TensorsInfo[node.input(1)].m_dtype,
                          onnx::TensorProto::INT64); //shape
 
-    if(!m_TensorsInfo[node.input(1)].isConstant())
+    TensorShape inputShape = m_TensorsInfo[node.input(0)].m_info->GetShape();
+
+    std::vector<unsigned int> targetShape;
+    if(m_TensorsInfo[node.input(1)].isConstant())
     {
-        throw ParseException(fmt::format("Shape '{}' should be constant in Reshape layer '{}' {}",
-                                         node.input(1),
-                                         node.name(),
-                                         CHECK_LOCATION().AsString()));
+        unsigned int dims = static_cast<unsigned int>(m_TensorsInfo[node.input(1)].m_tensor->int64_data_size());
+        targetShape.reserve(dims);
+
+        for(uint i = 0; i < dims; i++)
+        {
+            int val = CHECKED_INT32(m_TensorsInfo[node.input(1)].m_tensor->int64_data(static_cast<int>(i)));
+            targetShape[i]= static_cast<unsigned int>(val);
+        }
+    }
+    else
+    {
+        // The parser only supports shape (batch, -1) or (-1) for non-constant shape input.
+        unsigned int dims = m_TensorsInfo[node.input(1)].m_info->GetNumDimensions();
+        TensorShape shapes = m_TensorsInfo[node.input(1)].m_info->GetShape();
+        if (dims != 1 || shapes[0] > 2)
+        {
+            throw ParseException(fmt::format("Invalid input shape '{}' in Reshape layer '{}' {}",
+                                             node.input(1),
+                                             node.name(),
+                                             CHECK_LOCATION().AsString()));
+        }
+
+        unsigned int numInputElements = m_TensorsInfo[node.input(0)].m_info->GetNumElements();
+        if (shapes[0] == 1)
+        {
+            targetShape = { numInputElements };
+        }
+        else if (shapes[0] == 2)
+        {
+            targetShape = { inputShape[0] , numInputElements / inputShape[0] };
+        }
     }
 
     if(m_TensorsInfo[node.input(0)].isConstant())
@@ -1573,20 +2267,11 @@ void OnnxParser::ParseReshape(const onnx::NodeProto& node)
     }
     else
     {
-        TensorShape inputShape = m_TensorsInfo[node.input(0)].m_info->GetShape();
-
         if(m_TensorsInfo.count(node.output(0)) == 0 || m_TensorsInfo[node.output(0)].m_info == nullptr)
         {
-            uint64_t dims = static_cast<uint64_t>(m_TensorsInfo[node.input(1)].m_tensor->int64_data_size());
-            TensorShape targetShape{static_cast<unsigned int>(dims), 1};
-
-            for(uint i = 0; i < dims; i++)
-            {
-                int val = CHECKED_INT32(m_TensorsInfo[node.input(1)].m_tensor->int64_data(static_cast<int>(i)));
-                targetShape[i]= static_cast<unsigned int>(val);
-            }
-
-            auto outInfo = ComputeReshapeInfo(targetShape, inputShape, node.output(0));
+            auto outInfo = ComputeReshapeInfo(
+                TensorShape(static_cast<unsigned int>(targetShape.size()), targetShape.data()),
+                inputShape, node.output(0));
             m_TensorsInfo[node.output(0)].m_info = std::make_unique<TensorInfo>(outInfo);
         }
 
@@ -1594,9 +2279,62 @@ void OnnxParser::ParseReshape(const onnx::NodeProto& node)
     }
 }
 
-void OnnxParser::PrependForBroadcast(const std::string& outputName,
-                                     const std::string& input0,
-                                     const std::string& input1)
+void OnnxParserImpl::ParseUnsqueeze(const onnx::NodeProto& node)
+{
+    CHECK_VALID_SIZE(armnn::numeric_cast<size_t>(node.input_size()), 1, 2);
+    CHECK_VALID_SIZE(armnn::numeric_cast<size_t>(node.output_size()), 1);
+
+    TensorShape inputShape = m_TensorsInfo[node.input(0)].m_info->GetShape();
+    std::vector<uint32_t> dims;
+    if (node.input_size() == 1 && node.attribute_size() > 0)
+    {
+        dims = ReadMandatoryNodeUint32ListAttribute(node, "axes");
+    }
+    else
+    {
+        CHECK_VALID_DATATYPE(node.name(), node.input(1),
+                             m_TensorsInfo[node.input(1)].m_dtype,
+                             onnx::TensorProto::INT64); //axes
+
+        auto int64Axes = m_TensorsInfo[node.input(1)].m_tensor->int64_data().data();
+        uint numDim = armnn::numeric_cast<uint>(m_TensorsInfo[node.input(1)].m_tensor->int64_data_size());
+
+        for(uint i = 0; i < numDim; i++)
+        {
+            uint32_t uint32Value = CHECKED_NON_NEGATIVE(CHECKED_INT32(int64Axes[i]));
+            dims.push_back(uint32Value);
+        }
+    }
+
+    // Ensure that the axes are sorted
+    std::sort(dims.begin(), dims.end());
+
+    std::vector<unsigned int> targetShape;
+
+    if (inputShape.GetDimensionality() != Dimensionality::Scalar)
+    {
+        for(uint i = 0; i < inputShape.GetNumDimensions(); i++)
+        {
+            targetShape.push_back(inputShape[i]);
+        }
+    }
+
+    for(uint i = 0; i < dims.size(); i++)
+    {
+        targetShape.insert(targetShape.begin() + armnn::numeric_cast<int>(dims[i]), 1);
+    }
+
+    auto outInfo = ComputeReshapeInfo(TensorShape(static_cast<unsigned int>(targetShape.size()), targetShape.data()),
+                                      inputShape, node.output(0), m_TensorsInfo[node.input(0)].m_info->GetDataType());
+    m_TensorsInfo[node.output(0)].m_info = std::make_unique<TensorInfo>(outInfo);
+    m_TensorsInfo[node.output(0)].m_dtype = m_TensorsInfo[node.input(0)].m_dtype;
+
+    CreateReshapeLayer(node.input(0), node.output(0), node.name());
+}
+
+void OnnxParserImpl::PrependForBroadcast(const std::string& outputName,
+                                         const std::string& input0,
+                                         const std::string& input1)
 {
     //input0 should be reshaped to have same number of dim as input1
     TensorInfo outputTensorInfo = TensorInfo(*m_TensorsInfo[input0].m_info);
@@ -1633,25 +2371,43 @@ void OnnxParser::PrependForBroadcast(const std::string& outputName,
     }
 }
 
-void OnnxParser::SetupInputLayers()
+void OnnxParserImpl::SetupInputLayers()
 {
     //Find user input and add their layers
     for(int inputIndex = 0; inputIndex < m_Graph->input_size(); ++inputIndex)
     {
         auto input = m_Graph->input(inputIndex);
-        if (! m_TensorsInfo[input.name()].isConstant())
+        if (!m_TensorsInfo[input.name()].isConstant())
         {
             IConnectableLayer* layer =
-              m_Network->AddInputLayer(static_cast<armnn::LayerBindingId>(inputIndex), input.name().c_str());
-            auto tensorInfo = ToTensorInfo(input);
+                m_Network->AddInputLayer(static_cast<armnn::LayerBindingId>(inputIndex), input.name().c_str());
+            TensorInfo tensorInfo = *m_TensorsInfo[input.name()].m_info;
+            if (tensorInfo.GetShape().GetDimensionality() == Dimensionality::NotSpecified)
+            {
+                if (m_InputShapes.find(input.name()) == m_InputShapes.end())
+                {
+                    throw ParseException(fmt::format("The parser does not support dynamic tensor, "
+                                                     "please specify input shape for {}. {}",
+                                                     input.name(),
+                                                     CHECK_LOCATION().AsString()));
+                }
+                else
+                {
+                    tensorInfo.SetShape(m_InputShapes[input.name()]);
+                    m_TensorsInfo[input.name()].m_info = std::make_unique<TensorInfo>(tensorInfo);
+                }
+
+            }
             layer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+            m_InputInfos[input.name()] = tensorInfo;
 
             RegisterOutputSlots(layer,{ input.name() });
         }
     }
 }
 
-void OnnxParser::SetupOutputLayers()
+void OnnxParserImpl::SetupOutputLayers()
 {
     if(m_Graph->output_size() == 0)
     {
@@ -1668,7 +2424,23 @@ void OnnxParser::SetupOutputLayers()
     }
 }
 
-void OnnxParser::RegisterInputSlots(IConnectableLayer* layer, const std::vector<std::string>& tensorIds)
+void OnnxParserImpl::RegisterInputSlot(IConnectableLayer* layer,
+                                       const std::string& tensorId,
+                                       unsigned int slotIndex)
+{
+    armnn::IInputSlot* slot = &(layer->GetInputSlot(slotIndex));
+
+    auto it = m_TensorConnections.find(tensorId);
+
+    if (it == m_TensorConnections.end())
+    {
+        //First time seeing this tensor, we need to map it
+        m_TensorConnections[tensorId] = TensorSlots();
+    }
+    m_TensorConnections[tensorId].inputSlots.push_back(slot);
+}
+
+void OnnxParserImpl::RegisterInputSlots(IConnectableLayer* layer, const std::vector<std::string>& tensorIds)
 {
     ARMNN_ASSERT(layer != nullptr);
     if (tensorIds.size() != layer->GetNumInputSlots())
@@ -1679,6 +2451,7 @@ void OnnxParser::RegisterInputSlots(IConnectableLayer* layer, const std::vector<
                         layer->GetNumInputSlots(),
                         CHECK_LOCATION().AsString()));
     }
+
     for (unsigned int slotIndex = 0; slotIndex < layer->GetNumInputSlots(); ++slotIndex)
     {
         std::string tensorId = tensorIds[slotIndex];
@@ -1688,14 +2461,14 @@ void OnnxParser::RegisterInputSlots(IConnectableLayer* layer, const std::vector<
 
         if (it == m_TensorConnections.end())
         {
-            //First time seing this tensor, we need to map it
+            // First time seing this tensor, we need to map it
             m_TensorConnections[tensorId] = TensorSlots();
         }
         m_TensorConnections[tensorId].inputSlots.push_back(slot);
     }
 }
 
-void OnnxParser::RegisterOutputSlots(IConnectableLayer* layer, const std::vector<std::string>& tensorIds)
+void OnnxParserImpl::RegisterOutputSlots(IConnectableLayer* layer, const std::vector<std::string>& tensorIds)
 {
     ARMNN_ASSERT(layer != nullptr);
     if (tensorIds.size() != layer->GetNumOutputSlots())
@@ -1732,37 +2505,48 @@ void OnnxParser::RegisterOutputSlots(IConnectableLayer* layer, const std::vector
         }
         tensorSlots.outputSlot = slot;
     }
+
 }
 
-BindingPointInfo OnnxParser::GetNetworkInputBindingInfo(const std::string& name) const
+BindingPointInfo OnnxParserImpl::GetNetworkInputBindingInfo(const std::string& name) const
 {
     for(int i = 0; i < m_Graph->input_size(); ++i)
     {
         auto input = m_Graph->input(i);
         if(input.name() == name)
         {
-            return std::make_pair(static_cast<armnn::LayerBindingId>(i), ToTensorInfo(input));
+            auto it = m_InputInfos.find(name);
+
+            if (it != m_InputInfos.end())
+            {
+                return std::make_pair(static_cast<armnn::LayerBindingId>(i), it->second);
+            }
         }
     }
     throw InvalidArgumentException(fmt::format("The input layer '{}' does not exist {}",
                                                name, CHECK_LOCATION().AsString()));
 }
 
-BindingPointInfo OnnxParser::GetNetworkOutputBindingInfo(const std::string& name) const
+BindingPointInfo OnnxParserImpl::GetNetworkOutputBindingInfo(const std::string& name) const
 {
     for(int i = 0; i < m_Graph->output_size(); ++i)
     {
         auto output = m_Graph->output(i);
         if(output.name() == name)
         {
-            return std::make_pair(static_cast<armnn::LayerBindingId>(i), ToTensorInfo(output));
+            auto it = m_OutputInfos.find(name);
+
+            if (it != m_OutputInfos.end())
+            {
+                return std::make_pair(static_cast<armnn::LayerBindingId>(i), it->second);
+            }
         }
     }
     throw InvalidArgumentException(fmt::format("The output layer '{}' does not exist {}",
                                                name, CHECK_LOCATION().AsString()));
 }
 
-std::vector<std::string> OnnxParser::GetInputs(ModelPtr& model)
+std::vector<std::string> OnnxParserImpl::GetInputs(ModelPtr& model)
 {
     if(model == nullptr) {
         throw InvalidArgumentException(fmt::format("The given model cannot be null {}",
@@ -1786,7 +2570,7 @@ std::vector<std::string> OnnxParser::GetInputs(ModelPtr& model)
     return inputNames;
 }
 
-std::vector<std::string> OnnxParser::GetOutputs(ModelPtr& model)
+std::vector<std::string> OnnxParserImpl::GetOutputs(ModelPtr& model)
 {
     if(model == nullptr) {
         throw InvalidArgumentException(fmt::format("The given model cannot be null {}",
@@ -1799,6 +2583,11 @@ std::vector<std::string> OnnxParser::GetOutputs(ModelPtr& model)
         outputNames.push_back(output.name());
     }
     return outputNames;
+}
+
+const std::string OnnxParserImpl::GetVersion()
+{
+    return ONNX_PARSER_VERSION;
 }
 
 } // namespace armnnOnnxParser

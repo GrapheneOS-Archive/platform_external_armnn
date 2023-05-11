@@ -11,8 +11,8 @@
 
 #include <armnnUtils/Transpose.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -27,7 +27,7 @@ std::unique_ptr<IWorkload> TransposeLayer::CreateWorkload(const IWorkloadFactory
     TransposeQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateTranspose(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Transpose, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 TransposeLayer* TransposeLayer::Clone(Graph& graph) const
@@ -57,9 +57,9 @@ void TransposeLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "TransposeLayer");
 }
 
-void TransposeLayer::Accept(ILayerVisitor& visitor) const
+void TransposeLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitTransposeLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

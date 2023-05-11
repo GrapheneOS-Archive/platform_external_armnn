@@ -5,12 +5,14 @@
 
 #pragma once
 
-#include "CommonTestUtils.hpp"
+#include <CommonTestUtils.hpp>
 
 #include <armnn/INetwork.hpp>
 #include <armnn/TypesUtils.hpp>
 
 #include <ResolveType.hpp>
+
+#include <doctest/doctest.h>
 
 namespace
 {
@@ -44,13 +46,13 @@ void RankEndToEnd(const std::vector<armnn::BackendId>& backends)
 
     std::vector<int32_t> expectedOutputData{ 4 };
 
-    TensorInfo inputInfo ({ 1, 1, 5, 3 }, ArmnnType);
+    TensorInfo inputInfo ({ 1, 1, 5, 3 }, ArmnnType, 0.0f, 0, true);
     TensorShape outputShape (Dimensionality::Scalar);
     TensorInfo outputInfo(outputShape, DataType::Signed32);
 
     armnn::INetworkPtr network = CreateRankNetwork(inputInfo, outputInfo);
 
-    BOOST_TEST_CHECKPOINT("create a network");
+    CHECK(network);
 
     std::map<int, std::vector<T>> inputTensorData   = {{ 0, inputData }};
     std::map<int, std::vector<int32_t>> expectedOutputTensorData = {{ 0, expectedOutputData }};

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -9,16 +9,12 @@
 namespace armnn
 {
 
-class ScopedCpuTensorHandle;
+class ScopedTensorHandle;
 
 /// This layer represents a fully connected operation.
 class FullyConnectedLayer : public LayerWithParameters<FullyConnectedDescriptor>
 {
 public:
-    /// A unique pointer to store Weight values.
-    std::unique_ptr<ScopedCpuTensorHandle> m_Weight;
-    /// A unique pointer to store Bias values.
-    std::unique_ptr<ScopedCpuTensorHandle> m_Bias;
 
     /// Makes a workload for the FullyConnected type.
     /// @param [in] graph The graph where this layer can be found.
@@ -41,7 +37,11 @@ public:
     /// @return A vector to the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
+
+    /// This layer does not have any data stored, weights and bias are now stored in constant layers.
+    /// We do not want to release the data in the constant layer, that is why we override with an empty function.
+    void ReleaseConstantData() override {}
 
 protected:
     /// Constructor to create a FullyConnectedLayer.
@@ -54,7 +54,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    ConstantTensors GetConstantTensorsByRef() override;
+    ImmutableConstantTensors GetConstantTensorsByRef() const override;
 };
 
 } // namespace
