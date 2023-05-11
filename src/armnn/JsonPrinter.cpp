@@ -21,21 +21,50 @@ void JsonPrinter::PrintJsonChildObject(const JsonChildObject& object, size_t& id
         id++;
     }
 
-    PrintLabel(object.m_Label, id);
-    PrintType(object.m_Type);
+    if (object.GetType() != JsonObjectType::ExecObjectDesc)
+    {
+        PrintLabel(object.m_Label, id);
+        if (object.m_Guid.has_value())
+        {
+            PrintGuid(object.m_Guid.value());
+        }
+        PrintType(object.m_Type);
+    }
 
     if (!object.m_Measurements.empty() || !object.m_Children.empty())
     {
         PrintSeparator();
         PrintNewLine();
     }
-
     if (object.GetType() == JsonObjectType::Measurement)
     {
         PrintMeasurementsList(object.m_Measurements);
         PrintSeparator();
         PrintNewLine();
         PrintUnit(object.m_Unit);
+    }
+    else if (object.GetType() == JsonObjectType::ExecObjectDesc)
+    {
+        // Add details opening
+        DecrementNumberOfTabs();
+        PrintTabs();
+        m_OutputStream << std::quoted("Graph") << ":[";
+        PrintNewLine();
+
+        // Fill details body
+        for (std::string stringLine : object.m_LayerDetailsList)
+        {
+           PrintTabs();
+           m_OutputStream << stringLine;
+           PrintNewLine();
+        }
+
+        // Close out details
+        PrintTabs();
+        object.IsDetailsOnlyEnabled() ? m_OutputStream << "]" : m_OutputStream << "],";
+
+        PrintNewLine();
+        IncrementNumberOfTabs();
     }
     if (!object.m_Children.empty())
     {
@@ -50,21 +79,11 @@ void JsonPrinter::PrintJsonChildObject(const JsonChildObject& object, size_t& id
             }
         }
     }
-    PrintNewLine();
-    PrintFooter();
-}
-
-void JsonPrinter::PrintHeader()
-{
-    m_OutputStream << "{" << std::endl;
-    IncrementNumberOfTabs();
-}
-
-void JsonPrinter::PrintArmNNHeader()
-{
-    PrintTabs();
-    m_OutputStream << R"("ArmNN": {)" << std::endl;
-    IncrementNumberOfTabs();
+    if (object.GetType() != JsonObjectType::ExecObjectDesc)
+    {
+        PrintNewLine();
+        PrintFooter();
+    }
 }
 
 std::string JsonPrinter::MakeKey(const std::string& label, size_t id)
@@ -103,6 +122,10 @@ void JsonPrinter::PrintType(armnn::JsonObjectType type)
                 {
                     return "Event";
                 }
+                case JsonObjectType::ExecObjectDesc:
+                {
+                    return "Operator Description";
+                }
                 default:
                 {
                     return "Unknown";
@@ -115,6 +138,11 @@ void JsonPrinter::PrintType(armnn::JsonObjectType type)
     m_OutputStream << R"(")";
 }
 
+void JsonPrinter::PrintGuid(arm::pipe::ProfilingGuid guid)
+{
+    PrintTabs();
+    m_OutputStream << std::quoted("GUID") << ": " << std::quoted(std::to_string(guid))  << "," << std::endl;
+}
 
 void JsonPrinter::PrintMeasurementsList(const std::vector<double>& measurementsVector)
 {
@@ -139,46 +167,6 @@ void JsonPrinter::PrintMeasurementsList(const std::vector<double>& measurementsV
     DecrementNumberOfTabs();
     PrintTabs();
     m_OutputStream << "]";
-}
-
-void JsonPrinter::PrintTabs()
-{
-    unsigned int numTabs = m_NumTabs;
-    while (numTabs-- > 0)
-    {
-        m_OutputStream << "\t";
-    }
-}
-
-void JsonPrinter::PrintSeparator()
-{
-    m_OutputStream << ",";
-}
-
-void JsonPrinter::PrintNewLine()
-{
-    m_OutputStream << std::endl;
-}
-
-void JsonPrinter::PrintFooter()
-{
-    DecrementNumberOfTabs();
-    PrintTabs();
-    m_OutputStream << "}";
-}
-
-void JsonPrinter::DecrementNumberOfTabs()
-{
-    if (m_NumTabs == 0)
-    {
-        return;
-    }
-    --m_NumTabs;
-}
-
-void JsonPrinter::IncrementNumberOfTabs()
-{
-    ++m_NumTabs;
 }
 
 } // namespace armnn

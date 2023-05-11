@@ -7,7 +7,7 @@
 
 #include <armnn/backends/ITensorHandle.hpp>
 #include <backendsCommon/WorkloadDataCollector.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -33,6 +33,15 @@ void OutputHandler::CreateTensorHandles(const ITensorHandleFactory& factory, con
 void OutputHandler::CollectWorkloadOutputs(WorkloadDataCollector& dataCollector) const
 {
     dataCollector.Push(m_TensorHandle.get(), m_TensorInfo);
+}
+
+void OutputHandler::SetAllocatedData()
+{
+    // Set allocated data only once
+    if (!m_AllocatedTensorHandle)
+    {
+       m_AllocatedTensorHandle = std::move(m_TensorHandle);
+    }
 }
 
 } // namespace armnn

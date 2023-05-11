@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -14,50 +14,62 @@ namespace armnn
 {
 
 RefQLstmWorkload::RefQLstmWorkload(const QLstmQueueDescriptor &descriptor, const WorkloadInfo &info)
-        : BaseWorkload<QLstmQueueDescriptor>(descriptor, info)
-        , m_InputToInputWeightsTensor     (AssignScopedCpuTensorHandle(descriptor.m_InputToInputWeights))
-        , m_InputToForgetWeightsTensor    (AssignScopedCpuTensorHandle(descriptor.m_InputToForgetWeights))
-        , m_InputToCellWeightsTensor      (AssignScopedCpuTensorHandle(descriptor.m_InputToCellWeights))
-        , m_InputToOutputWeightsTensor    (AssignScopedCpuTensorHandle(descriptor.m_InputToOutputWeights))
+        : RefBaseWorkload<QLstmQueueDescriptor>(descriptor, info)
+        , m_InputToInputWeightsTensor     (AssignScopedTensorHandle(descriptor.m_InputToInputWeights))
+        , m_InputToForgetWeightsTensor    (AssignScopedTensorHandle(descriptor.m_InputToForgetWeights))
+        , m_InputToCellWeightsTensor      (AssignScopedTensorHandle(descriptor.m_InputToCellWeights))
+        , m_InputToOutputWeightsTensor    (AssignScopedTensorHandle(descriptor.m_InputToOutputWeights))
 
-        , m_RecurrentToInputWeightsTensor (AssignScopedCpuTensorHandle(descriptor.m_RecurrentToInputWeights))
-        , m_RecurrentToForgetWeightsTensor(AssignScopedCpuTensorHandle(descriptor.m_RecurrentToForgetWeights))
-        , m_RecurrentToCellWeightsTensor  (AssignScopedCpuTensorHandle(descriptor.m_RecurrentToCellWeights))
-        , m_RecurrentToOutputWeightsTensor(AssignScopedCpuTensorHandle(descriptor.m_RecurrentToOutputWeights))
+        , m_RecurrentToInputWeightsTensor (AssignScopedTensorHandle(descriptor.m_RecurrentToInputWeights))
+        , m_RecurrentToForgetWeightsTensor(AssignScopedTensorHandle(descriptor.m_RecurrentToForgetWeights))
+        , m_RecurrentToCellWeightsTensor  (AssignScopedTensorHandle(descriptor.m_RecurrentToCellWeights))
+        , m_RecurrentToOutputWeightsTensor(AssignScopedTensorHandle(descriptor.m_RecurrentToOutputWeights))
 
-        , m_CellToInputWeightsTensor      (AssignScopedCpuTensorHandle(descriptor.m_CellToInputWeights))
-        , m_CellToForgetWeightsTensor     (AssignScopedCpuTensorHandle(descriptor.m_CellToForgetWeights))
-        , m_CellToOutputWeightsTensor     (AssignScopedCpuTensorHandle(descriptor.m_CellToOutputWeights))
+        , m_CellToInputWeightsTensor      (AssignScopedTensorHandle(descriptor.m_CellToInputWeights))
+        , m_CellToForgetWeightsTensor     (AssignScopedTensorHandle(descriptor.m_CellToForgetWeights))
+        , m_CellToOutputWeightsTensor     (AssignScopedTensorHandle(descriptor.m_CellToOutputWeights))
 
-        , m_InputGateBiasTensor           (AssignScopedCpuTensorHandle(descriptor.m_InputGateBias))
-        , m_ForgetGateBiasTensor          (AssignScopedCpuTensorHandle(descriptor.m_ForgetGateBias))
-        , m_CellBiasTensor                (AssignScopedCpuTensorHandle(descriptor.m_CellBias))
-        , m_OutputGateBiasTensor          (AssignScopedCpuTensorHandle(descriptor.m_OutputGateBias))
+        , m_InputGateBiasTensor           (AssignScopedTensorHandle(descriptor.m_InputGateBias))
+        , m_ForgetGateBiasTensor          (AssignScopedTensorHandle(descriptor.m_ForgetGateBias))
+        , m_CellBiasTensor                (AssignScopedTensorHandle(descriptor.m_CellBias))
+        , m_OutputGateBiasTensor          (AssignScopedTensorHandle(descriptor.m_OutputGateBias))
 
-        , m_ProjectionWeightsTensor       (AssignScopedCpuTensorHandle(descriptor.m_ProjectionWeights))
-        , m_ProjectionBiasTensor          (AssignScopedCpuTensorHandle(descriptor.m_ProjectionBias))
+        , m_ProjectionWeightsTensor       (AssignScopedTensorHandle(descriptor.m_ProjectionWeights))
+        , m_ProjectionBiasTensor          (AssignScopedTensorHandle(descriptor.m_ProjectionBias))
 
-        , m_InputLayerNormWeightsTensor   (AssignScopedCpuTensorHandle(descriptor.m_InputLayerNormWeights))
-        , m_ForgetLayerNormWeightsTensor  (AssignScopedCpuTensorHandle(descriptor.m_ForgetLayerNormWeights))
-        , m_CellLayerNormWeightsTensor    (AssignScopedCpuTensorHandle(descriptor.m_CellLayerNormWeights))
-        , m_OutputLayerNormWeightsTensor  (AssignScopedCpuTensorHandle(descriptor.m_OutputLayerNormWeights))
+        , m_InputLayerNormWeightsTensor   (AssignScopedTensorHandle(descriptor.m_InputLayerNormWeights))
+        , m_ForgetLayerNormWeightsTensor  (AssignScopedTensorHandle(descriptor.m_ForgetLayerNormWeights))
+        , m_CellLayerNormWeightsTensor    (AssignScopedTensorHandle(descriptor.m_CellLayerNormWeights))
+        , m_OutputLayerNormWeightsTensor  (AssignScopedTensorHandle(descriptor.m_OutputLayerNormWeights))
 {}
 
 void RefQLstmWorkload::Execute() const
 {
-    // This is a porting of the QLSTM::Execute() method in the Android code base
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefQLstmWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefQLstmWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
+{
+    // This is a porting of the QLSTM::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs)
+    // method in the Android code base
     // Note: this implementation wraps the arithmetic functions of the LSTM cell in Quantize/Dequantize ops, so all
     // computation is done in the floating point domain. Arithmetic functions are found in LstmUtils.cpp.
     // Refer to: android/frameworks/ml/nn/common/operations/QLSTM.cpp
     const DataType& internalType = armnn::DataType::QSymmS16;
 
-    const TensorInfo& inputInfo = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& outputStateInInfo = GetTensorInfo(m_Data.m_Inputs[1]);
-    const TensorInfo& cellStateInInfo = GetTensorInfo(m_Data.m_Inputs[2]);
+    const TensorInfo& inputInfo = GetTensorInfo(inputs[0]);
+    const TensorInfo& outputStateInInfo = GetTensorInfo(inputs[1]);
+    const TensorInfo& cellStateInInfo = GetTensorInfo(inputs[2]);
 
-    const TensorInfo& outputStateOutInfo = GetTensorInfo(m_Data.m_Outputs[0]);
-    const TensorInfo& cellStateOutInfo = GetTensorInfo(m_Data.m_Outputs[1]);
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[2]);
+    const TensorInfo& outputStateOutInfo = GetTensorInfo(outputs[0]);
+    const TensorInfo& cellStateOutInfo = GetTensorInfo(outputs[1]);
+    const TensorInfo& outputInfo = GetTensorInfo(outputs[2]);
 
     const TensorShape& inputShape = inputInfo.GetShape();
     const TensorShape& outputStateInShape = outputStateInInfo.GetShape();
@@ -77,42 +89,44 @@ void RefQLstmWorkload::Execute() const
 
     // Input decoders
     std::unique_ptr<Decoder<float>> inputDecoder =
-            MakeDecoder<float>(inputInfo, m_Data.m_Inputs[0]->Map());
+            MakeDecoder<float>(inputInfo, inputs[0]->Map());
     std::unique_ptr<Decoder<float>> outputStateInDecoder =
-            MakeDecoder<float>(outputStateInInfo, m_Data.m_Inputs[1]->Map());
+            MakeDecoder<float>(outputStateInInfo, inputs[1]->Map());
     std::unique_ptr<Decoder<float>> cellStateInDecoder =
-            MakeDecoder<float>(cellStateInInfo, m_Data.m_Inputs[2]->Map());
+            MakeDecoder<float>(cellStateInInfo, inputs[2]->Map());
 
     // Output decoders
     std::unique_ptr<Decoder<float>> outputStateOutDecoder =
-            MakeDecoder<float>(outputStateOutInfo, m_Data.m_Outputs[0]->Map());
+            MakeDecoder<float>(outputStateOutInfo, outputs[0]->Map());
     std::unique_ptr<Decoder<float>> cellStateOutDecoder =
-            MakeDecoder<float>(cellStateOutInfo, m_Data.m_Outputs[1]->Map());
+            MakeDecoder<float>(cellStateOutInfo, outputs[1]->Map());
     std::unique_ptr<Decoder<float>> outputDecoder =
-            MakeDecoder<float>(outputInfo, m_Data.m_Outputs[2]->Map());
+            MakeDecoder<float>(outputInfo, outputs[2]->Map());
 
     // Output encoders
     std::unique_ptr<Encoder<float>> outputStateOutEncoder =
-            MakeEncoder<float>(outputStateOutInfo, m_Data.m_Outputs[0]->Map());
+            MakeEncoder<float>(outputStateOutInfo, outputs[0]->Map());
     std::unique_ptr<Encoder<float>> cellStateOutEncoder =
-            MakeEncoder<float>(cellStateOutInfo, m_Data.m_Outputs[1]->Map());
+            MakeEncoder<float>(cellStateOutInfo, outputs[1]->Map());
     std::unique_ptr<Encoder<float>> outputEncoder =
-            MakeEncoder<float>(outputInfo, m_Data.m_Outputs[2]->Map());
+            MakeEncoder<float>(outputInfo, outputs[2]->Map());
 
     // Weights decoders
     std::unique_ptr<Decoder<float>> inputToForgetWeightsDecoder = MakeDecoder<float>(
-            m_InputToForgetWeightsTensor->GetTensorInfo(), m_InputToForgetWeightsTensor->GetTensor<void>());
+            m_InputToForgetWeightsTensor->GetTensorInfo(), m_InputToForgetWeightsTensor->GetConstTensor<void>());
     std::unique_ptr<Decoder<float>> inputToCellWeightsDecoder = MakeDecoder<float>(
-            m_InputToCellWeightsTensor->GetTensorInfo(), m_InputToCellWeightsTensor->GetTensor<void>());
+            m_InputToCellWeightsTensor->GetTensorInfo(), m_InputToCellWeightsTensor->GetConstTensor<void>());
     std::unique_ptr<Decoder<float>> inputToOutputWeightsDecoder = MakeDecoder<float>(
-            m_InputToOutputWeightsTensor->GetTensorInfo(), m_InputToOutputWeightsTensor->GetTensor<void>());
+            m_InputToOutputWeightsTensor->GetTensorInfo(), m_InputToOutputWeightsTensor->GetConstTensor<void>());
 
     std::unique_ptr<Decoder<float>> recurrentToForgetWeightsDecoder = MakeDecoder<float>(
-            m_RecurrentToForgetWeightsTensor->GetTensorInfo(), m_RecurrentToForgetWeightsTensor->GetTensor<void>());
+            m_RecurrentToForgetWeightsTensor->GetTensorInfo(),
+            m_RecurrentToForgetWeightsTensor->GetConstTensor<void>());
     std::unique_ptr<Decoder<float>> recurrentToCellWeightsDecoder = MakeDecoder<float>(
-            m_RecurrentToCellWeightsTensor->GetTensorInfo(), m_RecurrentToCellWeightsTensor->GetTensor<void>());
+            m_RecurrentToCellWeightsTensor->GetTensorInfo(), m_RecurrentToCellWeightsTensor->GetConstTensor<void>());
     std::unique_ptr<Decoder<float>> recurrentToOutputWeightsDecoder = MakeDecoder<float>(
-            m_RecurrentToOutputWeightsTensor->GetTensorInfo(), m_RecurrentToOutputWeightsTensor->GetTensor<void>());
+            m_RecurrentToOutputWeightsTensor->GetTensorInfo(),
+            m_RecurrentToOutputWeightsTensor->GetConstTensor<void>());
 
     // Optional CIFG params
     std::unique_ptr<Decoder<float>> inputToInputWeightsDecoder;
@@ -198,9 +212,9 @@ void RefQLstmWorkload::Execute() const
     if (!cifgEnabled)
     {
         inputToInputWeightsDecoder = MakeDecoder<float>(
-                m_InputToInputWeightsTensor->GetTensorInfo(), m_InputToInputWeightsTensor->GetTensor<void>());
-        recurrentToInputWeightsDecoder = MakeDecoder<float>(
-                m_RecurrentToInputWeightsTensor->GetTensorInfo(), m_RecurrentToInputWeightsTensor->GetTensor<void>());
+                m_InputToInputWeightsTensor->GetTensorInfo(), m_InputToInputWeightsTensor->GetConstTensor<void>());
+        recurrentToInputWeightsDecoder = MakeDecoder<float>(m_RecurrentToInputWeightsTensor->GetTensorInfo(),
+                                                            m_RecurrentToInputWeightsTensor->GetConstTensor<void>());
     }
 
     if (peepholeEnabled)
@@ -208,22 +222,22 @@ void RefQLstmWorkload::Execute() const
         if (!cifgEnabled)
         {
             cellToInputWeightsDecoder = MakeDecoder<float>(
-                    m_CellToInputWeightsTensor->GetTensorInfo(), m_CellToInputWeightsTensor->GetTensor<void>());
+                    m_CellToInputWeightsTensor->GetTensorInfo(), m_CellToInputWeightsTensor->GetConstTensor<void>());
         }
         cellToForgetWeightsDecoder = MakeDecoder<float>(
-                m_CellToForgetWeightsTensor->GetTensorInfo(), m_CellToForgetWeightsTensor->GetTensor<void>());
+                m_CellToForgetWeightsTensor->GetTensorInfo(), m_CellToForgetWeightsTensor->GetConstTensor<void>());
         cellToOutputWeightsDecoder = MakeDecoder<float>(
-                m_CellToOutputWeightsTensor->GetTensorInfo(), m_CellToOutputWeightsTensor->GetTensor<void>());
+                m_CellToOutputWeightsTensor->GetTensorInfo(), m_CellToOutputWeightsTensor->GetConstTensor<void>());
     }
 
     if (projectionEnabled)
     {
         projectionWeightsDecoder = MakeDecoder<float>(
-                m_ProjectionWeightsTensor->GetTensorInfo(), m_ProjectionWeightsTensor->GetTensor<void>());
+                m_ProjectionWeightsTensor->GetTensorInfo(), m_ProjectionWeightsTensor->GetConstTensor<void>());
         if (m_ProjectionBiasTensor)
         {
             projectionBiasDecoder = MakeDecoder<float>(
-                    m_ProjectionBiasTensor->GetTensorInfo(), m_ProjectionBiasTensor->GetTensor<void>());
+                    m_ProjectionBiasTensor->GetTensorInfo(), m_ProjectionBiasTensor->GetConstTensor<void>());
         }
     }
 
@@ -231,38 +245,40 @@ void RefQLstmWorkload::Execute() const
     {
         if (!cifgEnabled)
         {
-            inputLayerNormWeightsDecoder = MakeDecoder<float>(
-                    m_InputLayerNormWeightsTensor->GetTensorInfo(), m_InputLayerNormWeightsTensor->GetTensor<void>());
+            inputLayerNormWeightsDecoder = MakeDecoder<float>(m_InputLayerNormWeightsTensor->GetTensorInfo(),
+                                                              m_InputLayerNormWeightsTensor->GetConstTensor<void>());
 
             // Bias only used if layer norm enabled
             armnn::TensorInfo inputGateBiasTensorInfo({outputSize}, armnn::DataType::Signed32,
                     m_InputLayerNormWeightsTensor->GetTensorInfo().GetQuantizationScale() / 1024, 0);
             inputGateBiasDecoder = MakeDecoder<float>(
-                    inputGateBiasTensorInfo, m_InputGateBiasTensor->GetTensor<void>());
+                    inputGateBiasTensorInfo, m_InputGateBiasTensor->GetConstTensor<void>());
         }
 
         forgetLayerNormWeightsDecoder = MakeDecoder<float>(
-                m_ForgetLayerNormWeightsTensor->GetTensorInfo(), m_ForgetLayerNormWeightsTensor->GetTensor<void>());
+                m_ForgetLayerNormWeightsTensor->GetTensorInfo(),
+                m_ForgetLayerNormWeightsTensor->GetConstTensor<void>());
         cellLayerNormWeightsDecoder = MakeDecoder<float>(
-                m_CellLayerNormWeightsTensor->GetTensorInfo(), m_CellLayerNormWeightsTensor->GetTensor<void>());
+                m_CellLayerNormWeightsTensor->GetTensorInfo(), m_CellLayerNormWeightsTensor->GetConstTensor<void>());
         outputLayerNormWeightsDecoder = MakeDecoder<float>(
-                m_OutputLayerNormWeightsTensor->GetTensorInfo(), m_OutputLayerNormWeightsTensor->GetTensor<void>());
+                m_OutputLayerNormWeightsTensor->GetTensorInfo(),
+                m_OutputLayerNormWeightsTensor->GetConstTensor<void>());
 
         // Bias only used if layer norm enabled
         armnn::TensorInfo forgetGateBiasTensorInfo({outputSize}, armnn::DataType::Signed32,
                 m_ForgetLayerNormWeightsTensor->GetTensorInfo().GetQuantizationScale() / 1024, 0);
         forgetGateBiasDecoder = MakeDecoder<float>(
-                forgetGateBiasTensorInfo, m_ForgetGateBiasTensor->GetTensor<void>());
+                forgetGateBiasTensorInfo, m_ForgetGateBiasTensor->GetConstTensor<void>());
 
         armnn::TensorInfo cellGateBiasTensorInfo({outputSize}, armnn::DataType::Signed32,
                 m_CellLayerNormWeightsTensor->GetTensorInfo().GetQuantizationScale() / 1024, 0);
         cellGateBiasDecoder = MakeDecoder<float>(
-                cellGateBiasTensorInfo, m_CellBiasTensor->GetTensor<void>());
+                cellGateBiasTensorInfo, m_CellBiasTensor->GetConstTensor<void>());
 
         armnn::TensorInfo outputGateBiasTensorInfo({outputSize}, armnn::DataType::Signed32,
                 m_OutputLayerNormWeightsTensor->GetTensorInfo().GetQuantizationScale() / 1024, 0);
         outputGateBiasDecoder = MakeDecoder<float>(
-                outputGateBiasTensorInfo, m_OutputGateBiasTensor->GetTensor<void>());
+                outputGateBiasTensorInfo, m_OutputGateBiasTensor->GetConstTensor<void>());
     }
 
     // Initialize internal state tensors with zeroes.

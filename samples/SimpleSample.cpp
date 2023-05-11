@@ -21,26 +21,29 @@ int main()
 
     // Turn on logging to standard output
     // This is useful in this sample so that users can learn more about what is going on
-    armnn::ConfigureLogging(true, false, LogSeverity::Warning);
+    ConfigureLogging(true, false, LogSeverity::Warning);
 
     // Construct ArmNN network
-    armnn::NetworkId networkIdentifier;
+    NetworkId networkIdentifier;
     INetworkPtr myNetwork = INetwork::Create();
 
-    armnn::FullyConnectedDescriptor fullyConnectedDesc;
     float weightsData[] = {1.0f}; // Identity
-    TensorInfo weightsInfo(TensorShape({1, 1}), DataType::Float32);
-    armnn::ConstTensor weights(weightsInfo, weightsData);
-    IConnectableLayer *fullyConnected = myNetwork->AddFullyConnectedLayer(fullyConnectedDesc,
-                                                                          weights,
-                                                                          EmptyOptional(),
-                                                                          "fully connected");
+    TensorInfo weightsInfo(TensorShape({1, 1}), DataType::Float32, 0.0f, 0, true);
+    weightsInfo.SetConstant();
+    ConstTensor weights(weightsInfo, weightsData);
 
-    IConnectableLayer *InputLayer = myNetwork->AddInputLayer(0);
-    IConnectableLayer *OutputLayer = myNetwork->AddOutputLayer(0);
+    // Constant layer that now holds weights data for FullyConnected
+    IConnectableLayer* const constantWeightsLayer = myNetwork->AddConstantLayer(weights, "const weights");
 
-    InputLayer->GetOutputSlot(0).Connect(fullyConnected->GetInputSlot(0));
-    fullyConnected->GetOutputSlot(0).Connect(OutputLayer->GetInputSlot(0));
+    FullyConnectedDescriptor fullyConnectedDesc;
+    IConnectableLayer* const fullyConnectedLayer = myNetwork->AddFullyConnectedLayer(fullyConnectedDesc,
+                                                                                     "fully connected");
+    IConnectableLayer* InputLayer  = myNetwork->AddInputLayer(0);
+    IConnectableLayer* OutputLayer = myNetwork->AddOutputLayer(0);
+
+    InputLayer->GetOutputSlot(0).Connect(fullyConnectedLayer->GetInputSlot(0));
+    constantWeightsLayer->GetOutputSlot(0).Connect(fullyConnectedLayer->GetInputSlot(1));
+    fullyConnectedLayer->GetOutputSlot(0).Connect(OutputLayer->GetInputSlot(0));
 
     // Create ArmNN runtime
     IRuntime::CreationOptions options; // default options
@@ -51,10 +54,11 @@ int main()
     InputLayer->GetOutputSlot(0).SetTensorInfo(inputTensorInfo);
 
     TensorInfo outputTensorInfo(TensorShape({1, 1}), DataType::Float32);
-    fullyConnected->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
+    fullyConnectedLayer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
+    constantWeightsLayer->GetOutputSlot(0).SetTensorInfo(weightsInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = Optimize(*myNetwork, {Compute::CpuRef}, run->GetDeviceSpec());
+    IOptimizedNetworkPtr optNet = Optimize(*myNetwork, {Compute::CpuRef}, run->GetDeviceSpec());
     if (!optNet)
     {
         // This shouldn't happen for this simple sample, with reference backend.
@@ -71,11 +75,12 @@ int main()
     std::vector<float> inputData{number};
     std::vector<float> outputData(1);
 
-
-    armnn::InputTensors inputTensors{{0, armnn::ConstTensor(run->GetInputTensorInfo(networkIdentifier, 0),
-                                                            inputData.data())}};
-    armnn::OutputTensors outputTensors{{0, armnn::Tensor(run->GetOutputTensorInfo(networkIdentifier, 0),
-                                                         outputData.data())}};
+    inputTensorInfo = run->GetInputTensorInfo(networkIdentifier, 0);
+    inputTensorInfo.SetConstant(true);
+    InputTensors inputTensors{{0, armnn::ConstTensor(inputTensorInfo,
+                                                     inputData.data())}};
+    OutputTensors outputTensors{{0, armnn::Tensor(run->GetOutputTensorInfo(networkIdentifier, 0),
+                                                  outputData.data())}};
 
     // Execute network
     run->EnqueueWorkload(networkIdentifier, inputTensors, outputTensors);

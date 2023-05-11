@@ -1,21 +1,24 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include "RefBaseWorkload.hpp"
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
 
-class RefPadWorkload : public BaseWorkload<PadQueueDescriptor>
+class RefPadWorkload : public RefBaseWorkload<PadQueueDescriptor>
 {
 public:
-    using BaseWorkload<PadQueueDescriptor>::BaseWorkload;
-    virtual void Execute() const override;
+    using RefBaseWorkload<PadQueueDescriptor>::RefBaseWorkload;
+    void Execute() const override;
+    void ExecuteAsync(ExecutionData& executionData)  override;
+private:
+    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
 };
 
 } //namespace armnn

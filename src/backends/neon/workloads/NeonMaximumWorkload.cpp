@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "NeonMaximumWorkload.hpp"
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 namespace armnn
 {
@@ -26,7 +26,7 @@ arm_compute::Status NeonMaximumWorkloadValidate(const TensorInfo& input0,
 
 NeonMaximumWorkload::NeonMaximumWorkload(const MaximumQueueDescriptor& descriptor,
                                          const WorkloadInfo& info)
-    : BaseWorkload<MaximumQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<MaximumQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonMaximumWorkload", 2, 1);
 
@@ -39,7 +39,7 @@ NeonMaximumWorkload::NeonMaximumWorkload(const MaximumQueueDescriptor& descripto
 
 void NeonMaximumWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonMaximumWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonMaximumWorkload_Execute", this->GetGuid());
     m_MaxLayer.run();
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -29,7 +29,7 @@ arm_compute::Status NeonPreluWorkloadValidate(const TensorInfo& input,
 
 NeonPreluWorkload::NeonPreluWorkload(const PreluQueueDescriptor& descriptor,
                                      const WorkloadInfo& info)
-        : BaseWorkload<PreluQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<PreluQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonPreluWorkload", 1, 1);
 
@@ -45,7 +45,7 @@ NeonPreluWorkload::NeonPreluWorkload(const PreluQueueDescriptor& descriptor,
 
 void NeonPreluWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonPreluWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonPreluWorkload_Execute", this->GetGuid());
     m_PreluLayer->run();
 }
 

@@ -6,11 +6,11 @@
 #include "ArgMinMaxTestImpl.hpp"
 
 
-#include <backendsCommon/test/DataTypeUtils.hpp>
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <DataTypeUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 namespace
 {
@@ -27,10 +27,8 @@ LayerTestResult<int32_t, 3> ArgMinMaxTestCommon(
         const std::vector<int32_t>& outputData,
         int axis = 3)
 {
-    auto inputTensor = MakeTensor<T, 4>(inputTensorInfo, ConvertToDataType<ArmnnType>(inputData, inputTensorInfo));
-
-    LayerTestResult<int32_t, 3> result(outputTensorInfo);
-    result.outputExpected = MakeTensor<int32_t, 3>(outputTensorInfo, outputData);
+    std::vector<T> inputTensor = ConvertToDataType<ArmnnType>(inputData, inputTensorInfo);
+    std::vector<int32_t> actualOutput(outputTensorInfo.GetNumElements());
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle  = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -43,19 +41,23 @@ LayerTestResult<int32_t, 3> ArgMinMaxTestCommon(
     AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateArgMinMax(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::ArgMinMax,
+                                                                                descriptor, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), &inputTensor[0][0][0][0]);
+    CopyDataToITensorHandle(inputHandle.get(), inputTensor.data());
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<int32_t, 3>(actualOutput,
+                                       outputData,
+                                       outputHandle->GetShape(),
+                                       outputTensorInfo.GetShape());
 }
 
 } // namespace

@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <armnn/Types.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 LayerTestResult<float, 4> SimpleNormalizationAcrossTest(
     armnn::IWorkloadFactory& workloadFactory,
@@ -35,3 +35,8 @@ LayerTestResult<float, 4> CompareNormalizationTest(
     const armnn::ITensorHandleFactory& refTensorHandleFactory,
     armnn::NormalizationAlgorithmChannel normChannel,
     armnn::NormalizationAlgorithmMethod normMethod);
+
+LayerTestResult<float, 4> AcrossChannelNormalizationTest(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);

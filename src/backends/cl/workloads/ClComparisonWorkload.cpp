@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,7 +10,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <cl/ClLayerSupport.hpp>
 #include <cl/ClTensorHandle.hpp>
@@ -39,9 +39,17 @@ arm_compute::Status ClComparisonWorkloadValidate(const TensorInfo& input0,
     return aclStatus;
 }
 
-ClComparisonWorkload::ClComparisonWorkload(const ComparisonQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<ComparisonQueueDescriptor>(descriptor, info)
+ClComparisonWorkload::ClComparisonWorkload(const ComparisonQueueDescriptor& descriptor,
+                                           const WorkloadInfo& info,
+                                           const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<ComparisonQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonComparisonWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("ClComparisonWorkload", 2, 1);
 
     arm_compute::ICLTensor& input0 = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -50,12 +58,15 @@ ClComparisonWorkload::ClComparisonWorkload(const ComparisonQueueDescriptor& desc
 
     const arm_compute::ComparisonOperation comparisonOperation = ConvertComparisonOperationToAcl(m_Data.m_Parameters);
 
-    m_ComparisonLayer.configure(&input0, &input1, &output, comparisonOperation);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClComparisonWorkload_configure");
+        m_ComparisonLayer.configure(clCompileContext, &input0, &input1, &output, comparisonOperation);
+    }
 }
 
 void ClComparisonWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClComparisonWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClComparisonWorkload_Execute", this->GetGuid());
     RunClFunction(m_ComparisonLayer, CHECK_LOCATION());
 }
 

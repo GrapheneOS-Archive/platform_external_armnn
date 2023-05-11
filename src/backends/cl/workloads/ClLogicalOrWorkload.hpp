@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/core/Error.h>
 #include <arm_compute/runtime/CL/functions/CLLogicalOr.h>
@@ -17,10 +17,12 @@ arm_compute::Status ClLogicalOrWorkloadValidate(const TensorInfo& input0,
                                                 const TensorInfo& input1,
                                                 const TensorInfo& output);
 
-class ClLogicalOrWorkload : public BaseWorkload<LogicalBinaryQueueDescriptor>
+class ClLogicalOrWorkload : public ClBaseWorkload<LogicalBinaryQueueDescriptor>
 {
 public:
-    ClLogicalOrWorkload(const LogicalBinaryQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClLogicalOrWorkload(const LogicalBinaryQueueDescriptor& descriptor,
+                        const WorkloadInfo& info,
+                        const arm_compute::CLCompileContext& clCompileContext);
     virtual void Execute() const override;
 
 private:

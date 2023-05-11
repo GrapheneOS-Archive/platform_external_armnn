@@ -1,12 +1,12 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include "ClBaseWorkload.hpp"
+#include <armnn/backends/WorkloadData.hpp>
 
 #include <armnn/TypesUtils.hpp>
 #include <arm_compute/runtime/CL/functions/CLPermute.h>
@@ -20,7 +20,7 @@ arm_compute::Status ClTransposeWorkloadValidate(const TensorInfo& input,
                                                 const TensorInfo& output,
                                                 const TransposeDescriptor& descriptor);
 
-class ClTransposeWorkload : public BaseWorkload<TransposeQueueDescriptor>
+class ClTransposeWorkload : public ClBaseWorkload<TransposeQueueDescriptor>
 {
 public:
     static const std::string& GetName()
@@ -29,7 +29,9 @@ public:
         return name;
     }
 
-    ClTransposeWorkload(const TransposeQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClTransposeWorkload(const TransposeQueueDescriptor& descriptor,
+                        const WorkloadInfo& info,
+                        const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:
