@@ -1,13 +1,15 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
+#include "ClBaseWorkload.hpp"
+
 #include <armnn/QuantizedLstmParams.hpp>
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/backends/Workload.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLLSTMLayerQuantized.h>
 
@@ -19,10 +21,12 @@ arm_compute::Status ClQuantizedLstmWorkloadValidate(const TensorInfo& input, con
                                                     const TensorInfo& output,
                                                     const QuantizedLstmInputParamsInfo& paramsInfo);
 
-class ClQuantizedLstmWorkload : public BaseWorkload<QuantizedLstmQueueDescriptor>
+class ClQuantizedLstmWorkload : public ClBaseWorkload<QuantizedLstmQueueDescriptor>
 {
 public:
-    ClQuantizedLstmWorkload(const QuantizedLstmQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClQuantizedLstmWorkload(const QuantizedLstmQueueDescriptor& descriptor,
+                            const WorkloadInfo& info,
+                            const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:

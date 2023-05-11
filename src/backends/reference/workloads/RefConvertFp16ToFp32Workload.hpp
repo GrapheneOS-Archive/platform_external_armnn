@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include "RefBaseWorkload.hpp"
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
@@ -15,7 +15,10 @@ class RefConvertFp16ToFp32Workload : public Float16ToFloat32Workload<ConvertFp16
 {
 public:
     using Float16ToFloat32Workload<ConvertFp16ToFp32QueueDescriptor>::Float16ToFloat32Workload;
-    virtual void Execute() const override;
+    void Execute() const override;
+    void ExecuteAsync(ExecutionData& executionData)  override;
+private:
+    void Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const;
 };
 
 } //namespace armnn

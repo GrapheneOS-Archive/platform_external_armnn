@@ -1,10 +1,10 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2022 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
-#include "CommonTestUtils.hpp"
+#include <CommonTestUtils.hpp>
 
 #include <ResolveType.hpp>
 
@@ -12,7 +12,7 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <vector>
 
@@ -39,7 +39,7 @@ INetworkPtr CreateConcatNetwork(const std::vector<TensorShape>& inputShapes,
 
     for (unsigned int i = 0; i < inputShapes.size(); ++i)
     {
-        TensorInfo inputTensorInfo(inputShapes[i], DataType, qScale, qOffset);
+        TensorInfo inputTensorInfo(inputShapes[i], DataType, qScale, qOffset, true);
         IConnectableLayer* input = net->AddInputLayer(armnn::numeric_cast<LayerBindingId>(i));
         Connect(input, concat, inputTensorInfo, 0, i);
     }
@@ -64,7 +64,7 @@ void ConcatDim0EndToEnd(const std::vector<BackendId>& backends)
     // Builds up the structure of the network
     INetworkPtr net = CreateConcatNetwork<ArmnnType>(inputShapes, outputShape, concatAxis);
 
-    BOOST_TEST_CHECKPOINT("create a network");
+    CHECK(net);
 
     // Creates structures for input & output.
     std::vector<T> inputData{
@@ -112,7 +112,7 @@ void ConcatDim0EndToEnd(const std::vector<BackendId>& backends)
     std::map<int, std::vector<T>> inputTensorData = {{ 0,inputData }, { 1,inputData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0,expectedOutput }};
 
-    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(move(net), inputTensorData, expectedOutputData, backends);
+    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(std::move(net), inputTensorData, expectedOutputData, backends);
 }
 
 template<armnn::DataType ArmnnType>
@@ -128,8 +128,6 @@ void ConcatDim1EndToEnd(const std::vector<BackendId>& backends)
     // Builds up the structure of the network
     INetworkPtr net = CreateConcatNetwork<ArmnnType>(inputShapes, outputShape, concatAxis);
 
-    BOOST_TEST_CHECKPOINT("create a network");
-
     // Creates structures for input & output.
     std::vector<T> inputData{
         1, 2,
@@ -176,7 +174,7 @@ void ConcatDim1EndToEnd(const std::vector<BackendId>& backends)
     std::map<int, std::vector<T>> inputTensorData = {{ 0,inputData }, { 1,inputData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0,expectedOutput }};
 
-    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(move(net), inputTensorData, expectedOutputData, backends);
+    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(std::move(net), inputTensorData, expectedOutputData, backends);
 }
 
 template<armnn::DataType ArmnnType>
@@ -192,8 +190,6 @@ void ConcatDim2EndToEnd(const std::vector<BackendId>& backends)
     // Builds up the structure of the network
     INetworkPtr net = CreateConcatNetwork<ArmnnType>(inputShapes, outputShape, concatAxis);
 
-    BOOST_TEST_CHECKPOINT("create a network");
-
     // Creates structures for input & output.
     std::vector<T> inputData{
         1, 2,
@@ -240,7 +236,7 @@ void ConcatDim2EndToEnd(const std::vector<BackendId>& backends)
     std::map<int, std::vector<T>> inputTensorData = {{ 0,inputData }, { 1,inputData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0,expectedOutput }};
 
-    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(move(net), inputTensorData, expectedOutputData, backends);
+    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(std::move(net), inputTensorData, expectedOutputData, backends);
 }
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
@@ -255,8 +251,6 @@ void ConcatDim3EndToEnd(const std::vector<BackendId>& backends)
     // Builds up the structure of the network
     INetworkPtr net = CreateConcatNetwork<ArmnnType>(inputShapes, outputShape, concatAxis);
 
-    BOOST_TEST_CHECKPOINT("create a network");
-
     // Creates structures for input & output.
     std::vector<T> inputData{
         1, 2,
@@ -303,7 +297,7 @@ void ConcatDim3EndToEnd(const std::vector<BackendId>& backends)
     std::map<int, std::vector<T>> inputTensorData = {{ 0,inputData }, { 1,inputData }};
     std::map<int, std::vector<T>> expectedOutputData = {{ 0,expectedOutput }};
 
-    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(move(net), inputTensorData, expectedOutputData, backends);
+    EndToEndLayerTestImpl<ArmnnType, ArmnnType>(std::move(net), inputTensorData, expectedOutputData, backends);
 }
 
 } // anonymous namespace

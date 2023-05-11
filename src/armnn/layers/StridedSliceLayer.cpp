@@ -8,8 +8,8 @@
 
 #include <armnn/utility/NumericCast.hpp>
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -36,7 +36,7 @@ std::unique_ptr<IWorkload> StridedSliceLayer::CreateWorkload(const IWorkloadFact
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateStridedSlice(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::StridedSlice, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 StridedSliceLayer* StridedSliceLayer::Clone(Graph& graph) const
@@ -111,9 +111,9 @@ void StridedSliceLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "StridedSliceLayer");
 }
 
-void StridedSliceLayer::Accept(ILayerVisitor& visitor) const
+void StridedSliceLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitStridedSliceLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

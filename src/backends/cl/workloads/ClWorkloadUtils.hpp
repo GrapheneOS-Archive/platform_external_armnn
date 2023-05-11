@@ -1,14 +1,15 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
+#include <BFloat16.hpp>
 #include <Half.hpp>
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <cl/OpenClTimer.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <armnn/Utils.hpp>
 
@@ -19,12 +20,37 @@
 
 #define ARMNN_SCOPED_PROFILING_EVENT_CL(name) \
     ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::GpuAcc, \
+                                                  armnn::EmptyOptional(), \
+                                                  name, \
+                                                  armnn::OpenClTimer(), \
+                                                  armnn::WallClockTimer())
+
+#define ARMNN_SCOPED_PROFILING_EVENT_CL_GUID(name, guid) \
+    ARMNN_SCOPED_PROFILING_EVENT_WITH_INSTRUMENTS(armnn::Compute::GpuAcc, \
+                                                  guid, \
                                                   name, \
                                                   armnn::OpenClTimer(), \
                                                   armnn::WallClockTimer())
 
 namespace armnn
 {
+
+inline std::string GetConvolutionMethodString(arm_compute::ConvolutionMethod& convolutionMethod)
+{
+    switch (convolutionMethod)
+    {
+        case arm_compute::ConvolutionMethod::FFT:
+            return "FFT";
+        case arm_compute::ConvolutionMethod::DIRECT:
+            return "Direct";
+        case arm_compute::ConvolutionMethod::GEMM:
+            return "GEMM";
+        case arm_compute::ConvolutionMethod::WINOGRAD:
+            return "Winograd";
+        default:
+            return "Unknown";
+    }
+}
 
 template <typename T>
 void CopyArmComputeClTensorData(arm_compute::CLTensor& dstTensor, const T* srcData)
@@ -88,7 +114,7 @@ inline auto SetClSliceData(const std::vector<unsigned int>& m_begin,
 }
 
 inline void InitializeArmComputeClTensorData(arm_compute::CLTensor& clTensor,
-                                             const ConstCpuTensorHandle* handle)
+                                             const ConstTensorHandle* handle)
 {
     ARMNN_ASSERT(handle);
 
@@ -104,9 +130,6 @@ inline void InitializeArmComputeClTensorData(arm_compute::CLTensor& clTensor,
         case DataType::QAsymmU8:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<uint8_t>());
             break;
-        ARMNN_NO_DEPRECATE_WARN_BEGIN
-        case DataType::QuantizedSymm8PerAxis:
-            ARMNN_FALLTHROUGH;
         case DataType::QAsymmS8:
         case DataType::QSymmS8:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int8_t>());
@@ -114,12 +137,15 @@ inline void InitializeArmComputeClTensorData(arm_compute::CLTensor& clTensor,
         case DataType::QSymmS16:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int16_t>());
             break;
-        ARMNN_NO_DEPRECATE_WARN_END
         case DataType::Signed32:
             CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<int32_t>());
             break;
+        case DataType::BFloat16:
+            CopyArmComputeClTensorData(clTensor, handle->GetConstTensor<armnn::BFloat16>());
+            break;
         default:
-            ARMNN_ASSERT_MSG(false, "Unexpected tensor type.");
+            // Throw exception; assertion not called in release build.
+            throw Exception("Unexpected tensor type during InitializeArmComputeClTensorData().");
     }
 };
 
@@ -141,6 +167,13 @@ inline void RunClFunction(arm_compute::IFunction& function, const CheckLocation&
     {
         throw WrapClError(error, location);
     }
+}
+
+template <typename DataType, typename PayloadType>
+DataType* GetOutputTensorData(unsigned int idx, const PayloadType& data)
+{
+    ITensorHandle* tensorHandle = data.m_Outputs[idx];
+    return reinterpret_cast<DataType*>(tensorHandle->Map());
 }
 
 } //namespace armnn

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -12,7 +12,7 @@
 
 #include <armnn/utility/PolymorphicDowncast.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <arm_compute/runtime/NEON/functions/NEArithmeticSubtraction.h>
 
@@ -40,7 +40,7 @@ arm_compute::Status NeonSubtractionWorkloadValidate(const TensorInfo& input0,
 
 NeonSubtractionWorkload::NeonSubtractionWorkload(const SubtractionQueueDescriptor& descriptor,
                                                  const WorkloadInfo& info)
-    : BaseWorkload<SubtractionQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<SubtractionQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonSubtractionWorkload", 2, 1);
 
@@ -57,7 +57,7 @@ NeonSubtractionWorkload::NeonSubtractionWorkload(const SubtractionQueueDescripto
 
 void NeonSubtractionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonSubtractionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonSubtractionWorkload_Execute", this->GetGuid());
     m_SubLayer->run();
 }
 

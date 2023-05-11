@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -10,11 +10,11 @@
 
 #include <neon/NeonWorkloadFactory.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
-BOOST_AUTO_TEST_SUITE(NeonOptimizedNetwork)
-
-BOOST_AUTO_TEST_CASE(OptimizeValidateCpuAccDeviceSupportLayerNoFallback)
+TEST_SUITE("NeonOptimizedNetwork")
+{
+TEST_CASE("OptimizeValidateCpuAccDeviceSupportLayerNoFallback")
 {
     // build up the structure of the network
     armnn::INetworkPtr net(armnn::INetwork::Create());
@@ -30,20 +30,21 @@ BOOST_AUTO_TEST_CASE(OptimizeValidateCpuAccDeviceSupportLayerNoFallback)
 
     std::vector<armnn::BackendId> backends = { armnn::Compute::CpuAcc };
     armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*net, backends, runtime->GetDeviceSpec());
-    BOOST_CHECK(optNet);
+    CHECK(optNet);
     // validate workloads
     armnn::NeonWorkloadFactory fact =
         NeonWorkloadFactoryHelper::GetFactory(NeonWorkloadFactoryHelper::GetMemoryManager());
 
-    for (auto&& layer : static_cast<armnn::OptimizedNetwork*>(optNet.get())->GetGraph())
+    armnn::Graph& graph = GetGraphForTesting(optNet.get());
+    for (auto&& layer : graph)
     {
-        BOOST_CHECK(layer->GetBackendId() == armnn::Compute::CpuAcc);
-        BOOST_CHECK_NO_THROW(
+        CHECK(layer->GetBackendId() == armnn::Compute::CpuAcc);
+        CHECK_NOTHROW(
             layer->CreateWorkload(fact));
     }
 }
 
-BOOST_AUTO_TEST_CASE(OptimizeValidateDeviceNonSupportLayerNoFallback)
+TEST_CASE("OptimizeValidateDeviceNonSupportLayerNoFallback")
 {
     // build up the structure of the network
     armnn::INetworkPtr net(armnn::INetwork::Create());
@@ -70,17 +71,18 @@ BOOST_AUTO_TEST_CASE(OptimizeValidateDeviceNonSupportLayerNoFallback)
 
     try
     {
-        Optimize(*net, backends, runtime->GetDeviceSpec(), armnn::OptimizerOptions(), errMessages);
-        BOOST_FAIL("Should have thrown an exception.");
+        Optimize(*net, backends, runtime->GetDeviceSpec(),
+                 armnn::OptimizerOptionsOpaque(), errMessages);
+        FAIL("Should have thrown an exception.");
     }
     catch (const armnn::InvalidArgumentException& e)
     {
         // Different exceptions are thrown on different backends
     }
-    BOOST_CHECK(errMessages.size() > 0);
+    CHECK(errMessages.size() > 0);
 }
 
-BOOST_AUTO_TEST_CASE(FastMathEnabledTestOnCpuAcc)
+TEST_CASE("FastMathEnabledTestOnCpuAcc")
 {
     armnn::INetworkPtr net(armnn::INetwork::Create());
 
@@ -94,20 +96,54 @@ BOOST_AUTO_TEST_CASE(FastMathEnabledTestOnCpuAcc)
     armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
 
     std::vector<armnn::BackendId> backends = {armnn::Compute::CpuAcc};
-    armnn::OptimizerOptions optimizerOptions;
+    armnn::OptimizerOptionsOpaque optimizerOptions;
     armnn::BackendOptions modelOptions("CpuAcc", {{"FastMathEnabled", true}});
-    optimizerOptions.m_ModelOptions.push_back(modelOptions);
+    optimizerOptions.AddModelOption(modelOptions);
 
     armnn::IOptimizedNetworkPtr optimizedNet = armnn::Optimize(
     *net, backends, runtime->GetDeviceSpec(), optimizerOptions);
 
-    BOOST_CHECK(optimizedNet);
+    CHECK(optimizedNet);
 
-    auto modelOptionsOut = static_cast<armnn::OptimizedNetwork*>(optimizedNet.get())->GetModelOptions();
+    auto modelOptionsOut = GetModelOptionsForTesting(optimizedNet.get());
 
-    BOOST_TEST(modelOptionsOut.size() == 1);
-    BOOST_TEST(modelOptionsOut[0].GetOption(0).GetName() == "FastMathEnabled");
-    BOOST_TEST(modelOptionsOut[0].GetOption(0).GetValue().AsBool() == true);
+    CHECK(modelOptionsOut.size() == 2); // FastMathEnabled and the Global to hold the import export values.
+    CHECK(modelOptionsOut[0].GetOption(0).GetName() == "FastMathEnabled");
+    CHECK(modelOptionsOut[0].GetOption(0).GetValue().AsBool() == true);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+TEST_CASE("NumberOfThreadsTestOnCpuAcc")
+{
+    armnn::INetworkPtr net(armnn::INetwork::Create());
+
+    armnn::IConnectableLayer* input  = net->AddInputLayer(0);
+    armnn::IConnectableLayer* output = net->AddOutputLayer(0);
+
+    input->GetOutputSlot(0).Connect(output->GetInputSlot(0));
+    input->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo({ 1, 1, 4, 4 }, armnn::DataType::Float32));
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+
+    unsigned int numberOfThreads = 2;
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuAcc};
+    armnn::OptimizerOptionsOpaque optimizerOptions;
+    armnn::BackendOptions modelOptions("CpuAcc", {{"NumberOfThreads", numberOfThreads}});
+    optimizerOptions.AddModelOption(modelOptions);
+
+    armnn::IOptimizedNetworkPtr optimizedNet = armnn::Optimize(
+            *net, backends, runtime->GetDeviceSpec(), optimizerOptions);
+
+    CHECK(optimizedNet);
+    std::unique_ptr<armnn::Graph> graphPtr;
+    armnn::OptimizedNetworkImpl impl(std::move(graphPtr), optimizerOptions.GetModelOptions());
+
+    auto modelOptionsOut = impl.GetModelOptions();
+
+    CHECK(modelOptionsOut.size() == 1);
+    CHECK(modelOptionsOut[0].GetOption(0).GetName() == "NumberOfThreads");
+    CHECK(modelOptionsOut[0].GetOption(0).GetValue().AsUnsignedInt() == numberOfThreads);
+}
+
+}

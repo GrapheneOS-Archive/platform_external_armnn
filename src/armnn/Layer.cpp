@@ -5,10 +5,15 @@
 #include "Layer.hpp"
 
 #include "Graph.hpp"
-#include <ProfilingService.hpp>
+
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+
 #include <armnn/utility/NumericCast.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+
+#include <armnnUtils/TensorUtils.hpp>
+
+#include <client/include/IProfilingService.hpp>
 
 #include <fmt/format.h>
 
@@ -16,6 +21,29 @@
 
 namespace armnn
 {
+
+// Instantiate the static member variable
+NullDescriptor Layer::m_NullDescriptor;
+
+void AssertNumberOfInputSlots(Layer& layer)
+{
+    switch (layer.GetType())
+    {
+        case LayerType::Convolution2d:
+        case LayerType::DepthwiseConvolution2d:
+        case LayerType::FullyConnected:
+        {
+            ARMNN_ASSERT(layer.GetNumInputSlots() == 2 ||
+                         layer.GetNumInputSlots() == 3);
+            break;
+        }
+        default:
+        {
+            ARMNN_ASSERT(layer.GetNumInputSlots() == 1);
+            break;
+        }
+    }
+}
 
 void InputSlot::Insert(Layer& layer)
 {
@@ -28,8 +56,9 @@ void InputSlot::Insert(Layer& layer)
         // Disconnects parent from this.
         prevSlot->Disconnect(*this);
 
+        AssertNumberOfInputSlots(layer);
+
         // Connects inserted layer to parent.
-        ARMNN_ASSERT(layer.GetNumInputSlots() == 1);
         int idx = prevSlot->Connect(layer.GetInputSlot(0));
         prevSlot->SetEdgeStrategy(armnn::numeric_cast<unsigned int>(idx), EdgeStrategy::Undefined);
 
@@ -199,7 +228,7 @@ Layer::Layer(unsigned int numInputSlots,
 , m_Type(type)
 , m_BackendId()
 , m_BackendHint(EmptyOptional())
-, m_Guid(profiling::ProfilingService::GetNextGuid())
+, m_Guid(arm::pipe::IProfilingService::GetNextGuid())
 {
     IgnoreUnused(layout);
     m_InputSlots.reserve(numInputSlots);
@@ -264,7 +293,8 @@ void Layer::CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
         }
         else
         {
-            ITensorHandleFactory* handleFactory = registry.GetFactory(factoryId);
+            ITensorHandleFactory* handleFactory;
+            handleFactory = registry.GetFactory(factoryId);
             ARMNN_ASSERT(handleFactory);
             handler.CreateTensorHandles(*handleFactory, IsMemoryManaged);
         }
@@ -274,9 +304,9 @@ void Layer::CreateTensorHandles(const TensorHandleFactoryRegistry& registry,
 void Layer::ReleaseConstantData()
 {
     // Now free up the static data.
-    OperateOnConstantTensors([](std::unique_ptr<ScopedCpuTensorHandle>& handle)
+    OperateOnConstantTensors([](std::shared_ptr<ConstTensorHandle>& handle)
                                  {
-                                     handle.reset(nullptr);
+                                     handle.reset();
                                  });
 }
 
@@ -397,11 +427,40 @@ void Layer::ValidateAndCopyShape(const TensorShape& outputShape,
 {
     if (shapeInferenceMethod == ShapeInferenceMethod::ValidateOnly)
     {
-        ConditionalThrowIfNotEqual<LayerValidationException>(
-                layerName + ": TensorShape set on OutputSlot[0] does not match the inferred shape.",
-                outputShape,
-                inferredShape);
-        return;
+        if (m_AllowExpandedDims)
+        {
+            std::vector<unsigned int> outputDims = armnnUtils::SqueezeDims(outputShape);
+            std::vector<unsigned int> inferredDims = armnnUtils::SqueezeDims(inferredShape);
+
+            if (outputDims.size() != inferredDims.size())
+            {
+                std::stringstream ss;
+                ss << layerName << ": TensorShape set on OutputSlot[" << outputSlotIndex <<
+                   "] does not match the inferred shape. ";
+                ss << outputShape << " != " << inferredShape;
+                throw LayerValidationException(ss.str());
+            }
+            for (unsigned int i = 0; i < outputDims.size(); ++i)
+            {
+                if (outputDims[i] != inferredDims[i])
+                {
+                    std::stringstream ss;
+                    ss << layerName << ": TensorShape set on OutputSlot[" << outputSlotIndex <<
+                       "] does not match the inferred shape at dimension index [";
+                    ss << i << "] " << outputShape << " != " << inferredShape;
+                    throw LayerValidationException(ss.str());
+                }
+            }
+            return;
+        }
+        else
+        {
+            ConditionalThrowIfNotEqual<LayerValidationException>(
+                    layerName + ": TensorShape set on OutputSlot[0] does not match the inferred shape.",
+                    outputShape,
+                    inferredShape);
+            return;
+        }
     }
 
     if (outputShape.GetDimensionality() == Dimensionality::Specified)
@@ -471,6 +530,45 @@ void Layer::SerializeLayerParameters(ParameterStringifyFunction& fn) const
     {
         StringifyLayerParameters<ActivationDescriptor>::Serialize(fn, *activationDescPtr.get());
     }
+}
+
+// default implementation of ExecuteStrategy
+void Layer::ExecuteStrategy(IStrategy& strategy) const
+{
+    strategy.ExecuteStrategy(this, BaseDescriptor(), {}, GetName());
+}
+
+Layer::ConstantTensors Layer::GetConstantTensorsByRef()
+{
+    const Layer *constThis = const_cast<const Layer*>(this);
+    ConstantTensors res;
+
+    ImmutableConstantTensors immutableData = constThis->GetConstantTensorsByRef();
+    for (auto i : immutableData)
+    {
+        res.push_back(const_cast<std::shared_ptr<ConstTensorHandle>&>(i.get()));
+    }
+    return res;
+}
+
+const IConnectableLayer& OutputSlot::GetOwningIConnectableLayer() const
+{
+    return m_OwningLayer;
+}
+
+IConnectableLayer& OutputSlot::GetOwningIConnectableLayer()
+{
+    return m_OwningLayer;
+}
+
+const IConnectableLayer& InputSlot::GetOwningIConnectableLayer() const
+{
+    return m_OwningLayer;
+}
+
+IConnectableLayer& InputSlot::GetOwningIConnectableLayer()
+{
+    return m_OwningLayer;
 }
 
 } // namespace armnn

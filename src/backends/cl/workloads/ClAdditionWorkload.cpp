@@ -6,7 +6,7 @@
 #include "ClAdditionWorkload.hpp"
 
 #include <cl/ClTensorHandle.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <aclCommon/ArmComputeUtils.hpp>
 
@@ -19,8 +19,9 @@ using namespace armcomputetensorutils;
 static constexpr arm_compute::ConvertPolicy g_AclConvertPolicy = arm_compute::ConvertPolicy::SATURATE;
 
 ClAdditionWorkload::ClAdditionWorkload(const AdditionQueueDescriptor& descriptor,
-                                       const WorkloadInfo& info)
-    : BaseWorkload<AdditionQueueDescriptor>(descriptor, info)
+                                       const WorkloadInfo& info,
+                                       const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<AdditionQueueDescriptor>(descriptor, info)
 {
     this->m_Data.ValidateInputsOutputs("ClAdditionWorkload", 2, 1);
 
@@ -29,13 +30,15 @@ ClAdditionWorkload::ClAdditionWorkload(const AdditionQueueDescriptor& descriptor
     arm_compute::ICLTensor& output = static_cast<IClTensorHandle*>(this->m_Data.m_Outputs[0])->GetTensor();
 
     const arm_compute::ActivationLayerInfo activationInfo = ConvertAdditionalInfoToAclActivationLayerInfo(descriptor);
-
-    m_Layer.configure(&input0, &input1, &output, g_AclConvertPolicy, activationInfo);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClAdditionWorkload_configure");
+        m_Layer.configure(clCompileContext, &input0, &input1, &output, g_AclConvertPolicy, activationInfo);
+    }
 }
 
 void ClAdditionWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClAdditionWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClAdditionWorkload_Execute", this->GetGuid());
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

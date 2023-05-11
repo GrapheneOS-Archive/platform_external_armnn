@@ -1,21 +1,23 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/runtime/CL/functions/CLElementwiseOperations.h>
 
 namespace armnn
 {
 
-class ClSubtractionWorkload : public BaseWorkload<SubtractionQueueDescriptor>
+class ClSubtractionWorkload : public ClBaseWorkload<SubtractionQueueDescriptor>
 {
 public:
-    ClSubtractionWorkload(const SubtractionQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClSubtractionWorkload(const SubtractionQueueDescriptor& descriptor,
+                          const WorkloadInfo& info,
+                          const arm_compute::CLCompileContext& clCompileContext);
 
     void Execute() const override;
 

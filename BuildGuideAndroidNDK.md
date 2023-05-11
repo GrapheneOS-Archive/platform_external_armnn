@@ -1,307 +1,393 @@
-# How to use the Android NDK to build ArmNN
+# How to use the Android NDK to build Arm NN
 
-*  [Introduction](#introduction)
-*  [Download the Android NDK and make a standalone toolchain](#downloadNDK)
-*  [Build the Boost C++ libraries](#buildBoost)
-*  [Build the Compute Library](#buildCL)
-*  [Build Google's Protobuf library](#buildProtobuf)
-*  [Download TensorFlow](#downloadTF)
-*  [Build ArmNN](#buildArmNN)
-*  [Run ArmNN UnitTests on an Android device](#runArmNNUnitTests)
+- [Introduction](#introduction)
+- [Initial Setup](#initial-setup)
+- [Download the Android NDK and make a standalone toolchain](#download-the-android-ndk-and-make-a-standalone-toolchain)
+- [Install Cmake](#install-cmake)
+- [Build Flatbuffers](#build-flatbuffers)
+- [Download Arm NN](#download-arm-nn)
+- [Get And Build TFLite](#get-and-build-tflite)
+- [Build Arm Compute Library](#build-arm-compute-library)
+- [Build Arm NN](#build-arm-nn)
+- [Build Standalone Sample Dynamic Backend](#build-standalone-sample-dynamic-backend)
+- [Run the Arm NN unit tests on an Android device](#run-the-arm-nn-unit-tests-on-an-android-device)
 
 
-#### <a name="introduction">Introduction</a>
-These are step by step instructions for using the Android NDK to build ArmNN.
-They have been tested on a clean install of Ubuntu 18.04, and should also work with other OS versions.
-The instructions show how to build the ArmNN core library and the optional TensorFlow parser.
-All downloaded or generated files will be saved inside the `~/armnn-devenv` directory.
+## Introduction
+These are step-by-step instructions for using the Android NDK to build Arm NN.
+They have been tested on a clean installation of Ubuntu 18.04 and 20.04, and should also work with other OS versions.
+The instructions show how to build the Arm NN core library and its dependencies.
 
-#### <a name="downloadNDK">Download the Android NDK and make a standalone toolchain</a>
+For ease of use there is a shell script version of this guide located in the scripts directory called [build_android_ndk_guide.sh](scripts/build_android_ndk_guide.sh). 
+Run the script with a -h flag to see the command line parameters.
 
-* Download the Android NDK from [the official website](https://developer.android.com/ndk/downloads/index.html):
+## Initial Setup
 
-     ```bash
-     mkdir -p ~/armnn-devenv/toolchains
-     cd ~/armnn-devenv/toolchains
-     # For Mac OS, change the NDK download link accordingly.
-     wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
-     unzip android-ndk-r20b-linux-x86_64.zip
-     export NDK=~/armnn-devenv/android-ndk-r20b
-     export NDK_TOOLCHAIN_ROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-     export PATH=$NDK_TOOLCHAIN_ROOT/bin/:$PATH
-     ```
+First, we need to specify the Android version and the directories you want to build armnn in and to install some applications required to build Arm NN and its dependencies.
 
-	 You may want to append the above export variables commands to your `~/.bashrc` (or `~/.bash_profile` in Mac OS).
+```bash
+export ANDROID_API=30
+export WORKING_DIR=$HOME/armnn-devenv
+export NDK_DIR=$WORKING_DIR/android-ndk-r25
+export NDK_TOOLCHAIN_ROOT=$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64
+export PATH=$NDK_TOOLCHAIN_ROOT/bin/:$PATH
+```
+You may want to append the above export variables commands to your `~/.bashrc` (or `~/.bash_profile` in macOS).
 
-* With the android ndk-20b, you don't need to use the make_standalone_toolchain script to create a toolchain for a specific version of android. Android's current preference is for you to just specify the architecture and operating system while setting the compiler and just use the ndk directory.
+The ANDROID_API variable should be set to the Android API version number you are using. For example, "30" for Android R. The WORKING_DIR can be any directory you have write permissions to.
 
-#### <a name="buildBoost">Build the Boost C++ libraries</a>
+### Required Applications
+Git is required to obtain Arm NN. If this has not been already installed then install it using: 
+```bash
+sudo apt install git
+```
 
-* Download Boost version 1.64:
+Arm Compute Library requires SCons. If this has not been already installed then install it using:
+```bash
+sudo apt install scons
+```
 
-   ```bash
-   mkdir ~/armnn-devenv/boost
-   cd ~/armnn-devenv/boost
-   wget https://dl.bintray.com/boostorg/release/1.64.0/source/boost_1_64_0.tar.bz2
-   tar xvf boost_1_64_0.tar.bz2
-   ```
+CMake is required to build Arm NN and its dependencies. If this has not been already installed then install it using:
+```bash
+sudo apt install cmake
+```
 
-* Build:
+## Download the Android NDK and make a standalone toolchain
 
-	(Requires clang if not previously installed: `sudo apt-get install clang`)
-	```bash
-	echo "using clang : arm : aarch64-linux-android<Android_API>-clang++ ;" > $HOME/armnn-devenv/boost/user-config.jam
-	cd ~/armnn-devenv/boost/boost_1_64_0
-	./bootstrap.sh --prefix=$HOME/armnn-devenv/boost/install
-	./b2 install --user-config=$HOME/armnn-devenv/boost/user-config.jam \
-     toolset=clang-arm link=static cxxflags=-fPIC \
-	 --with-test --with-log --with-program_options -j16
-    ```
- Note: You can specify the 'Android_API' version you want. For example, if your ANDROID_API is 27 then the compiler will be aarch64-linux-android27-clang++.
+Download the Android NDK from [the official website](https://developer.android.com/ndk/downloads/index.html):
+```bash
+mkdir -p $WORKING_DIR
+cd $WORKING_DIR
+# For Mac OS, change the NDK download link accordingly.
+wget https://dl.google.com/android/repository/android-ndk-r25-linux.zip
+unzip android-ndk-r25-linux.zip
+```
+With Android NDK-25, you no longer need to use the make_standalone_toolchain script to create a toolchain for a specific version of Android. Android's current preference is for you to just specify the architecture and operating system while setting the compiler and just use the ndk directory.
 
-#### <a name="buildCL">Build the Compute Library</a>
-* Clone the Compute Library:
+## Install Cmake
+Cmake 3.19rc3 or later is required to build Arm NN. If you are using Ubuntu 20.04 the command given in [Initial Setup](#initial-setup) should install a usable version. If you're using Ubuntu 18.04 you may need to compile cmake yourself. 
 
-	(Requires Git if not previously installed: `sudo apt install git`)
+```bash
+cd $WORKING_DIR
+sudo apt-get install libssl-dev
+wget https://github.com/Kitware/CMake/releases/download/v3.19.0-rc3/cmake-3.19.0-rc3.tar.gz
+tar -zxvf cmake-3.19.0-rc3.tar.gz
+cd cmake-3.19.0-rc3
+./bootstrap --prefix=$WORKING_DIR/cmake/install
+make all install
+cd..
+```
 
-	``` bash
-	cd ~/armnn-devenv
-	git clone https://github.com/ARM-software/ComputeLibrary.git
-	```
+## Build Flatbuffers
 
-* Checkout ComputeLibrary branch:
-        ```bash
-        cd ComputeLibrary
-        git checkout <branch_name>
-        git pull
-        ```
-        For example, if you want to checkout release branch of 20.02:
-        ```bash
-        git checkout branches/arm_compute_20_02
-        git pull
-        ```
+Download Flatbuffers:
+```bash
+cd $WORKING_DIR
+wget https://github.com/google/flatbuffers/archive/v2.0.6.tar.gz
+tar xf v2.0.6.tar.gz
+```
 
-* Build:
+Build Flatbuffers for x86:
+```bash
+cd $WORKING_DIR/flatbuffers-2.0.6
 
-	(Requires SCons if not previously installed: `sudo apt install scons`)
-	```bash
-	scons arch=arm64-v8a neon=1 opencl=1 embed_kernels=1 extra_cxx_flags="-fPIC" \
-	 benchmark_tests=0 validation_tests=0 os=android -j16
-	```
+rm -f CMakeCache.txt
 
-#### <a name="buildProtobuf">Build Google's Protobuf library</a>
+rm -rf build-x86
+mkdir build-x86
+cd build-x86
 
-* Clone protobuf:
-	```bash
-	mkdir ~/armnn-devenv/google
-	cd ~/armnn-devenv/google
-	git clone https://github.com/google/protobuf.git
-	cd protobuf
-	git checkout -b v3.12.0 v3.12.0
-	```
+rm -rf $WORKING_DIR/flatbuffers-x86
+mkdir $WORKING_DIR/flatbuffers-x86
 
-* Build a native (x86) version of the protobuf libraries and compiler (protoc):
+CXXFLAGS="-fPIC" $CMAKE .. \
+    -DFLATBUFFERS_BUILD_FLATC=1 \
+    -DCMAKE_INSTALL_PREFIX:PATH=$WORKING_DIR/flatbuffers-x86
 
-	(Requires cUrl, autoconf, llibtool, and other build dependencies if not previously installed: `sudo apt install curl autoconf libtool build-essential g++`)
+make all install -j16
+```
+Note: -fPIC is added to allow users to use the libraries in shared objects.
 
-	```bash
-	./autogen.sh
-	mkdir x86_build
-	cd x86_build
-	../configure --prefix=$HOME/armnn-devenv/google/x86_pb_install
-	make install -j16
-	cd ..
-	```
+Build Flatbuffers for Android:
+```bash
+cd $WORKING_DIR/flatbuffers-2.0.6
 
-* Build the arm64 version of the protobuf libraries:
+rm -f CMakeCache.txt
 
-   ```bash
- 	mkdir arm64_build
- 	cd arm64_build
- 	CC=aarch64-linux-android<Android_API>-clang \
- 	CXX=aarch64-linux-android<Android_API>-clang++ \
-	CFLAGS="-fPIE -fPIC" \
-        LDFLAGS="-llog -lz -lc++_static" \
-       ../configure --host=aarch64-linux-android \
-       --prefix=$HOME/armnn-devenv/google/arm64_pb_install \
-       --enable-cross-compile \
-       --with-protoc=$HOME/armnn-devenv/google/x86_pb_install/bin/protoc
- 	make install -j16
-	cd ..
-	```
+rm -rf build-android
+mkdir build-android
+cd build-android
 
-#### <a name="downloadTF">Download TensorFlow</a>
-* Clone TensorFlow source code:
+rm -rf $WORKING_DIR/flatbuffers-android
+mkdir $WORKING_DIR/flatbuffers-android
 
-	```bash
-	cd ~/armnn-devenv/google/
-	git clone https://github.com/tensorflow/tensorflow.git
-        cd tensorflow/
-        git checkout fcc4b966f1265f466e82617020af93670141b009
-	```
+CC=/usr/bin/aarch64-linux-gnu-gcc CXX=/usr/bin/aarch64-linux-gnu-g++ \
+CXXFLAGS="-fPIC" \
+cmake .. \
+    -DCMAKE_ANDROID_NDK=$NDK_DIR \
+    -DCMAKE_SYSTEM_NAME=Android \
+    -DCMAKE_SYSTEM_VERSION=27 \
+    -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+    -DCMAKE_CXX_FLAGS=--std=c++14 \
+    -DFLATBUFFERS_BUILD_FLATC=OFF \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DFLATBUFFERS_BUILD_TESTS=OFF \
+    -DCMAKE_INSTALL_PREFIX=$WORKING_DIR/flatbuffers-android
 
-#### <a name="buildArmNN">Build ArmNN</a>
+make all install -j16
+```
 
-* Clone ArmNN source code:
+## Download Arm NN
+Clone Arm NN: 
 
-	```bash
-	cd ~/armnn-devenv/
-	git clone https://github.com/ARM-software/armnn.git
-	```
+```bash
+cd $WORKING_DIR
+git clone https://github.com/ARM-software/armnn.git
+```
 
-* Checkout ArmNN branch:
+Checkout the Arm NN branch:
+```bash
+cd armnn
+git checkout <branch_name>
+git pull
+```
 
-        ```bash
-        cd armnn
-        git checkout <branch_name>
-        git pull
-        ```
+For example, if you want to check out the 23.02 release branch:
+```bash
+cd armnn
+git checkout branches/armnn_23_02
+git pull
+```
 
-        For example, if you want to checkout release branch of 20.02:
-        ```bash
-        git checkout branches/armnn_20_02
-        git pull
-        ```
+## Get And Build TFLite
+This optional step is only required if you intend to build the TFLite delegate or parser for Arm NN. 
 
-* Generate TensorFlow protobuf definitions:
+First clone tensorflow:
+```bash
+cd $WORKING_DIR
+git clone https://github.com/tensorflow/tensorflow.git
+cd tensorflow
+git fetch && git checkout "tags/v2.10.0"
+```
+Arm NN provides a script that downloads the version of Tensorflow that Arm NN was tested with:
+```bash
+git fetch && git checkout $(../armnn/scripts/get_tensorflow.sh -p)
+```
+Next build Tensorflow Lite:
+```bash
+cd $WORKING_DIR
+mkdir -p tflite-out/android
+cd tflite-out/android
 
-	```bash
-	cd ~/armnn-devenv/google/tensorflow
-	~/armnn-devenv/armnn/scripts/generate_tensorflow_protobuf.sh \
-	 $HOME/armnn-devenv/google/tf_pb $HOME/armnn-devenv/google/x86_pb_install
-	```
+CMARGS="-DCMAKE_TOOLCHAIN_FILE=$NDK_DIR/build/cmake/android.toolchain.cmake \
+    -DANDROID_ABI=arm64-v8a \
+    -DANDROID_PLATFORM=$ANDROID_API"
 
- * Build ArmNN:
+cmake $CMARGS $WORKING_DIR/tensorflow/tensorflow/lite
 
- 	(Requires CMake if not previously installed: `sudo apt install cmake`)
+cd $WORKING_DIR
+cmake --build tflite-out/android -j 16
+```
+Now generate the Tensorflow Lite Schema for the TFLite parser:
+```bash
+cd $WORKING_DIR
+mkdir -p $WORKING_DIR/tflite-out/tensorflow/tensorflow/lite/schema
 
-	```bash
-	mkdir ~/armnn-devenv/armnn/build
-	cd ~/armnn-devenv/armnn/build
-	CXX=aarch64-linux-android<Android_API>-clang++ \
-	CC=aarch64-linux-android<Android_API>-clang \
-	CXX_FLAGS="-fPIE -fPIC" \
-	cmake .. \
-        -DCMAKE_ANDROID_NDK=$NDK \
-        -DCMAKE_SYSTEM_NAME=Android \
-        -DCMAKE_SYSTEM_VERSION=<Android_API> \
-        -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-        -DCMAKE_EXE_LINKER_FLAGS="-pie -llog -lz" \
-        -DARMCOMPUTE_ROOT=$HOME/armnn-devenv/ComputeLibrary/ \
-        -DARMCOMPUTE_BUILD_DIR=$HOME/armnn-devenv/ComputeLibrary/build \
-        -DBOOST_ROOT=$HOME/armnn-devenv/boost/install/ \
-        -DARMCOMPUTENEON=1 -DARMCOMPUTECL=1 -DARMNNREF=1 \
-        -DTF_GENERATED_SOURCES=$HOME/armnn-devenv/google/tf_pb/ -DBUILD_TF_PARSER=1 \
-        -DPROTOBUF_ROOT=$HOME/armnn-devenv/google/arm64_pb_install/
-	```
+SCHEMA_LOCATION=$WORKING_DIR/tensorflow/tensorflow/lite/schema/schema.fbs
+cp $SCHEMA_LOCATION $WORKING_DIR/tflite-out/tensorflow/tensorflow/lite/schema
 
-	To include standalone sample dynamic backend tests, add the argument to enable the tests and the dynamic backend path to the CMake command:
+cd $WORKING_DIR/tflite-out/tensorflow/tensorflow/lite/schema
+$WORKING_DIR/flatbuffers-x86/bin/flatc -c --gen-object-api --reflect-types --reflect-names schema.fbs
+```
 
-    ```bash
+## Build Arm Compute Library
+Clone Arm Compute Library:
+
+```bash
+cd $WORKING_DIR
+git clone https://github.com/ARM-software/ComputeLibrary.git
+```
+Checkout Arm Compute Library release tag:
+```bash
+cd ComputeLibrary
+git checkout <tag_name>
+```
+For example, if you want to check out the 23.02 release tag:
+```bash
+cd ComputeLibrary
+git checkout v23.02
+```
+
+Arm NN and Arm Compute Library are developed closely together. To use a particular version of Arm NN you will need a compatible version of ACL. 
+Arm NN provides a script that downloads the version of Arm Compute Library that Arm NN was tested with:
+```bash
+git checkout $(../armnn/scripts/get_compute_library.sh -p) 
+```
+Build the Arm Compute Library:
+```bash
+scons arch=arm64-v8a os=android toolchain_prefix=llvm- compiler_prefix=aarch64-linux-android$ANDROID_API- \
+    neon=1 opencl=1 embed_kernels=1 extra_cxx_flags="-fPIC" \
+    benchmark_tests=0 validation_tests=0 -j16
+```
+
+## Build Arm NN
+
+Build Arm NN:
+
+```bash
+mkdir $WORKING_DIR/armnn/build
+cd $WORKING_DIR/armnn/build
+CXX=aarch64-linux-android$ANDROID_API-clang++ \
+CC=aarch64-linux-android$ANDROID_API-clang \
+CXX_FLAGS="-fPIE -fPIC" \
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_ANDROID_NDK=$NDK_DIR \
+    -DNDK_VERSION=r25 \
+    -DCMAKE_SYSTEM_NAME=Android \
+    -DCMAKE_SYSTEM_VERSION=$ANDROID_API \
+    -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+    -DCMAKE_SYSROOT=$WORKING_DIR/android-ndk-r25/toolchains/llvm/prebuilt/linux-x86_64/sysroot \
+    -DARMCOMPUTE_ROOT=$WORKING_DIR/ComputeLibrary \
+    -DARMCOMPUTE_BUILD_DIR=$WORKING_DIR/ComputeLibrary/build \
+    -DARMCOMPUTENEON=1 -DARMCOMPUTECL=1 -DARMNNREF=1 \
+    -DFLATBUFFERS_INCLUDE_PATH=$WORKING_DIR/flatbuffers-x86/include \
+    -DFLATBUFFERS_ROOT=$WORKING_DIR/flatbuffers-android \
+    -DFLATC_DIR=$WORKING_DIR/flatbuffers-x86 \
+    -DBUILD_UNIT_TESTS=1 \
+    -DBUILD_TESTS=1 \
+    -fexception \
+```
+
+To include the Arm NN TFLite delegate add these arguments to the above list:
+
+```bash
+    -DBUILD_ARMNN_TFLITE_DELEGATE=1 \
+    -DTENSORFLOW_ROOT=$WORKING_DIR/tensorflow \
+    -DTFLITE_LIB_ROOT=$WORKING_DIR/tflite-out/android \
+    -DTFLITE_ROOT_DIR=$WORKING_DIR/tensorflow/tensorflow/lite \
+```
+
+To include the Arm NN TFLite Parser add these arguments to the above list:
+
+```bash
+    -DBUILD_TF_LITE_PARSER=1 \
+    -DTF_LITE_GENERATED_PATH=$WORKING_DIR/tflite-out/tensorflow/tensorflow/lite/schema \
+    -DTENSORFLOW_ROOT=$WORKING_DIR/tensorflow \
+    -DTFLITE_LIB_ROOT=$WORKING_DIR/tflite-out/android \
+```
+
+To include standalone sample dynamic backend tests, add these arguments to enable the tests and the dynamic backend path to the CMake command:
+
+```bash
     -DSAMPLE_DYNAMIC_BACKEND=1 \
     -DDYNAMIC_BACKEND_PATHS=$SAMPLE_DYNAMIC_BACKEND_PATH
-    ```
-    Where $SAMPLE_DYNAMIC_BACKEND_PATH is the path where libArm_SampleDynamic_backend.so library file is pushed
+# Where $SAMPLE_DYNAMIC_BACKEND_PATH is the path where libArm_SampleDynamic_backend.so library file is pushed
+```
 
  * Run the build
-    ```bash
-    make -j16
-    ```
+```bash
+make -j16
+```
 
-#### <a name="buildStandaloneBackend">Build Standalone Sample Dynamic Backend</a>
-* The sample dynamic backend is located in armnn/src/dynamic/sample
-    ```bash
-    mkdir build
-    cd build
-    ```
+## Build Standalone Sample Dynamic Backend
+This step is optional. The sample dynamic backend is located in armnn/src/dynamic/sample
+```bash
+mkdir build
+cd build
+```
 
-* Use CMake to configure the build environment, update the following script and run it from the armnn/src/dynamic/sample/build directory to set up the armNN build:
-    ```bash
-    #!/bin/bash
-    CXX=aarch64-linux-android<Android_API>-clang++ \
-    CC=aarch64-linux-android<Android_API>-clang \
-    CXX_FLAGS="-fPIE -fPIC" \
-    cmake \
+* Use CMake to configure the build environment, update the following script and run it from the armnn/src/dynamic/sample/build directory to set up the Arm NN build:
+```bash
+#!/bin/bash
+CXX=aarch64-linux-android$ANDROID_API-clang++ \
+CC=aarch64-linux-android$ANDROID_API-clang \
+CXX_FLAGS="-fPIE -fPIC" \
+cmake \
+    -DCMAKE_C_COMPILER_WORKS=TRUE \
+    -DCMAKE_CXX_COMPILER_WORKS=TRUE \
+    -DCMAKE_ANDROID_NDK=$NDK_DIR \
     -DCMAKE_SYSTEM_NAME=Android \
+    -DCMAKE_SYSTEM_VERSION=$ANDROID_API \
+    -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+    -DCMAKE_SYSROOT=$WORKING_DIR/android-ndk-r25/toolchains/llvm/prebuilt/linux-x86_64/sysroot \
     -DCMAKE_CXX_FLAGS=--std=c++14 \
     -DCMAKE_EXE_LINKER_FLAGS="-pie -llog" \
     -DCMAKE_MODULE_LINKER_FLAGS="-llog" \
-    -DBOOST_ROOT=$HOME/armnn-devenv/boost/install \
-    -DBoost_SYSTEM_LIBRARY=$HOME/armnn-devenv/boost/install/lib/libboost_system.a \
-    -DARMNN_PATH=$HOME/armnn-devenv/armnn/build/libarmnn.so ..
-    ```
+    -DARMNN_PATH=$WORKING_DIR/armnn/build/libarmnn.so ..
+```
 
 * Run the build
-    ```bash
-    make
-    ```
+```bash
+make
+```
 
-#### <a name="runArmNNUnitTests">Run the ArmNN unit tests on an Android device</a>
+## Run the Arm NN unit tests on an Android device
 
 
 * Push the build results to an Android device and make symbolic links for shared libraries:
   Currently adb version we have used for testing is 1.0.41.
-
-	```bash
-	adb push libarmnnTfParser.so /data/local/tmp/
-	adb push libarmnn.so /data/local/tmp/
-        adb push libtimelineDecoder.so /data/local/tmp/
-	adb push UnitTests /data/local/tmp/
-	adb push $NDK/sources/cxx-stl/llvm-libc++/libs/arm64-v8a/libc++_shared.so /data/local/tmp/
-	adb push $HOME/armnn-devenv/google/arm64_pb_install/lib/libprotobuf.so /data/local/tmp/libprotobuf.so.23.0.0
-	adb shell 'ln -s libprotobuf.so.23.0.0 /data/local/tmp/libprotobuf.so.23'
-	adb shell 'ln -s libprotobuf.so.23.0.0 /data/local/tmp/libprotobuf.so'
-	```
+```bash
+adb push libarmnn.so /data/local/tmp/
+    adb push libtimelineDecoder.so /data/local/tmp/
+adb push UnitTests /data/local/tmp/
+adb push $NDK_DIR/sources/cxx-stl/llvm-libc++/libs/arm64-v8a/libc++_shared.so /data/local/tmp/
+```
 
 * Push the files needed for the unit tests (they are a mix of files, directories and symbolic links):
+```bash
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/testSharedObject
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/testSharedObject/* /data/local/tmp/src/backends/backendsCommon/test/testSharedObject/
 
-	```bash
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/testSharedObject
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/testSharedObject/* /data/local/tmp/src/backends/backendsCommon/test/testSharedObject/
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/testDynamicBackend
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/testDynamicBackend/* /data/local/tmp/src/backends/backendsCommon/test/testDynamicBackend/
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/testDynamicBackend
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/testDynamicBackend/* /data/local/tmp/src/backends/backendsCommon/test/testDynamicBackend/
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath1
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath1/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath1/
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath1
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath1/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath1/
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/
+adb shell ln -s Arm_CpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1
+adb shell ln -s Arm_CpuAcc_backend.so.1 /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1.2
+adb shell ln -s Arm_CpuAcc_backend.so.1.2 /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1.2.3
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath2/Arm_GpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/
+adb shell ln -s nothing /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_no_backend.so
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/
-	adb shell ln -s Arm_CpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1
-	adb shell ln -s Arm_CpuAcc_backend.so.1 /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1.2
-	adb shell ln -s Arm_CpuAcc_backend.so.1.2 /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_CpuAcc_backend.so.1.2.3
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath2/Arm_GpuAcc_backend.so /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/
-	adb shell ln -s nothing /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath2/Arm_no_backend.so
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath3
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath3
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath5
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath5/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath5/
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath5
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath5/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath5/
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath6
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath6/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath6/
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath6
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath6/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath6/
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath7
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath7
+adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath9
+adb push -p $WORKING_DIR/armnn/build/src/backends/backendsCommon/test/backendsTestPath9/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath9/
 
-	adb shell mkdir -p /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath9
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/backendsCommon/test/backendsTestPath9/* /data/local/tmp/src/backends/backendsCommon/test/backendsTestPath9/
+adb shell mkdir -p /data/local/tmp/src/backends/dynamic/reference
+adb push -p $WORKING_DIR/armnn/build/src/backends/dynamic/reference/Arm_CpuRef_backend.so /data/local/tmp/src/backends/dynamic/reference/
+```
 
-	adb shell mkdir -p /data/local/tmp/src/backends/dynamic/reference
-	adb push -p ~/armnn-devenv/armnn/build/src/backends/dynamic/reference/Arm_CpuRef_backend.so /data/local/tmp/src/backends/dynamic/reference/
-	```
+If the standalone sample dynamic tests are enabled, also push libArm_SampleDynamic_backend.so library file to the folder specified as $SAMPLE_DYNAMIC_BACKEND_PATH when Arm NN is built.
+This is the example when $SAMPLE_DYNAMIC_BACKEND_PATH is specified as /data/local/tmp/dynamic/sample/:
 
-	If the standalone sample dynamic tests are enabled, also push libArm_SampleDynamic_backend.so library file to the folder specified as $SAMPLE_DYNAMIC_BACKEND_PATH when ArmNN is built.
-	This is the example when $SAMPLE_DYNAMIC_BACKEND_PATH is specified as /data/local/tmp/dynamic/sample/:
-
-	```bash
-	adb shell mkdir -p /data/local/tmp/dynamic/sample/
-	adb push -p ${WORKING_DIR}/armnn/src/dynamic/sample/build/libArm_SampleDynamic_backend.so /data/local/tmp/dynamic/sample/
-	```
-
-* Run ArmNN unit tests:
-
-	```bash
-	adb shell 'LD_LIBRARY_PATH=/data/local/tmp:/vendor/lib64:/vendor/lib64/egl /data/local/tmp/UnitTests'
-	```
-
-	If libarmnnUtils.a is present in `~/armnn-devenv/armnn/build/` and the unit tests run without failure then the build was successful.
+```bash
+adb shell mkdir -p /data/local/tmp/dynamic/sample/
+adb push -p $WORKING_DIR/armnn/src/dynamic/sample/build/libArm_SampleDynamic_backend.so /data/local/tmp/dynamic/sample/
+```
+If the delegate was built, push the delegate unit tests too.
+```bash
+adb push $WORKING_DIR/armnn/build/delegate/DelegateUnitTests /data/local/tmp/
+adb push $WORKING_DIR/armnn/build/delegate/libarmnnDelegate.so /data/local/tmp/
+```
+Run Arm NN unit tests:
+```bash
+adb shell 'LD_LIBRARY_PATH=/data/local/tmp:/vendor/lib64:/vendor/lib64/egl /data/local/tmp/UnitTests'
+```
+If the delegate was built run Arm Delegate NN unit tests:
+```bash
+adb shell 'LD_LIBRARY_PATH=/data/local/tmp:/vendor/lib64:/vendor/lib64/egl /data/local/tmp/DelegateUnitTests'
+```
+If libarmnnUtils.a is present in `$WORKING_DIR/armnn/build/` and the unit tests run without failure then the build was successful.

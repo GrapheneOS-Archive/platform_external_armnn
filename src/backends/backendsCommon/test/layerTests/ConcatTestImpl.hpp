@@ -5,14 +5,14 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <BFloat16.hpp>
 #include <Half.hpp>
 #include <ResolveType.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 template<armnn::DataType ArmnnType, typename T = armnn::ResolveType<ArmnnType>>
 LayerTestResult<T, 3> ConcatDifferentInputOutputQParamTest(
@@ -32,6 +32,11 @@ LayerTestResult<armnn::BFloat16, 3> ConcatBFloat16Test(
     const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 LayerTestResult<armnn::Half, 3> ConcatFloat16Test(
+    armnn::IWorkloadFactory& workloadFactory,
+    const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+    const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+LayerTestResult<int32_t, 3> ConcatInt32Test(
     armnn::IWorkloadFactory& workloadFactory,
     const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
     const armnn::ITensorHandleFactory& tensorHandleFactory);
