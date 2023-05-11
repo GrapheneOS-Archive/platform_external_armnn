@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 %{
@@ -129,6 +129,26 @@ struct BatchToSpaceNdDescriptor
     DataLayout m_DataLayout;
 
     bool operator ==(const BatchToSpaceNdDescriptor& rhs) const;
+};
+
+%feature("docstring",
+    "
+    A descriptor for the ChannelShuffle layer.  See `INetwork.AddChannelShuffleLayer()`.
+
+    Contains:
+        m_NumGroups (int): Underlying C++ type is uint32_t. Number of groups for the shuffle operation. Default: 0.
+        m_Axis (int): Underlying C++ type is uint32_t. 0-based axis along which shuffle is performed. Default: 0.
+
+    ") ChannelShuffleDescriptor;
+struct ChannelShuffleDescriptor
+{
+    ChannelShuffleDescriptor();
+    ChannelShuffleDescriptor(int numGroups, int axis);
+
+    int m_NumGroups;
+    int m_Axis;
+
+    bool operator ==(const ChannelShuffleDescriptor &rhs) const;
 };
 
 %feature("docstring",
@@ -274,6 +294,48 @@ struct Convolution2dDescriptor
     bool operator ==(const Convolution2dDescriptor& rhs) const;
 };
 
+%feature("docstring",
+    "
+    A descriptor for the Convolution3d layer.  See `INetwork.AddConvolution3dLayer()`.
+
+    Contains:
+        m_PadLeft (int): Underlying C++ data type is uint32_t. Padding left value in the width dimension. Default: 0.
+        m_PadRight (int): Underlying C++ data type is uint32_t. Padding right value in the width dimension. Default: 0.
+        m_PadTop (int): Underlying C++ data type is uint32_t. Padding top value in the height dimension. Default: 0.
+        m_PadBottom (int): Underlying C++ data type is uint32_t. Padding bottom value in the height dimension. Default: 0.
+        m_PadFront (int): Underlying C++ data type is uint32_t. Padding front value in the depth dimension. Default: 0.
+        m_PadBack (int): Underlying C++ data type is uint32_t. Padding back value in the depth dimension. Default: 0.
+        m_StrideX (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the width dimension. Default: 0.
+        m_StrideY (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the height dimension. Default: 0.
+        m_StrideZ (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the depth dimension. Default: 0.
+        m_DilationX (int): Underlying C++ data type is uint32_t. Dilation along x axis. Default: 1.
+        m_DilationY (int): Underlying C++ data type is uint32_t. Dilation along y axis. Default: 1.
+        m_DilationZ (int): Underlying C++ data type is uint32_t. Dilation along z axis. Default: 1.
+        m_BiasEnabled (bool): Enable/disable bias. Default: false.
+        m_DataLayout (int): The data layout to be used (`DataLayout_NDHWC`, `DataLayout_NCDHW`). Default: 3 `DataLayout_NDHWC`.
+
+    ") Convolution3dDescriptor;
+struct Convolution3dDescriptor
+{
+    Convolution3dDescriptor();
+
+    uint32_t             m_PadLeft;
+    uint32_t             m_PadRight;
+    uint32_t             m_PadTop;
+    uint32_t             m_PadBottom;
+    uint32_t             m_PadFront;
+    uint32_t             m_PadBack;
+    uint32_t             m_StrideX;
+    uint32_t             m_StrideY;
+    uint32_t             m_StrideZ;
+    uint32_t             m_DilationX;
+    uint32_t             m_DilationY;
+    uint32_t             m_DilationZ;
+    bool                 m_BiasEnabled;
+    DataLayout           m_DataLayout;
+
+    bool operator ==(const Convolution3dDescriptor& rhs) const;
+};
 
 %feature("docstring",
     "
@@ -326,7 +388,9 @@ struct DepthwiseConvolution2dDescriptor
     bool       m_BiasEnabled;
     DataLayout m_DataLayout;
 
-     bool operator ==(const DepthwiseConvolution2dDescriptor& rhs) const;
+    bool operator ==(const DepthwiseConvolution2dDescriptor& rhs) const;
+
+    uint32_t GetNumInputs() const;
 };
 
 %feature("docstring",
@@ -482,7 +546,13 @@ struct InstanceNormalizationDescriptor
         m_PeepholeEnabled (bool): Enable/disable peephole. Default: false.
         m_ProjectionEnabled (bool): Enable/disable the projection layer. Default: false.
         m_LayerNormEnabled (bool): Enable/disable layer normalization. Default: false.
-
+        m_TimeMajor (bool): Enable/disable time major. Default: false.
+        m_InputIntermediateScale (float): Input intermediate quantization scale. Default: 0.0.
+        m_ForgetIntermediateScale (float): Forget intermediate quantization scale. Default: 0.0.
+        m_CellIntermediateScale (float): Cell intermediate quantization scale. Default: 0.0.
+        m_OutputIntermediateScale (float): Output intermediate quantization scale. Default: 0.0.
+        m_HiddenStateZeroPoint (int): Hidden State zero point. Default: 0.
+        m_HiddenStateScale (float): Hidden State quantization scale. Default: 0.0.
     ") LstmDescriptor;
 struct LstmDescriptor
 {
@@ -495,6 +565,13 @@ struct LstmDescriptor
     bool m_PeepholeEnabled;
     bool m_ProjectionEnabled;
     bool m_LayerNormEnabled;
+    bool m_TimeMajor;
+    float m_InputIntermediateScale;
+    float m_ForgetIntermediateScale;
+    float m_CellIntermediateScale;
+    float m_OutputIntermediateScale;
+    int32_t m_HiddenStateZeroPoint;
+    float m_HiddenStateScale;
 
     bool operator ==(const LstmDescriptor& rhs) const;
 };
@@ -579,15 +656,23 @@ struct NormalizationDescriptor
                                    The second tuple value is the number of values to add after the tensor in the dimension.
                                    The number of pairs should match the number of dimensions in the input tensor.
         m_PadValue (bool): Optional value to use for padding. Default: 0.
+        m_PaddingMode (int): The padding mode controls whether the padding should be filled
+                             with constant values (`PaddingMode_Constant`), or reflect the input,
+                             either excluding the border values (`PaddingMode_Reflect`)
+                             or including them (`PaddingMode_Symmetric`).
+                             Default: 0 (`PaddingMode_Constant`).
 
     ") PadDescriptor;
 struct PadDescriptor
 {
     PadDescriptor();
-    PadDescriptor(const std::vector<std::pair<unsigned int, unsigned int>>& padList, const float& padValue = 0);
+    PadDescriptor(const std::vector<std::pair<unsigned int, unsigned int>>& padList,
+                  const float& padValue = 0,
+                  const PaddingMode& paddingMode = PaddingMode_Constant);
 
     std::vector<std::pair<unsigned int, unsigned int>> m_PadList;
     float m_PadValue;
+    PaddingMode m_PaddingMode;
 
     bool operator ==(const PadDescriptor& rhs) const;
 };
@@ -671,6 +756,75 @@ struct Pooling2dDescriptor
     DataLayout          m_DataLayout;
 
     bool operator ==(const Pooling2dDescriptor& rhs) const;
+};
+
+%feature("docstring",
+    "
+    A descriptor for the Pooling3d layer. See `INetwork.AddPooling3dLayer()`.
+
+    Contains:
+        m_PoolType (int): The pooling algorithm to use (`PoolingAlgorithm_Max`, `PoolingAlgorithm_Average`, `PoolingAlgorithm_L2`). Default: `PoolingAlgorithm_Max`.
+        m_PadLeft (int): Underlying C++ data type is uint32_t. Padding left value in the width dimension. Default: 0.
+        m_PadRight (int): Underlying C++ data type is uint32_t. Padding right value in the width dimension. Default: 0.
+        m_PadTop (int): Underlying C++ data type is uint32_t. Padding top value in the height dimension. Default: 0.
+        m_PadBottom (int): Underlying C++ data type is uint32_t. Padding bottom value in the height dimension. Default: 0.
+        m_PadFront (int): Underlying C++ data type is uint32_t. Padding front value in the depth dimension. Default: 0.
+        m_PadBack (int): Underlying C++ data type is uint32_t. Padding back value in the depth dimension. Default: 0.
+        m_PoolWidth (int): Underlying C++ data type is uint32_t. Pooling width value. Default: 0.
+        m_PoolHeight (int): Underlying C++ data type is uint32_t. Pooling height value. Default: 0.
+        m_StrideX (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the width dimension. Default: 0.
+        m_StrideY (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the height dimension. Default: 0.
+        m_StrideZ (int): Underlying C++ data type is uint32_t. Stride value when proceeding through input for the depth dimension. Default: 0.
+        m_OutputShapeRounding (int):  The rounding method for the output shape. (`OutputShapeRounding_Floor`, `OutputShapeRounding_Ceiling`).
+                                                                                Default: `OutputShapeRounding_Floor`.
+        m_PaddingMethod (int): The padding method to be used. (`PaddingMethod_Exclude`, `PaddingMethod_IgnoreValue`).
+                                                                                Default: `PaddingMethod_Exclude`.
+        m_DataLayout (int): The data layout to be used (`DataLayout_NCDHW`, `DataLayout_NDHWC`). Default: `DataLayout_NCDHW`.
+
+    ") Pooling3dDescriptor;
+struct Pooling3dDescriptor
+{
+    Pooling3dDescriptor();
+
+    PoolingAlgorithm    m_PoolType;
+    uint32_t            m_PadLeft;
+    uint32_t            m_PadRight;
+    uint32_t            m_PadTop;
+    uint32_t            m_PadBottom;
+    uint32_t            m_PadFront;
+    uint32_t            m_PadBack;
+    uint32_t            m_PoolWidth;
+    uint32_t            m_PoolHeight;
+    uint32_t            m_StrideX;
+    uint32_t            m_StrideY;
+    uint32_t            m_StrideZ;
+    OutputShapeRounding m_OutputShapeRounding;
+    PaddingMethod       m_PaddingMethod;
+    DataLayout          m_DataLayout;
+
+    bool operator ==(const Pooling3dDescriptor& rhs) const;
+};
+
+%feature("docstring",
+    "
+    A ReduceDescriptor for the REDUCE operators.
+
+    Contains:
+        m_KeepDims(bool): If true then output shape has no change.
+        m_vAxis (list of int): The indices of the dimensions to reduce.
+        m_ReduceOperation (int): Specifies the reduction operation to execute ('ReduceOperation_Sum',
+                                             'ReduceOperation_Max', 'ReduceOperation_Mean', 'ReduceOperation_Min',
+                                             'ReduceOperation_Prod'). Default: 0 ('ReduceOperation_Sum').
+        ") ReduceDescriptor;
+struct ReduceDescriptor
+{
+    ReduceDescriptor();
+
+    bool m_KeepDims;
+    std::vector<uint32_t> m_vAxis;
+    ReduceOperation m_ReduceOperation;
+
+    bool operator ==(const ReduceDescriptor& rhs) const;
 };
 
 %feature("docstring",
@@ -1000,7 +1154,6 @@ struct SoftmaxDescriptor
     bool operator ==(const SoftmaxDescriptor& rhs) const;
 };
 
-
 %feature("docstring",
     "
     A descriptor for the TransposeConvolution2d layer. See `INetwork.AddTransposeConvolution2dLayer()`.
@@ -1034,6 +1187,45 @@ struct TransposeConvolution2dDescriptor
     std::vector<unsigned int> m_OutputShape;
 
     bool operator ==(const TransposeConvolution2dDescriptor& rhs) const;
+};
+
+%feature("docstring",
+    "
+    A descriptor for the LogicalBinary layer. See `INetwork.AddLogicalBinaryLayer()`.
+
+    Contains:
+        m_Operation (int): Specifies the logical operation to execute.
+                           (0: `LogicalBinaryOperation_LogicalAnd`, 1: `LogicalBinaryOperation_LogicalOr`)
+                           Default: 0: `LogicalBinaryOperation_LogicalAnd`.
+
+    ") LogicalBinaryDescriptor;
+struct LogicalBinaryDescriptor
+{
+    LogicalBinaryDescriptor();
+    LogicalBinaryDescriptor(LogicalBinaryOperation operation);
+
+    LogicalBinaryOperation m_Operation;
+
+    bool operator ==(const LogicalBinaryDescriptor &rhs) const;
+};
+
+%feature("docstring",
+    "
+    A descriptor for the Transpose layer. See `INetwork.AddTransposeLayer()`.
+
+    Contains:
+        m_DimMappings (PermutationVector): Indicates how to translate tensor elements from a given source into the target destination,
+                                           when source and target potentially have different memory layouts e.g. {0U, 3U, 1U, 2U}.
+
+    ") TransposeDescriptor;
+struct TransposeDescriptor
+{
+    TransposeDescriptor();
+    TransposeDescriptor(const PermutationVector& dimMappings);
+
+    PermutationVector m_DimMappings;
+
+    bool operator ==(const TransposeDescriptor &rhs) const;
 };
 
 

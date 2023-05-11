@@ -5,73 +5,12 @@
 #pragma once
 
 #include "LayerWithParameters.hpp"
+#include "LstmParameters.hpp"
 
 namespace armnn
 {
 
-class ScopedCpuTensorHandle;
-
-struct LstmOptLayerNormParameters
-{
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputLayerNormWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_ForgetLayerNormWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellLayerNormWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_OutputLayerNormWeights;
-};
-
-struct LstmOptCifgParameters
-{
-    /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToInputWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToInputWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputGateBias;
-};
-
-struct LstmOptProjectionParameters
-{
-    /// A unique pointer to represent 2D weights tensor with dimensions [output_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_ProjectionWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [output_size].
-    std::unique_ptr<ScopedCpuTensorHandle> m_ProjectionBias;
-};
-
-struct LstmOptPeepholeParameters
-{
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellToInputWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellToForgetWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellToOutputWeights;
-};
-
-struct LstmBasicParameters
-{
-    /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToForgetWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToCellWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [input_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_InputToOutputWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [output_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToForgetWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [output_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToCellWeights;
-    /// A unique pointer to represent 2D weights tensor with dimensions [output_size, num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_RecurrentToOutputWeights;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_ForgetGateBias;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_CellBias;
-    /// A unique pointer to represent 1D weights tensor with dimensions [num_units].
-    std::unique_ptr<ScopedCpuTensorHandle> m_OutputGateBias;
-};
+class ScopedTensorHandle;
 
 /// This layer represents a LSTM operation.
 class LstmLayer : public LayerWithParameters<LstmDescriptor>
@@ -105,7 +44,7 @@ public:
     /// @return A vector to the inferred output shape.
     std::vector<TensorShape> InferOutputShapes(const std::vector<TensorShape>& inputShapes) const override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a LstmLayer.
@@ -118,7 +57,7 @@ protected:
 
     /// Retrieve the handles to the constant values stored by the layer.
     /// @return A vector of the constant tensors stored by this layer.
-    Layer::ConstantTensors GetConstantTensorsByRef() override;
+    Layer::ImmutableConstantTensors GetConstantTensorsByRef() const override;
 };
 
 } // namespace

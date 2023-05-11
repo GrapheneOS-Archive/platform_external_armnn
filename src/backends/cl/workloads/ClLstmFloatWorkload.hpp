@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,8 +7,8 @@
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/LstmParams.hpp>
-#include <backendsCommon/Workload.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/backends/Workload.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 #include <arm_compute/runtime/CL/functions/CLLSTMLayer.h>
 
@@ -18,11 +18,18 @@ namespace armnn
 class ClLstmFloatWorkload : public FloatWorkload<LstmQueueDescriptor>
 {
 public:
-    ClLstmFloatWorkload(const LstmQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClLstmFloatWorkload(const LstmQueueDescriptor& descriptor,
+                        const WorkloadInfo& info,
+                        const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
+    // Replace input tensor handle with the given TensorHandle
+    void ReplaceInputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot) override;
 
+    // Replace output tensor handle with the given TensorHandle
+    void ReplaceOutputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot) override;
 private:
     mutable arm_compute::CLLSTMLayer m_LstmLayer;
+    virtual void Reconfigure();
 
     std::unique_ptr<arm_compute::CLTensor> m_InputToInputWeightsTensor;
     std::unique_ptr<arm_compute::CLTensor> m_InputToForgetWeightsTensor;

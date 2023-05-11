@@ -4,18 +4,18 @@
 //
 
 #include "StackTestImpl.hpp"
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <ResolveType.hpp>
 
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
-#include <test/TensorHelpers.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
 
 namespace
 {
@@ -33,14 +33,13 @@ LayerTestResult<T, outputDimLength> StackTestHelper(
 {
     IgnoreUnused(memoryManager);
     unsigned int numInputs = static_cast<unsigned int>(inputData.size());
-    std::vector<boost::multi_array<T, outputDimLength-1>> inputs;
+    std::vector<std::vector<T>> inputs;
     for (unsigned int i = 0; i < numInputs; ++i)
     {
-        inputs.push_back(MakeTensor<T, outputDimLength-1>(inputTensorInfo, inputData[i]));
+        inputs.emplace_back(inputData[i]);
     }
 
-    LayerTestResult<T, outputDimLength> result(outputTensorInfo);
-    result.outputExpected = MakeTensor<T, outputDimLength>(outputTensorInfo, outputExpectedData);
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
 
     std::vector<std::unique_ptr<armnn::ITensorHandle>> inputHandles;
     for (unsigned int i = 0; i < numInputs; ++i)
@@ -60,19 +59,24 @@ LayerTestResult<T, outputDimLength> StackTestHelper(
         std::unique_ptr<armnn::ITensorHandle>& inputHandle = inputHandles[i];
         AddInputToWorkload(descriptor, info, inputTensorInfo, inputHandle.get());
         inputHandle->Allocate();
-        CopyDataToITensorHandle(inputHandle.get(), inputs[i].origin());
+        CopyDataToITensorHandle(inputHandle.get(), inputs[i].data());
     }
 
     AddOutputToWorkload(descriptor, info, outputTensorInfo, outputHandle.get());
     outputHandle->Allocate();
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateStack(descriptor, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::Stack,
+                                                                                descriptor,
+                                                                                info);
 
     workload->Execute();
 
-    CopyDataFromITensorHandle(result.output.origin(), outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<T, outputDimLength>(actualOutput,
+                                               outputExpectedData,
+                                               outputHandle->GetShape(),
+                                               outputTensorInfo.GetShape());
 }
 
 } // anonymous namespace
@@ -629,4 +633,12 @@ LayerTestResult<armnn::Half, 4> StackFloat16Test(
         inputData,
         outputExpectedData
     );
+}
+
+LayerTestResult<int32_t, 4> StackInt32Test(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory)
+{
+    return StackAxis0TestImpl<armnn::DataType::Signed32>(workloadFactory, memoryManager, tensorHandleFactory);
 }

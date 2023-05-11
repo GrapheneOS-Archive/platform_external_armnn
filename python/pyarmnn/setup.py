@@ -124,12 +124,25 @@ def find_includes(armnn_include_env: str = INCLUDE_ENV_NAME):
     Returns:
         list: A list of paths to include.
     """
-    armnn_include_path = os.getenv(armnn_include_env)
-    if armnn_include_path is not None and os.path.exists(armnn_include_path):
-        armnn_include_path = [armnn_include_path]
-    else:
-        armnn_include_path = ['/usr/local/include', '/usr/include']
-    return armnn_include_path
+
+    # split multiple paths
+    global armnn_include_path
+    armnn_include_path_raw = os.getenv(armnn_include_env)
+    if not armnn_include_path_raw == None:
+        armnn_include_path = armnn_include_path_raw.split(":")
+
+    # validate input paths
+    armnn_include_path_result = []
+    for path in armnn_include_path:
+        if path is not None and os.path.exists(path):
+            armnn_include_path_result = armnn_include_path_result + [path]
+
+
+    # if none exist revert to default
+    if len(armnn_include_path_result) == 0:
+        armnn_include_path_result = ['/usr/local/include', '/usr/include']
+    return armnn_include_path_result
+
 
 
 @lru_cache(maxsize=1)
@@ -186,11 +199,13 @@ class LazyArmnnFinderExtension(Extension):
         self._library_dirs = None
         self._runtime_library_dirs = None
         self._armnn_libs = armnn_libs
-        self._optional = optional[0]
-        # self.__swig_opts = None
-        super().__init__(name, sources, include_dirs, define_macros, undef_macros, library_dirs, libraries,
-                         runtime_library_dirs, extra_objects, extra_compile_args, extra_link_args, export_symbols,
-                         language, optional, **kw)
+        self._optional = False if optional is None else optional
+
+        super().__init__(name=name, sources=sources, include_dirs=include_dirs, define_macros=define_macros,
+                         undef_macros=undef_macros, library_dirs=library_dirs, libraries=libraries,
+                         runtime_library_dirs=runtime_library_dirs, extra_objects=extra_objects,
+                         extra_compile_args=extra_compile_args, extra_link_args=extra_link_args,
+                         export_symbols=export_symbols, language=language, optional=optional, **kw)
 
     @property
     def include_dirs(self):
@@ -256,14 +271,14 @@ if __name__ == '__main__':
                                               extra_compile_args=['-std=c++14'],
                                               language='c++',
                                               armnn_libs=['libarmnn.so'],
-                                              optional=[False]
+                                              optional=False
                                               )
     pyarmnn_v_module = LazyArmnnFinderExtension('pyarmnn._generated._pyarmnn_version',
                                                 sources=['src/pyarmnn/_generated/armnn_version_wrap.cpp'],
                                                 extra_compile_args=['-std=c++14'],
                                                 language='c++',
                                                 armnn_libs=['libarmnn.so'],
-                                                optional=[False]
+                                                optional=False
                                                 )
     extensions_to_build = [pyarmnn_v_module, pyarmnn_module]
 
@@ -276,14 +291,12 @@ if __name__ == '__main__':
                                                            extra_compile_args=['-std=c++14'],
                                                            language='c++',
                                                            armnn_libs=['libarmnn.so', 'libarmnn{}.so'.format(name)],
-                                                           optional=[True]
+                                                           optional=True
                                                            )
         ext_list.append(pyarmnn_optional_module)
 
 
-    add_parsers_ext('CaffeParser', extensions_to_build)
     add_parsers_ext('OnnxParser', extensions_to_build)
-    add_parsers_ext('TfParser', extensions_to_build)
     add_parsers_ext('TfLiteParser', extensions_to_build)
     add_parsers_ext('Deserializer', extensions_to_build)
 

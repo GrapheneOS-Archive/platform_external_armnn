@@ -7,8 +7,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <algorithm>
 
@@ -23,7 +23,7 @@ LogicalBinaryLayer::LogicalBinaryLayer(const LogicalBinaryDescriptor& param, con
 std::unique_ptr<IWorkload> LogicalBinaryLayer::CreateWorkload(const IWorkloadFactory& factory) const
 {
     LogicalBinaryQueueDescriptor descriptor;
-    return factory.CreateLogicalBinary(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::LogicalBinary, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 LogicalBinaryLayer* LogicalBinaryLayer::Clone(Graph& graph) const
@@ -72,9 +72,9 @@ void LogicalBinaryLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LogicalBinaryLayer");
 }
 
-void LogicalBinaryLayer::Accept(ILayerVisitor& visitor) const
+void LogicalBinaryLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitLogicalBinaryLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

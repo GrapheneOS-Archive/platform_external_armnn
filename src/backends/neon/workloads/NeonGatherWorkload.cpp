@@ -26,9 +26,15 @@ arm_compute::Status NeonGatherWorkloadValidate(const TensorInfo& input,
 
 NeonGatherWorkload::NeonGatherWorkload(const GatherQueueDescriptor& descriptor,
                                        const WorkloadInfo& info)
-        : BaseWorkload<GatherQueueDescriptor>(descriptor, info)
+        : NeonBaseWorkload<GatherQueueDescriptor>(descriptor, info)
 {
-    m_Data.ValidateInputsOutputs("NeonGatherWorkload", 1, 1);
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonGatherWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
+    m_Data.ValidateInputsOutputs("NeonGatherWorkload", 2, 1);
 
     arm_compute::ITensor& input   = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ITensor& indices = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[1])->GetTensor();
@@ -41,7 +47,7 @@ NeonGatherWorkload::NeonGatherWorkload(const GatherQueueDescriptor& descriptor,
 
 void NeonGatherWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonGatherWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonGatherWorkload_Execute", this->GetGuid());
     m_Layer.run();
 }
 } //namespace armnn

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -7,7 +7,7 @@
 
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <armnn/utility/PolymorphicDowncast.hpp>
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 namespace armnn
 {
@@ -27,7 +27,7 @@ arm_compute::Status NeonMinimumWorkloadValidate(const TensorInfo& input0,
 
 NeonMinimumWorkload::NeonMinimumWorkload(const MinimumQueueDescriptor& descriptor,
                                          const WorkloadInfo& info)
-    : BaseWorkload<MinimumQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<MinimumQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonMinimumWorkload", 2, 1);
 
@@ -40,7 +40,7 @@ NeonMinimumWorkload::NeonMinimumWorkload(const MinimumQueueDescriptor& descripto
 
 void NeonMinimumWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonMinimumWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonMinimumWorkload_Execute", this->GetGuid());
     m_MinLayer.run();
 }
 

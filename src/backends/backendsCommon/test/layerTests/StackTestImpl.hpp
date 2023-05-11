@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
+#include <armnnTestUtils/LayerTestResult.hpp>
 
 #include <Half.hpp>
 
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 LayerTestResult<float, 4> StackAxis0Float32Test(
         armnn::IWorkloadFactory& workloadFactory,
@@ -43,6 +43,11 @@ LayerTestResult<float, 5> StackOutput5DFloat32Test(
         const armnn::ITensorHandleFactory& tensorHandleFactory);
 
 LayerTestResult<armnn::Half, 4> StackFloat16Test(
+        armnn::IWorkloadFactory& workloadFactory,
+        const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
+        const armnn::ITensorHandleFactory& tensorHandleFactory);
+
+LayerTestResult<int32_t, 4> StackInt32Test(
         armnn::IWorkloadFactory& workloadFactory,
         const armnn::IBackendInternal::IMemoryManagerSharedPtr& memoryManager,
         const armnn::ITensorHandleFactory& tensorHandleFactory);

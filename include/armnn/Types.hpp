@@ -1,16 +1,29 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2018-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
 
 #include <array>
 #include <functional>
-#include <memory>
 #include <stdint.h>
+#include <chrono>
 #include "BackendId.hpp"
 #include "Exceptions.hpp"
 #include "Deprecated.hpp"
+
+namespace arm
+{
+namespace pipe
+{
+
+class ProfilingGuid;
+
+} // namespace arm
+} // namespace pipe
+
+/// Define LayerGuid type.
+using LayerGuid = arm::pipe::ProfilingGuid;
 
 namespace armnn
 {
@@ -19,6 +32,9 @@ constexpr unsigned int MaxNumOfTensorDimensions = 5U;
 
 /// The lowest performance data capture interval we support is 10 miliseconds.
 constexpr unsigned int LOWEST_CAPTURE_PERIOD = 10000u;
+
+/// Variable to control expire rate of priority queue
+constexpr unsigned int EXPIRE_RATE = 3U;
 
 /// @enum Status enumeration
 /// @var Status::Successful
@@ -31,26 +47,40 @@ enum class Status
 
 enum class DataType
 {
-    Float16 = 0,
-    Float32 = 1,
+    Float16  = 0,
+    Float32  = 1,
     QAsymmU8 = 2,
     Signed32 = 3,
-    Boolean = 4,
+    Boolean  = 4,
     QSymmS16 = 5,
-    QuantizedSymm8PerAxis ARMNN_DEPRECATED_ENUM_MSG("Per Axis property inferred by number of scales in TensorInfo") = 6,
-    QSymmS8 = 7,
-    QAsymmS8 = 8,
-    BFloat16 = 9,
-    Signed64 = 10,
-
-    QuantisedAsymm8 ARMNN_DEPRECATED_ENUM_MSG("Use DataType::QAsymmU8 instead.") = QAsymmU8,
-    QuantisedSymm16 ARMNN_DEPRECATED_ENUM_MSG("Use DataType::QSymmS16 instead.") = QSymmS16
+    QSymmS8  = 6,
+    QAsymmS8 = 7,
+    BFloat16 = 8,
+    Signed64 = 9,
 };
 
 enum class DataLayout
 {
     NCHW = 1,
-    NHWC = 2
+    NHWC = 2,
+    NDHWC = 3,
+    NCDHW = 4
+};
+
+/// Define the behaviour of the internal profiler when outputting network details
+enum class ProfilingDetailsMethod
+{
+    Undefined = 0,
+    DetailsWithEvents = 1,
+    DetailsOnly = 2
+};
+
+
+enum class QosExecPriority
+{
+    Low    = 0,
+    Medium = 1,
+    High   = 2
 };
 
 enum class ActivationFunction
@@ -98,7 +128,20 @@ enum class UnaryOperation
     Sqrt       = 2,
     Rsqrt      = 3,
     Neg        = 4,
-    LogicalNot = 5
+    LogicalNot = 5,
+    Log        = 6,
+    Sin        = 7,
+    Ceil       = 8
+};
+
+enum class BinaryOperation
+{
+    Add     = 0,
+    Div     = 1,
+    Maximum = 2,
+    Minimum = 3,
+    Mul     = 4,
+    Sub     = 5
 };
 
 enum class PoolingAlgorithm
@@ -106,6 +149,15 @@ enum class PoolingAlgorithm
     Max     = 0,
     Average = 1,
     L2      = 2
+};
+
+enum class ReduceOperation
+{
+    Sum  = 0,
+    Max  = 1,
+    Mean = 2,
+    Min  = 3,
+    Prod = 4
 };
 
 enum class ResizeMethod
@@ -138,6 +190,17 @@ enum class PaddingMethod
     Exclude     = 1
 };
 
+///
+/// The padding mode controls whether the padding should be filled with constant values (Constant), or
+/// reflect the input, either including the border values (Symmetric) or not (Reflect).
+///
+enum class PaddingMode
+{
+    Constant  = 0,
+    Reflect   = 1,
+    Symmetric = 2
+};
+
 enum class NormalizationAlgorithmChannel
 {
     Across = 0,
@@ -162,7 +225,7 @@ enum class OutputShapeRounding
 /// The ShapeInferenceMethod modify how the output shapes are treated.
 /// When ValidateOnly is selected, the output shapes are inferred from the input parameters of the layer
 /// and any mismatch is reported.
-/// When InferAndValidate is selected 2 actions must be performed: (1)infer output shape from inputs and (2)validate the
+/// When InferAndValidate is selected 2 actions are performed: (1)infer output shape from inputs and (2)validate the
 /// shapes as in ValidateOnly. This option has been added to work with tensors which rank or dimension sizes are not
 /// specified explicitly, however this information can be calculated from the inputs.
 ///
@@ -172,6 +235,29 @@ enum class ShapeInferenceMethod
     ValidateOnly     = 0,
     /// Infer missing output shapes and validate all output shapes
     InferAndValidate = 1
+};
+
+/// Define the Memory Source to reduce copies
+enum class MemorySource : uint32_t
+{
+    Undefined = 0,
+    Malloc = 1,
+    DmaBuf = 2,
+    DmaBufProtected = 4,
+    Gralloc = 8
+};
+
+enum class MemBlockStrategyType
+{
+    // MemBlocks can be packed on the Y axis only, overlap allowed on X axis.
+    // In other words MemBlocks with overlapping lifetimes cannot use the same MemBin,
+    // equivalent to blob or pooling memory management.
+    SingleAxisPacking  = 0,
+
+    // MemBlocks can be packed on either Y or X axis but cannot overlap on both.
+    // In other words MemBlocks with overlapping lifetimes can use the same MemBin,
+    // equivalent to offset or slab memory management.
+    MultiAxisPacking  = 1
 };
 
 /// Each backend should implement an IBackend.
@@ -188,6 +274,19 @@ public:
 using IBackendSharedPtr = std::shared_ptr<IBackend>;
 using IBackendUniquePtr = std::unique_ptr<IBackend, void(*)(IBackend* backend)>;
 
+/// BackendCapability class
+enum class BackendCapability : uint32_t
+{
+    /// Constant weights can be accessed through the descriptors,
+    /// On the other hand, non-const weights can be accessed through inputs.
+    NonConstWeights,
+
+    /// Asynchronous Execution.
+    AsyncExecution,
+
+    // add new enum values here
+};
+
 /// Device specific knowledge to be passed to the optimizer.
 class IDeviceSpec
 {
@@ -200,6 +299,9 @@ public:
 
 /// Type of identifiers for bindable layers (inputs, outputs).
 using LayerBindingId = int;
+using ImportedInputId = unsigned int;
+using ImportedOutputId = unsigned int;
+
 
 class PermutationVector
 {
@@ -228,12 +330,30 @@ public:
 
     PermutationVector(std::initializer_list<ValueType> dimMappings);
 
-    ValueType operator[](SizeType i) const { return m_DimMappings.at(i); }
+    ///
+    /// Indexing method with out-of-bounds error checking for the m_DimMappings array.
+    /// @param i - integer value corresponding to index of m_DimMappings array to retrieve element from.
+    /// @return element at index i of m_DimMappings array.
+    /// @throws InvalidArgumentException when indexing out-of-bounds index of m_DimMappings array.
+    ///
+    ValueType operator[](SizeType i) const
+    {
+        if (i >= GetSize())
+        {
+            throw InvalidArgumentException("Invalid indexing of PermutationVector of size " + std::to_string(GetSize())
+                                            + " at location [" + std::to_string(i) + "].");
+        }
+        return m_DimMappings.at(i);
+    }
 
     SizeType GetSize() const { return m_NumDimMappings; }
 
     ConstIterator begin() const { return m_DimMappings.begin(); }
-    ConstIterator end() const { return m_DimMappings.end(); }
+    /**
+     *
+     * @return pointer one past the end of the number of mapping not the length of m_DimMappings.
+     */
+    ConstIterator end() const { return m_DimMappings.begin() + m_NumDimMappings; }
 
     bool IsEqual(const PermutationVector& other) const
     {
@@ -261,11 +381,6 @@ private:
     SizeType m_NumDimMappings;
 };
 
-namespace profiling { class ProfilingGuid; }
-
-/// Define LayerGuid type.
-using LayerGuid = profiling::ProfilingGuid;
-
 class ITensorHandle;
 
 /// Define the type of callback for the Debug layer to call
@@ -274,100 +389,102 @@ class ITensorHandle;
 /// @param tensorHandle - TensorHandle for the input tensor to the Debug layer
 using DebugCallbackFunction = std::function<void(LayerGuid guid, unsigned int slotIndex, ITensorHandle* tensorHandle)>;
 
+/// Define a timer and associated inference ID for recording execution times
+using HighResolutionClock = std::chrono::high_resolution_clock::time_point;
+using InferenceTimingPair = std::pair<HighResolutionClock, HighResolutionClock>;
 
-namespace profiling
+
+/// This list uses X macro technique.
+/// See https://en.wikipedia.org/wiki/X_Macro for more info
+// New layers should be added at last position to minimize instability.
+#define LIST_OF_LAYER_TYPE \
+    X(Activation) \
+    X(Addition) \
+    X(ArgMinMax) \
+    X(BatchNormalization) \
+    X(BatchToSpaceNd)      \
+    X(Comparison) \
+    X(Concat) \
+    X(Constant) \
+    X(ConvertFp16ToFp32) \
+    X(ConvertFp32ToFp16) \
+    X(Convolution2d) \
+    X(Debug) \
+    X(DepthToSpace) \
+    X(DepthwiseConvolution2d) \
+    X(Dequantize) \
+    X(DetectionPostProcess) \
+    X(Division) \
+    X(ElementwiseUnary) \
+    X(FakeQuantization) \
+    X(Fill) \
+    X(Floor) \
+    X(FullyConnected) \
+    X(Gather) \
+    X(Input) \
+    X(InstanceNormalization) \
+    X(L2Normalization) \
+    X(LogicalBinary) \
+    X(LogSoftmax) \
+    X(Lstm) \
+    X(QLstm) \
+    X(Map) \
+    X(Maximum) \
+    X(Mean) \
+    X(MemCopy) \
+    X(MemImport) \
+    X(Merge) \
+    X(Minimum) \
+    X(Multiplication) \
+    X(Normalization) \
+    X(Output) \
+    X(Pad) \
+    X(Permute) \
+    X(Pooling2d) \
+    X(PreCompiled) \
+    X(Prelu) \
+    X(Quantize) \
+    X(QuantizedLstm) \
+    X(Reshape) \
+    X(Rank) \
+    X(Resize) \
+    X(Reduce) \
+    X(Slice) \
+    X(Softmax) \
+    X(SpaceToBatchNd) \
+    X(SpaceToDepth) \
+    X(Splitter) \
+    X(Stack) \
+    X(StandIn) \
+    X(StridedSlice) \
+    X(Subtraction) \
+    X(Switch) \
+    X(Transpose) \
+    X(TransposeConvolution2d) \
+    X(Unmap) \
+    X(Cast) \
+    X(Shape) \
+    X(UnidirectionalSequenceLstm) \
+    X(ChannelShuffle) \
+    X(Convolution3d) \
+    X(Pooling3d) \
+    X(GatherNd) \
+    X(BatchMatMul) \
+    X(ElementwiseBinary) \
+
+// New layers should be added at last position to minimize instability.
+
+/// When adding a new layer, adapt also the LastLayer enum value in the
+/// enum class LayerType below
+enum class LayerType
 {
-
-static constexpr uint64_t MIN_STATIC_GUID = 1llu << 63;
-
-class ProfilingGuid
-{
-public:
-    ProfilingGuid() : m_Guid(0) {}
-
-    ProfilingGuid(uint64_t guid) : m_Guid(guid) {}
-
-    operator uint64_t() const { return m_Guid; }
-
-    bool operator==(const ProfilingGuid& other) const
-    {
-        return m_Guid == other.m_Guid;
-    }
-
-    bool operator!=(const ProfilingGuid& other) const
-    {
-        return m_Guid != other.m_Guid;
-    }
-
-    bool operator<(const ProfilingGuid& other) const
-    {
-        return m_Guid < other.m_Guid;
-    }
-
-    bool operator<=(const ProfilingGuid& other) const
-    {
-        return m_Guid <= other.m_Guid;
-    }
-
-    bool operator>(const ProfilingGuid& other) const
-    {
-        return m_Guid > other.m_Guid;
-    }
-
-    bool operator>=(const ProfilingGuid& other) const
-    {
-        return m_Guid >= other.m_Guid;
-    }
-
-protected:
-    uint64_t m_Guid;
+#define X(name) name,
+    LIST_OF_LAYER_TYPE
+#undef X
+    FirstLayer = Activation,
+    LastLayer = ElementwiseBinary
 };
 
-/// Strongly typed guids to distinguish between those generated at runtime, and those that are statically defined.
-struct ProfilingDynamicGuid : public ProfilingGuid
-{
-    using ProfilingGuid::ProfilingGuid;
-};
-
-struct ProfilingStaticGuid : public ProfilingGuid
-{
-    using ProfilingGuid::ProfilingGuid;
-};
-
-} // namespace profiling
+const char* GetLayerTypeAsCString(LayerType type);
 
 } // namespace armnn
-
-
-namespace std
-{
-/// make ProfilingGuid hashable
-template<>
-struct hash<armnn::profiling::ProfilingGuid>
-{
-    std::size_t operator()(armnn::profiling::ProfilingGuid const& guid) const noexcept
-    {
-        return hash<uint64_t>()(uint64_t(guid));
-    }
-};
-
-/// make ProfilingDynamicGuid hashable
-template<>
-struct hash<armnn::profiling::ProfilingDynamicGuid>
-{
-    std::size_t operator()(armnn::profiling::ProfilingDynamicGuid const& guid) const noexcept
-    {
-        return hash<uint64_t>()(uint64_t(guid));
-    }
-};
-
-/// make ProfilingStaticGuid hashable
-template<>
-struct hash<armnn::profiling::ProfilingStaticGuid>
-{
-    std::size_t operator()(armnn::profiling::ProfilingStaticGuid const& guid) const noexcept
-    {
-        return hash<uint64_t>()(uint64_t(guid));
-    }
-};
-} // namespace std

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -9,7 +9,7 @@
 #include <aclCommon/ArmComputeUtils.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 
 #include <cl/ClLayerSupport.hpp>
 #include <cl/ClTensorHandle.hpp>
@@ -29,20 +29,25 @@ arm_compute::Status ClQuantizeWorkloadValidate(const TensorInfo& input,
                                                       &aclOutputInfo);
 }
 
-ClQuantizeWorkload::ClQuantizeWorkload(const QuantizeQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<QuantizeQueueDescriptor>(descriptor, info)
+ClQuantizeWorkload::ClQuantizeWorkload(const QuantizeQueueDescriptor& descriptor,
+                                       const WorkloadInfo& info,
+                                       const arm_compute::CLCompileContext& clCompileContext)
+    : ClBaseWorkload<QuantizeQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("ClQuantizeWorkload", 1, 1);
 
     arm_compute::ICLTensor& input  = static_cast<IClTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
     arm_compute::ICLTensor& output = static_cast<IClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
 
-    m_Layer.configure(&input, &output);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClQuantizeWorkload_configure");
+        m_Layer.configure(clCompileContext, &input, &output);
+    }
 }
 
 void ClQuantizeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClQuantizeWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClQuantizeWorkload_Execute", this->GetGuid());
     RunClFunction(m_Layer, CHECK_LOCATION());
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -32,6 +32,12 @@ NeonL2NormalizationFloatWorkload::NeonL2NormalizationFloatWorkload(const L2Norma
     const WorkloadInfo& info, std::shared_ptr<arm_compute::MemoryManagerOnDemand>& memoryManager)
     : FloatWorkload<L2NormalizationQueueDescriptor>(descriptor, info)
 {
+    // Report Profiling Details
+    ARMNN_REPORT_PROFILING_WORKLOAD_DESC("NeonL2NormalizationFloatWorkload_Construct",
+                                         descriptor.m_Parameters,
+                                         info,
+                                         this->GetGuid());
+
     m_Data.ValidateInputsOutputs("NeonL2NormalizationFloatWorkload", 1, 1);
 
     arm_compute::ITensor& input = PolymorphicDowncast<IAclTensorHandle*>(m_Data.m_Inputs[0])->GetTensor();
@@ -50,8 +56,46 @@ NeonL2NormalizationFloatWorkload::NeonL2NormalizationFloatWorkload(const L2Norma
 
 void NeonL2NormalizationFloatWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonL2NormalizationFloatWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonL2NormalizationFloatWorkload_Execute", this->GetGuid());
     m_Layer->run();
+}
+
+void NeonL2NormalizationFloatWorkload::ReplaceInputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+// Replace output tensor handle with the given TensorHandle
+void NeonL2NormalizationFloatWorkload::ReplaceOutputTensorHandle(ITensorHandle* tensorHandle, unsigned int slot)
+{
+    ITensorHandle* backupHandle = this->m_Data.m_Inputs[slot];
+    this->m_Data.m_Inputs[slot] = tensorHandle;
+    try
+    {
+        Reconfigure();
+    }
+    catch(armnn::UnimplementedException& e)
+    {
+        // Cannot reconfigure, revert the slot back and throw the exception.
+        this->m_Data.m_Inputs[slot] = backupHandle;
+        throw e;
+    }
+}
+
+void NeonL2NormalizationFloatWorkload::Reconfigure()
+{
+    throw armnn::UnimplementedException("Reconfigure not implemented for this workload");
 }
 
 } //namespace armnn

@@ -6,8 +6,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -22,7 +22,7 @@ std::unique_ptr<IWorkload> ActivationLayer::CreateWorkload(const IWorkloadFactor
     ActivationQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateActivation(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Activation, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ActivationLayer* ActivationLayer::Clone(Graph& graph) const
@@ -45,9 +45,9 @@ void ActivationLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "ActivationLayer");
 }
 
-void ActivationLayer::Accept(ILayerVisitor& visitor) const
+void ActivationLayer::ExecuteStrategy(IStrategy &strategy) const
 {
-    visitor.VisitActivationLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

@@ -1,42 +1,49 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
+
+#include <ArmNNProfilingServiceInitialiser.hpp>
+#include <ProfilingOptionsConverter.hpp>
+#include <Runtime.hpp>
 
 #include <armnn/Descriptors.hpp>
 #include <armnn/IRuntime.hpp>
 #include <armnn/INetwork.hpp>
-#include <Processes.hpp>
-#include <Runtime.hpp>
-#include <armnn/TypesUtils.hpp>
 
-#include <LabelsAndEventClasses.hpp>
+#include <armnn/profiling/ArmNNProfiling.hpp>
+
+#include <common/include/LabelsAndEventClasses.hpp>
+#include <common/include/Processes.hpp>
+
 #include <test/ProfilingTestUtils.hpp>
-
-#include <HeapProfiling.hpp>
-#include <LeakChecking.hpp>
 
 #ifdef WITH_VALGRIND
 #include <valgrind/memcheck.h>
 #endif
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 #include "RuntimeTests.hpp"
-#include "TestUtils.hpp"
+#include <TestUtils.hpp>
+
+#ifdef ARMNN_LEAK_CHECKING_ENABLED
+#include <HeapProfiling.hpp>
+#include <LeakChecking.hpp>
+#endif
 
 namespace armnn
 {
 
-void RuntimeLoadedNetworksReserve(armnn::Runtime* runtime)
+void RuntimeLoadedNetworksReserve(armnn::RuntimeImpl* runtime)
 {
     runtime->m_LoadedNetworks.reserve(1);
 }
 
-}
+} // namespace armnn
 
-BOOST_AUTO_TEST_SUITE(Runtime)
-
-BOOST_AUTO_TEST_CASE(RuntimeUnloadNetwork)
+TEST_SUITE("Runtime")
+{
+TEST_CASE("RuntimeUnloadNetwork")
 {
     // build 2 mock-networks and load them into the runtime
     armnn::IRuntime::CreationOptions options;
@@ -56,9 +63,279 @@ BOOST_AUTO_TEST_CASE(RuntimeUnloadNetwork)
     runtime->LoadNetwork(networkIdentifier2, Optimize(*mockNetwork2, backends, runtime->GetDeviceSpec()));
 
     // Unloads one by its networkID.
-    BOOST_TEST(runtime->UnloadNetwork(networkIdentifier1) == armnn::Status::Success);
+    CHECK(runtime->UnloadNetwork(networkIdentifier1) == armnn::Status::Success);
 
-    BOOST_TEST(runtime->UnloadNetwork(networkIdentifier1) == armnn::Status::Failure);
+    CHECK(runtime->UnloadNetwork(networkIdentifier1) == armnn::Status::Failure);
+}
+
+TEST_CASE("RuntimePreImportInputs")
+{
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{{4}, armnn::DataType::Signed32};
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
+
+    std::string er;
+    armnn::INetworkProperties networkProperties(true, MemorySource::Undefined, MemorySource::Undefined);
+    runtime->LoadNetwork(networkId,
+                         Optimize(*testNetwork, backends, runtime->GetDeviceSpec()),
+                         er,
+                         networkProperties);
+
+    std::vector<int> inputData1(4, 10);
+    std::vector<int> inputData2(4, 20);
+    std::vector<int> output(4);
+
+    ConstTensor inputTensor1({{4}, armnn::DataType::Signed32, 0.0f, 0, true}, inputData1.data());
+    ConstTensor inputTensor2({{4}, armnn::DataType::Signed32, 0.0f, 0, true}, inputData2.data());
+    Tensor outputTensor({{4}, armnn::DataType::Signed32}, output.data());
+
+    auto importedInputVec1 = runtime->ImportInputs(networkId, {{0, inputTensor1}}, MemorySource::Malloc);
+    CHECK(importedInputVec1.size() == 1);
+    CHECK(importedInputVec1[0] == 0);
+
+    auto memHandle = runtime->CreateWorkingMemHandle(networkId);
+
+    runtime->Execute(*memHandle.get(), {{1, inputTensor2}}, {{2, outputTensor}}, {0 /* pre-imported id */});
+    for (auto val: output) {
+        CHECK(val == 30);
+    }
+
+    auto importedInputVec2 = runtime->ImportInputs(networkId, {{1, inputTensor2}}, MemorySource::Malloc);
+    CHECK(importedInputVec2.size() == 1);
+    CHECK(importedInputVec2[0] == 1);
+
+    runtime->Execute(*memHandle.get(), {{0, inputTensor1}}, {{2, outputTensor}}, {1 /* pre-imported id */});
+    for (auto val: output) {
+        CHECK(val == 30);
+    }
+
+    runtime->Execute(*memHandle.get(), {}, {{2, outputTensor}}, {0, 1});
+    for (auto val: output) {
+        CHECK(val == 30);
+    }
+    // Duplicate ImportedInputId and LayerBindingId
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {}, {{2, outputTensor}}, {0, 0});,
+                    armnn::InvalidArgumentException);
+    // Duplicate LayerBindingId
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {{1, inputTensor2}}, {{2, outputTensor}}, {1});,
+                    armnn::InvalidArgumentException);
+    // Incorrect ImportedInputId
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {{1, inputTensor2}}, {{2, outputTensor}}, {10});,
+                    armnn::InvalidArgumentException);
+    // Incorrect LayerBindingId
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {{-2, inputTensor2}}, {{2, outputTensor}}, {1});,
+                    armnn::InvalidArgumentException);
+    // Incorrect layer binding id and ImportedInputId
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {{-2, inputTensor2}}, {{2, outputTensor}}, {10});,
+                    armnn::InvalidArgumentException);
+    auto importedInputVec3 = runtime->ImportInputs(networkId, {{1, inputTensor2}}, MemorySource::Malloc);
+    CHECK(importedInputVec3[0] == 2);
+    // Too many ImportedInputIds
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {}, {{2, outputTensor}}, {0, 1, 2});,
+                    armnn::InvalidArgumentException);
+    // Too many InputTensors
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(),
+                                     {{0, inputTensor2},
+                                      {1, inputTensor2},
+                                      {2, inputTensor2}},
+                                      {{2, outputTensor}});, armnn::InvalidArgumentException);
+    // Too few ImportedInputIds
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {}, {{2, outputTensor}}, {0});,
+                    armnn::InvalidArgumentException);
+    runtime->ClearImportedInputs(networkId, {1});
+    runtime->Execute(*memHandle.get(), {{1, inputTensor2}}, {{2, outputTensor}}, {0}, {});
+    for (auto val: output) {
+        CHECK(val == 30);
+    }
+    // Using deleted pre-imported input
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {}, {{2, outputTensor}}, {0, 1}, {});,
+                    armnn::InvalidArgumentException);
+
+    // Trying to delete deleted pre-imported tensor
+    CHECK_THROWS_AS(runtime->ClearImportedInputs(networkId, {1});, armnn::InvalidArgumentException);
+
+    // Trying to delete unknown pre-imported tensor
+    CHECK_THROWS_AS(runtime->ClearImportedInputs(networkId, {10});, armnn::InvalidArgumentException);
+}
+
+TEST_CASE("RuntimePreImportOutputs")
+{
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr               runtime(armnn::IRuntime::Create(options));
+
+    armnn::NetworkId   networkId = 1;
+
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+    TensorInfo tensorInfo{{4}, armnn::DataType::Float32, 0.0f, 0, true};
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    ActivationDescriptor activationDescriptor;
+    activationDescriptor.m_Function = ActivationFunction::BoundedReLu;
+    activationDescriptor.m_A = 2.0f;
+    activationDescriptor.m_B = 0.0f;
+    auto activationLayer1 = testNetwork->AddActivationLayer(activationDescriptor, "add layer");
+    auto outputLayer1 = testNetwork->AddOutputLayer(2, "output layer");
+
+    inputLayer1->GetOutputSlot(0).Connect(activationLayer1->GetInputSlot(0));
+
+    activationLayer1->GetOutputSlot(0).Connect(outputLayer1->GetInputSlot(0));
+    activationLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 1 layer");
+
+    activationDescriptor.m_A = 4.0f;
+    activationDescriptor.m_B = 2.0f;
+    auto activationLayer2 = testNetwork->AddActivationLayer(activationDescriptor, "add layer");
+    auto outputLayer2 = testNetwork->AddOutputLayer(3, "output layer");
+
+    inputLayer2->GetOutputSlot(0).Connect(activationLayer2->GetInputSlot(0));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    activationLayer2->GetOutputSlot(0).Connect(outputLayer2->GetInputSlot(0));
+    activationLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
+
+    std::string er;
+    armnn::INetworkProperties networkProperties(true, MemorySource::Undefined, MemorySource::Undefined);
+    runtime->LoadNetwork(networkId,
+                         Optimize(*testNetwork, backends, runtime->GetDeviceSpec()),
+                         er,
+                         networkProperties);
+
+    std::vector<float> inputData1(4, 1.0f);
+    std::vector<float> inputData2(4, 3.0f);
+
+    std::vector<float> outputData1(4);
+    std::vector<float> outputData2(4);
+
+    ConstTensor inputTensor1(tensorInfo, inputData1.data());
+    ConstTensor inputTensor2(tensorInfo, inputData2.data());
+
+    Tensor outputTensor1{tensorInfo, outputData1.data()};
+    Tensor outputTensor2{tensorInfo, outputData2.data()};
+
+    InputTensors inputTensors = {{0, inputTensor1}, {1, inputTensor2}};
+
+    std::pair<LayerBindingId, class Tensor> output1{2, outputTensor1};
+    std::pair<LayerBindingId, class Tensor> output2{3, outputTensor2};
+
+    auto testOutputs = [&]()
+    {
+        for (auto val : outputData1)
+        {
+                    CHECK(val == 1.0f);
+        }
+
+        for (auto val : outputData2)
+        {
+                    CHECK(val == 3.0f);
+        }
+    };
+
+    auto memHandle = runtime->CreateWorkingMemHandle(networkId);
+
+    runtime->Execute(*memHandle.get(),inputTensors, {output1, output2});
+    testOutputs();
+
+    auto importedOutputVec = runtime->ImportOutputs(networkId, {output1, output2 }, MemorySource::Malloc);
+    CHECK(importedOutputVec.size() == 2);
+    CHECK(importedOutputVec[0] == 0);
+    CHECK(importedOutputVec[1] == 1);
+
+    runtime->Execute(*memHandle.get(), inputTensors, {}, {}, importedOutputVec);
+    testOutputs();
+
+    runtime->Execute(*memHandle.get(), inputTensors, {output1}, {}, {1});
+    testOutputs();
+
+    runtime->Execute(*memHandle.get(), inputTensors, {output2}, {}, {0});
+    testOutputs();
+
+    auto importedInputVec = runtime->ImportInputs(networkId, inputTensors, MemorySource::Malloc);
+    CHECK(importedInputVec.size() == 2);
+    CHECK(importedInputVec[0] == 0);
+    CHECK(importedInputVec[1] == 1);
+
+    runtime->Execute(*memHandle.get(), {}, {}, importedInputVec, importedOutputVec);
+    testOutputs();
+
+    runtime->Execute(*memHandle.get(), {{0, inputTensor1}}, {output2}, {1}, {0});
+    testOutputs();
+
+    // Too many ids
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {output1, output2}, {}, {0, 1});,
+                    armnn::InvalidArgumentException);
+
+    // Duplicate ids
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {output2}, {}, {1});,
+                    armnn::InvalidArgumentException);
+
+    // Duplicate ids
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {output1, output1}, {}, {});,
+                    armnn::InvalidArgumentException);
+
+    // Duplicate ids
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {}, {}, {0, 0}),
+                    armnn::InvalidArgumentException);
+
+    // Unknown id
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {output1}, {}, {3});,
+                    armnn::InvalidArgumentException);
+
+    // Unknown id
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {{4, outputTensor2}}, {}, {1});,
+                    armnn::InvalidArgumentException);
+
+    // Input id for output
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {{0, outputTensor2}}, {}, {1});,
+                    armnn::InvalidArgumentException);
+
+    // Input id for output
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {{0, outputTensor2}}, {}, {1});,
+                    armnn::InvalidArgumentException);
+
+    // Output id for input
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), {{2, inputTensor1}}, {{0, outputTensor2}}, {1}, {1, 0});,
+                    armnn::InvalidArgumentException);
+
+    runtime->ClearImportedOutputs(networkId, {1});
+
+    runtime->Execute(*memHandle.get(), inputTensors, {output2}, {}, {0});
+    testOutputs();
+
+    // Trying to use deleted pre-imported tensor
+    CHECK_THROWS_AS(runtime->Execute(*memHandle.get(), inputTensors, {}, {}, importedOutputVec),
+                    armnn::InvalidArgumentException);
+
+    // Trying to delete deleted pre-imported tensor
+    CHECK_THROWS_AS(runtime->ClearImportedOutputs(networkId, {1});, armnn::InvalidArgumentException);
+
+    // Trying to delete unknown pre-imported tensor
+    CHECK_THROWS_AS(runtime->ClearImportedOutputs(networkId, {10});, armnn::InvalidArgumentException);
 }
 
 // Note: the current builds we don't do valgrind and gperftools based leak checking at the same
@@ -76,26 +353,24 @@ struct DisableGlobalLeakChecking
     }
 };
 
-BOOST_GLOBAL_FIXTURE(DisableGlobalLeakChecking);
-
-BOOST_AUTO_TEST_CASE(RuntimeHeapMemoryUsageSanityChecks)
+TEST_CASE_FIXTURE(DisableGlobalLeakChecking,  "RuntimeHeapMemoryUsageSanityChecks")
 {
-    BOOST_TEST(ARMNN_LEAK_CHECKER_IS_ACTIVE());
+    CHECK(ARMNN_LEAK_CHECKER_IS_ACTIVE());
     {
         ARMNN_SCOPED_LEAK_CHECKER("Sanity_Check_Outer");
         {
             ARMNN_SCOPED_LEAK_CHECKER("Sanity_Check_Inner");
-            BOOST_TEST(ARMNN_NO_LEAKS_IN_SCOPE() == true);
+            CHECK(ARMNN_NO_LEAKS_IN_SCOPE() == true);
             std::unique_ptr<char[]> dummyAllocation(new char[1000]);
-            BOOST_CHECK_MESSAGE(ARMNN_NO_LEAKS_IN_SCOPE() == false,
-                "A leak of 1000 bytes is expected here. "
-                "Please make sure environment variable: HEAPCHECK=draconian is set!");
-            BOOST_TEST(ARMNN_BYTES_LEAKED_IN_SCOPE() == 1000);
-            BOOST_TEST(ARMNN_OBJECTS_LEAKED_IN_SCOPE() == 1);
+            // "A leak of 1000 bytes is expected here. "
+            // "Please make sure environment variable: HEAPCHECK=draconian is set!"
+            CHECK((ARMNN_NO_LEAKS_IN_SCOPE() == false));
+            CHECK(ARMNN_BYTES_LEAKED_IN_SCOPE() == 1000);
+            CHECK(ARMNN_OBJECTS_LEAKED_IN_SCOPE() == 1);
         }
-        BOOST_TEST(ARMNN_NO_LEAKS_IN_SCOPE());
-        BOOST_TEST(ARMNN_BYTES_LEAKED_IN_SCOPE() == 0);
-        BOOST_TEST(ARMNN_OBJECTS_LEAKED_IN_SCOPE() == 0);
+        CHECK(ARMNN_NO_LEAKS_IN_SCOPE());
+        CHECK(ARMNN_BYTES_LEAKED_IN_SCOPE() == 0);
+        CHECK(ARMNN_OBJECTS_LEAKED_IN_SCOPE() == 0);
     }
 }
 
@@ -105,7 +380,7 @@ BOOST_AUTO_TEST_CASE(RuntimeHeapMemoryUsageSanityChecks)
 #ifdef WITH_VALGRIND
 // Run with the following command to get all the amazing output (in the devenv/build folder) :)
 // valgrind --leak-check=full --show-leak-kinds=all --log-file=Valgrind_Memcheck_Leak_Report.txt armnn/test/UnitTests
-BOOST_AUTO_TEST_CASE(RuntimeMemoryLeak)
+TEST_CASE("RuntimeMemoryLeak")
 {
     // From documentation:
 
@@ -129,13 +404,13 @@ BOOST_AUTO_TEST_CASE(RuntimeMemoryLeak)
     // ensure that runtime is large enough before checking for memory leaks
     // otherwise when loading the network it will automatically reserve memory that won't be released until destruction
     armnn::IRuntime::CreationOptions options;
-    armnn::Runtime                   runtime(options);
+    armnn::RuntimeImpl                   runtime(options);
     armnn::RuntimeLoadedNetworksReserve(&runtime);
 
     {
         std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
 
-        std::unique_ptr<armnn::Network> mockNetwork1 = std::make_unique<armnn::Network>();
+        armnn::INetworkPtr mockNetwork1(armnn::INetwork::Create());
         mockNetwork1->AddInputLayer(0, "test layer");
 
         // Warm-up load/unload pair to put the runtime in a stable state (memory-wise).
@@ -155,17 +430,17 @@ BOOST_AUTO_TEST_CASE(RuntimeMemoryLeak)
     }
 
     // If we're not running under Valgrind, these vars will have been initialised to 0, so this will always pass.
-    BOOST_TEST(leakedBefore == leakedAfter);
-    BOOST_TEST(reachableBefore == reachableAfter);
+    CHECK(leakedBefore == leakedAfter);
+    CHECK(reachableBefore == reachableAfter);
 
     // These are needed because VALGRIND_COUNT_LEAKS is a macro that assigns to the parameters
     // so they are assigned to, but still considered unused, causing a warning.
-    IgnoreUnused(dubious);
-    IgnoreUnused(suppressed);
+    armnn::IgnoreUnused(dubious);
+    armnn::IgnoreUnused(suppressed);
 }
 #endif // WITH_VALGRIND
 
-BOOST_AUTO_TEST_CASE(RuntimeCpuRef)
+TEST_CASE("RuntimeCpuRef")
 {
     using namespace armnn;
 
@@ -196,10 +471,10 @@ BOOST_AUTO_TEST_CASE(RuntimeCpuRef)
 
     // Load it into the runtime. It should success.
     armnn::NetworkId netId;
-    BOOST_TEST(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
+    CHECK(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
 }
 
-BOOST_AUTO_TEST_CASE(RuntimeFallbackToCpuRef)
+TEST_CASE("RuntimeFallbackToCpuRef")
 {
     using namespace armnn;
 
@@ -231,10 +506,10 @@ BOOST_AUTO_TEST_CASE(RuntimeFallbackToCpuRef)
 
     // Load it into the runtime. It should succeed.
     armnn::NetworkId netId;
-    BOOST_TEST(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
+    CHECK(runtime->LoadNetwork(netId, std::move(optNet)) == Status::Success);
 }
 
-BOOST_AUTO_TEST_CASE(IVGCVSW_1929_QuantizedSoftmaxIssue)
+TEST_CASE("IVGCVSW_1929_QuantizedSoftmaxIssue")
 {
     // Test for issue reported by Chris Nix in https://jira.arm.com/browse/IVGCVSW-1929
     using namespace armnn;
@@ -258,7 +533,9 @@ BOOST_AUTO_TEST_CASE(IVGCVSW_1929_QuantizedSoftmaxIssue)
                                                             0));
 
     softmax->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo(armnn::TensorShape({ 1, 5 }),
-                                                              armnn::DataType::QAsymmU8));
+                                                              armnn::DataType::QAsymmU8,
+                                                              0.0f,
+                                                              0));
 
     std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
     std::vector<std::string>      errMessages;
@@ -268,18 +545,18 @@ BOOST_AUTO_TEST_CASE(IVGCVSW_1929_QuantizedSoftmaxIssue)
         armnn::IOptimizedNetworkPtr optNet = Optimize(*net,
                                                       backends,
                                                       runtime->GetDeviceSpec(),
-                                                      OptimizerOptions(),
+                                                      OptimizerOptionsOpaque(),
                                                       errMessages);
-        BOOST_FAIL("An exception should have been thrown");
+        FAIL("An exception should have been thrown");
     }
-    catch (const InvalidArgumentException& e)
+    catch (const armnn::InvalidArgumentException&)
     {
         // Different exceptions are thrown on different backends
     }
-    BOOST_CHECK(errMessages.size() > 0);
+    CHECK(errMessages.size() > 0);
 }
 
-BOOST_AUTO_TEST_CASE(RuntimeBackendOptions)
+TEST_CASE("RuntimeBackendOptions")
 {
     using namespace armnn;
 
@@ -307,33 +584,35 @@ BOOST_AUTO_TEST_CASE(RuntimeBackendOptions)
 
 
     // First group
-    BOOST_TEST(backendOptions[0].GetBackendId().Get() == "FakeBackend1");
-    BOOST_TEST(backendOptions[0].GetOption(0).GetName() == "Option1");
-    BOOST_TEST(backendOptions[0].GetOption(0).GetValue().IsFloat() == true);
-    BOOST_TEST(backendOptions[0].GetOption(0).GetValue().AsFloat() == 1.3f);
+    CHECK(backendOptions[0].GetBackendId().Get() == "FakeBackend1");
+    CHECK(backendOptions[0].GetOption(0).GetName() == "Option1");
+    CHECK(backendOptions[0].GetOption(0).GetValue().IsFloat() == true);
+    CHECK(backendOptions[0].GetOption(0).GetValue().AsFloat() == 1.3f);
 
-    BOOST_TEST(backendOptions[0].GetOption(1).GetName() == "Option2");
-    BOOST_TEST(backendOptions[0].GetOption(1).GetValue().IsBool() == true);
-    BOOST_TEST(backendOptions[0].GetOption(1).GetValue().AsBool() == true);
+    CHECK(backendOptions[0].GetOption(1).GetName() == "Option2");
+    CHECK(backendOptions[0].GetOption(1).GetValue().IsBool() == true);
+    CHECK(backendOptions[0].GetOption(1).GetValue().AsBool() == true);
 
-    BOOST_TEST(backendOptions[0].GetOption(2).GetName() == "Option3");
-    BOOST_TEST(backendOptions[0].GetOption(2).GetValue().IsString() == true);
-    BOOST_TEST(backendOptions[0].GetOption(2).GetValue().AsString() == "some_value");
+    CHECK(backendOptions[0].GetOption(2).GetName() == "Option3");
+    CHECK(backendOptions[0].GetOption(2).GetValue().IsString() == true);
+    CHECK(backendOptions[0].GetOption(2).GetValue().AsString() == "some_value");
 
     // Second group
-    BOOST_TEST(backendOptions[1].GetBackendId().Get() == "FakeBackend1");
-    BOOST_TEST(backendOptions[1].GetOption(0).GetName() == "Option4");
-    BOOST_TEST(backendOptions[1].GetOption(0).GetValue().IsInt() == true);
-    BOOST_TEST(backendOptions[1].GetOption(0).GetValue().AsInt() == 42);
+    CHECK(backendOptions[1].GetBackendId().Get() == "FakeBackend1");
+    CHECK(backendOptions[1].GetOption(0).GetName() == "Option4");
+    CHECK(backendOptions[1].GetOption(0).GetValue().IsInt() == true);
+    CHECK(backendOptions[1].GetOption(0).GetValue().AsInt() == 42);
 }
 
-BOOST_AUTO_TEST_CASE(ProfilingDisable)
+TEST_CASE("ProfilingDisable")
 {
     using namespace armnn;
 
+    LogLevelSwapper logLevelSwapper(arm::pipe::LogSeverity::Fatal);
+
     // Create runtime in which the test will run
     armnn::IRuntime::CreationOptions options;
-    armnn::Runtime runtime(options);
+    armnn::RuntimeImpl runtime(options);
 
     // build up the structure of the network
     INetworkPtr net(INetwork::Create());
@@ -358,30 +637,35 @@ BOOST_AUTO_TEST_CASE(ProfilingDisable)
 
     // Load it into the runtime. It should succeed.
     armnn::NetworkId netId;
-    BOOST_TEST(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
+    CHECK(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
 
-    profiling::ProfilingServiceRuntimeHelper profilingServiceHelper(GetProfilingService(&runtime));
-    profiling::BufferManager& bufferManager = profilingServiceHelper.GetProfilingBufferManager();
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingServiceRuntimeHelper profilingServiceHelper(
+        arm::pipe::MAX_ARMNN_COUNTER, initialiser, GetProfilingService(&runtime));
+    BufferManager& bufferManager = profilingServiceHelper.GetProfilingBufferManager();
     auto readableBuffer = bufferManager.GetReadableBuffer();
 
     // Profiling is not enabled, the post-optimisation structure should not be created
-    BOOST_TEST(!readableBuffer);
+    CHECK(!readableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(ProfilingEnableCpuRef)
+TEST_CASE("ProfilingEnableCpuRef")
 {
     using namespace armnn;
-    using namespace armnn::profiling;
+    using namespace arm::pipe;
 
     // Create runtime in which the test will run
     armnn::IRuntime::CreationOptions options;
     options.m_ProfilingOptions.m_EnableProfiling = true;
     options.m_ProfilingOptions.m_TimelineEnabled = true;
 
-    armnn::Runtime runtime(options);
-    GetProfilingService(&runtime).ResetExternalProfilingOptions(options.m_ProfilingOptions, false);
+    armnn::RuntimeImpl runtime(options);
+    GetProfilingService(&runtime).ResetExternalProfilingOptions(
+        ConvertExternalProfilingOptions(options.m_ProfilingOptions), false);
 
-    profiling::ProfilingServiceRuntimeHelper profilingServiceHelper(GetProfilingService(&runtime));
+    armnn::ArmNNProfilingServiceInitialiser initialiser;
+    ProfilingServiceRuntimeHelper profilingServiceHelper(
+        arm::pipe::MAX_ARMNN_COUNTER, initialiser, GetProfilingService(&runtime));
     profilingServiceHelper.ForceTransitionToState(ProfilingState::NotConnected);
     profilingServiceHelper.ForceTransitionToState(ProfilingState::WaitingForAck);
     profilingServiceHelper.ForceTransitionToState(ProfilingState::Active);
@@ -410,255 +694,227 @@ BOOST_AUTO_TEST_CASE(ProfilingEnableCpuRef)
 
     // Load it into the runtime. It should succeed.
     armnn::NetworkId netId;
-    BOOST_TEST(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
+    CHECK(runtime.LoadNetwork(netId, std::move(optNet)) == Status::Success);
 
-    profiling::BufferManager& bufferManager = profilingServiceHelper.GetProfilingBufferManager();
+    BufferManager& bufferManager = profilingServiceHelper.GetProfilingBufferManager();
     auto readableBuffer = bufferManager.GetReadableBuffer();
 
     // Profiling is enabled, the post-optimisation structure should be created
-    BOOST_CHECK(readableBuffer != nullptr);
+    CHECK(readableBuffer != nullptr);
 
     unsigned int size = readableBuffer->GetSize();
 
     const unsigned char* readableData = readableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     unsigned int offset = 0;
 
     // Verify Header
     VerifyTimelineHeaderBinary(readableData, offset, size - 8);
-    BOOST_TEST_MESSAGE("HEADER OK");
 
     // Post-optimisation network
     // Network entity
     VerifyTimelineEntityBinaryPacketData(optNetGuid, readableData, offset);
-    BOOST_TEST_MESSAGE("NETWORK ENTITY OK");
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                LabelsAndEventClasses::NETWORK_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK TYPE RELATIONSHIP OK");
 
     // Network - START OF LIFE
-    ProfilingGuid networkSolEventGuid = VerifyTimelineEventBinaryPacket(EmptyOptional(),
-                                                                        EmptyOptional(),
-                                                                        EmptyOptional(),
+    ProfilingGuid networkSolEventGuid = VerifyTimelineEventBinaryPacket(arm::pipe::EmptyOptional(),
+                                                                        arm::pipe::EmptyOptional(),
+                                                                        arm::pipe::EmptyOptional(),
                                                                         readableData,
                                                                         offset);
-    BOOST_TEST_MESSAGE("NETWORK START OF LIFE EVENT OK");
 
     // Network - START OF LIFE event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                networkSolEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK START OF LIFE RELATIONSHIP OK");
 
     // Process ID Label
-    int processID = armnnUtils::Processes::GetCurrentId();
+    int processID = arm::pipe::GetCurrentProcessId();
     std::stringstream ss;
     ss << processID;
     std::string processIdLabel = ss.str();
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), processIdLabel, readableData, offset);
-    BOOST_TEST_MESSAGE("PROCESS ID LABEL OK");
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), processIdLabel, readableData, offset);
 
     // Entity - Process ID relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                LabelsAndEventClasses::PROCESS_ID_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK PROCESS ID RELATIONSHIP OK");
 
     // Input layer
     // Input layer entity
     VerifyTimelineEntityBinaryPacketData(input->GetGuid(), readableData, offset);
-    BOOST_TEST_MESSAGE("INPUT ENTITY OK");
 
     // Name Entity
-    ProfilingGuid inputLabelGuid = VerifyTimelineLabelBinaryPacketData(EmptyOptional(), "input", readableData, offset);
-    BOOST_TEST_MESSAGE("INPUT NAME LABEL OK");
+    ProfilingGuid inputLabelGuid = VerifyTimelineLabelBinaryPacketData(
+        arm::pipe::EmptyOptional(), "input", readableData, offset);
 
     // Entity - Name relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                input->GetGuid(),
                                                inputLabelGuid,
                                                LabelsAndEventClasses::NAME_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT NAME RELATIONSHIP OK");
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                input->GetGuid(),
                                                LabelsAndEventClasses::LAYER_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT TYPE RELATIONSHIP OK");
 
     // Network - Input layer relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                input->GetGuid(),
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK - INPUT CHILD RELATIONSHIP OK");
 
     // Normalization layer
     // Normalization layer entity
     VerifyTimelineEntityBinaryPacketData(normalize->GetGuid(), readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION LAYER ENTITY OK");
 
     // Name entity
     ProfilingGuid normalizationLayerNameGuid = VerifyTimelineLabelBinaryPacketData(
-        EmptyOptional(), "normalization", readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION LAYER NAME LABEL OK");
+        arm::pipe::EmptyOptional(), "normalization", readableData, offset);
 
     // Entity - Name relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalize->GetGuid(),
                                                normalizationLayerNameGuid,
                                                LabelsAndEventClasses::NAME_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION LAYER NAME RELATIONSHIP OK");
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalize->GetGuid(),
                                                LabelsAndEventClasses::LAYER_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION LAYER TYPE RELATIONSHIP OK");
 
     // Network - Normalize layer relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                normalize->GetGuid(),
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK - NORMALIZATION LAYER CHILD RELATIONSHIP OK");
 
     // Input layer - Normalize layer relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                input->GetGuid(),
                                                normalize->GetGuid(),
                                                LabelsAndEventClasses::CONNECTION_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT - NORMALIZATION LAYER CONNECTION OK");
 
     // Normalization workload
     // Normalization workload entity
     ProfilingGuid normalizationWorkloadGuid = VerifyTimelineEntityBinaryPacketData(
-        EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD ENTITY OK");
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizationWorkloadGuid,
                                                LabelsAndEventClasses::WORKLOAD_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD TYPE RELATIONSHIP OK");
 
     // BackendId entity
     ProfilingGuid cpuRefLabelGuid = VerifyTimelineLabelBinaryPacketData(
-        EmptyOptional(), "CpuRef", readableData, offset);
-    BOOST_TEST_MESSAGE("CPUREF LABEL OK");
+        arm::pipe::EmptyOptional(), "CpuRef", readableData, offset);
 
     // Entity - BackendId relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizationWorkloadGuid,
                                                cpuRefLabelGuid,
                                                LabelsAndEventClasses::BACKENDID_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD BACKEND ID RELATIONSHIP OK");
 
     // Normalize layer - Normalize workload relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalize->GetGuid(),
                                                normalizationWorkloadGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION LAYER - WORKLOAD CHILD RELATIONSHIP OK");
 
     // Output layer
     // Output layer entity
     VerifyTimelineEntityBinaryPacketData(output->GetGuid(), readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT LAYER ENTITY OK");
 
     // Name entity
     ProfilingGuid outputLabelGuid = VerifyTimelineLabelBinaryPacketData(
-        EmptyOptional(), "output", readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT LAYER NAME LABEL OK");
+        arm::pipe::EmptyOptional(), "output", readableData, offset);
 
     // Entity - Name relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                output->GetGuid(),
                                                outputLabelGuid,
                                                LabelsAndEventClasses::NAME_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT LAYER NAME RELATIONSHIP OK");
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                output->GetGuid(),
                                                LabelsAndEventClasses::LAYER_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT LAYER TYPE RELATIONSHIP OK");
 
     // Network - Output layer relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                output->GetGuid(),
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK - OUTPUT LAYER CHILD RELATIONSHIP OK");
 
     // Normalize layer - Output layer relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalize->GetGuid(),
                                                output->GetGuid(),
                                                LabelsAndEventClasses::CONNECTION_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZE LAYER - OUTPUT LAYER CONNECTION OK");
 
     bufferManager.MarkRead(readableBuffer);
 
@@ -666,9 +922,11 @@ BOOST_AUTO_TEST_CASE(ProfilingEnableCpuRef)
     std::vector<float> inputData(16);
     std::vector<float> outputData(16);
 
+    TensorInfo inputTensorInfo = runtime.GetInputTensorInfo(netId, 0);
+    inputTensorInfo.SetConstant(true);
     InputTensors  inputTensors
     {
-        {0, ConstTensor(runtime.GetInputTensorInfo(netId, 0), inputData.data())}
+        {0, ConstTensor(inputTensorInfo, inputData.data())}
     };
     OutputTensors outputTensors
     {
@@ -680,404 +938,613 @@ BOOST_AUTO_TEST_CASE(ProfilingEnableCpuRef)
 
     // Get readable buffer for input workload
     auto  inputReadableBuffer = bufferManager.GetReadableBuffer();
-    BOOST_CHECK(inputReadableBuffer != nullptr);
+    CHECK(inputReadableBuffer != nullptr);
 
     // Get readable buffer for output workload
     auto outputReadableBuffer = bufferManager.GetReadableBuffer();
-    BOOST_CHECK(outputReadableBuffer != nullptr);
+    CHECK(outputReadableBuffer != nullptr);
 
     // Get readable buffer for inference timeline
     auto inferenceReadableBuffer = bufferManager.GetReadableBuffer();
-    BOOST_CHECK(inferenceReadableBuffer != nullptr);
+    CHECK(inferenceReadableBuffer != nullptr);
 
     // Validate input workload data
     size = inputReadableBuffer->GetSize();
-    BOOST_CHECK(size == 164);
+    CHECK(size == 164);
 
     readableData = inputReadableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     offset = 0;
 
     // Verify Header
     VerifyTimelineHeaderBinary(readableData, offset, 156);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD HEADER OK");
 
     // Input workload
     // Input workload entity
-    ProfilingGuid inputWorkloadGuid = VerifyTimelineEntityBinaryPacketData(EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD ENTITY OK");
+    ProfilingGuid inputWorkloadGuid = VerifyTimelineEntityBinaryPacketData(
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadGuid,
                                                LabelsAndEventClasses::WORKLOAD_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD TYPE RELATIONSHIP OK");
 
     // BackendId entity
     ProfilingGuid CpuRefLabelGuid = VerifyTimelineLabelBinaryPacketData(
-        EmptyOptional(), "CpuRef", readableData, offset);
-    BOOST_TEST_MESSAGE("CPUREF LABEL OK (INPUT WORKLOAD)");
+        arm::pipe::EmptyOptional(), "CpuRef", readableData, offset);
 
     // Entity - BackendId relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadGuid,
                                                CpuRefLabelGuid,
                                                LabelsAndEventClasses::BACKENDID_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD BACKEND ID RELATIONSHIP OK");
 
     // Input layer - Input workload relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                input->GetGuid(),
                                                inputWorkloadGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT LAYER - INPUT WORKLOAD CHILD RELATIONSHIP OK");
 
     bufferManager.MarkRead(inputReadableBuffer);
 
     // Validate output workload data
     size = outputReadableBuffer->GetSize();
-    BOOST_CHECK(size == 164);
+    CHECK(size == 164);
 
     readableData = outputReadableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     offset = 0;
 
     // Verify Header
     VerifyTimelineHeaderBinary(readableData, offset, 156);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD HEADER OK");
 
     // Output workload
     // Output workload entity
-    ProfilingGuid outputWorkloadGuid = VerifyTimelineEntityBinaryPacketData(EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD ENTITY OK");
+    ProfilingGuid outputWorkloadGuid = VerifyTimelineEntityBinaryPacketData(
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadGuid,
                                                LabelsAndEventClasses::WORKLOAD_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD TYPE RELATIONSHIP OK");
 
     // BackendId entity
-    VerifyTimelineLabelBinaryPacketData(EmptyOptional(), "CpuRef", readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD CPU REF LABEL OK");
+    VerifyTimelineLabelBinaryPacketData(arm::pipe::EmptyOptional(), "CpuRef", readableData, offset);
 
     // Entity - BackendId relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadGuid,
                                                CpuRefLabelGuid,
                                                LabelsAndEventClasses::BACKENDID_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD BACKEND ID RELATIONSHIP OK");
 
     // Output layer - Output workload relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                output->GetGuid(),
                                                outputWorkloadGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT LAYER - OUTPUT WORKLOAD CHILD RELATIONSHIP OK");
 
     bufferManager.MarkRead(outputReadableBuffer);
 
     // Validate inference data
     size = inferenceReadableBuffer->GetSize();
-    BOOST_CHECK(size == 976 + 8 * ThreadIdSize);
+    CHECK(size == 976 + 8 * ThreadIdSize);
 
     readableData = inferenceReadableBuffer->GetReadableData();
-    BOOST_CHECK(readableData != nullptr);
+    CHECK(readableData != nullptr);
 
     offset = 0;
 
     // Verify Header
     VerifyTimelineHeaderBinary(readableData, offset, 968 + 8 * ThreadIdSize);
-    BOOST_TEST_MESSAGE("INFERENCE HEADER OK");
 
     // Inference timeline trace
     // Inference entity
-    ProfilingGuid inferenceGuid = VerifyTimelineEntityBinaryPacketData(EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("INFERENCE ENTITY OK");
+    ProfilingGuid inferenceGuid = VerifyTimelineEntityBinaryPacketData(
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                LabelsAndEventClasses::INFERENCE_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE TYPE RELATIONSHIP OK");
 
     // Network - Inference relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                optNetGuid,
                                                inferenceGuid,
                                                LabelsAndEventClasses::EXECUTION_OF_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NETWORK - INFERENCE EXECUTION_OF RELATIONSHIP OK");
 
     // Start Inference life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid inferenceEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("INFERENCE START OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Inference - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                inferenceEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE START OF LIFE RELATIONSHIP OK");
 
     // Execution
     // Input workload execution
     // Input workload execution entity
     ProfilingGuid inputWorkloadExecutionGuid = VerifyTimelineEntityBinaryPacketData(
-        EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD EXECUTION ENTITY OK");
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::WORKLOAD_EXECUTION_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD EXECUTION TYPE RELATIONSHIP OK");
 
     // Inference - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                inputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE - INPUT WORKLOAD EXECUTION CHILD RELATIONSHIP OK");
 
     // Workload - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadGuid,
                                                inputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::EXECUTION_OF_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD - INPUT WORKLOAD EXECUTION RELATIONSHIP OK");
 
     // Start Input workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid inputWorkloadExecutionSOLEventId = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Input workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadExecutionGuid,
                                                inputWorkloadExecutionSOLEventId,
                                                LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD EXECUTION - START OF LIFE EVENT RELATIONSHIP OK");
 
     // End of Input workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid inputWorkloadExecutionEOLEventId = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Input workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inputWorkloadExecutionGuid,
                                                inputWorkloadExecutionEOLEventId,
                                                LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INPUT WORKLOAD EXECUTION - END OF LIFE EVENT RELATIONSHIP OK");
 
     // Normalize workload execution
     // Normalize workload execution entity
     ProfilingGuid normalizeWorkloadExecutionGuid = VerifyTimelineEntityBinaryPacketData(
-        EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZE WORKLOAD EXECUTION ENTITY OK");
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizeWorkloadExecutionGuid,
                                                LabelsAndEventClasses::WORKLOAD_EXECUTION_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZE WORKLOAD EXECUTION TYPE RELATIONSHIP OK");
 
     // Inference - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                normalizeWorkloadExecutionGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE - NORMALIZE WORKLOAD EXECUTION CHILD RELATIONSHIP OK");
 
     // Workload - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizationWorkloadGuid,
                                                normalizeWorkloadExecutionGuid,
                                                LabelsAndEventClasses::EXECUTION_OF_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD - NORMALIZATION WORKLOAD EXECUTION RELATIONSHIP OK");
 
     // Start Normalize workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid normalizationWorkloadExecutionSOLEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD EXECUTION START OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Normalize workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizeWorkloadExecutionGuid,
                                                normalizationWorkloadExecutionSOLEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD EXECUTION START OF LIFE RELATIONSHIP OK");
 
     // End of Normalize workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid normalizationWorkloadExecutionEOLEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD EXECUTION END OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Normalize workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                normalizeWorkloadExecutionGuid,
                                                normalizationWorkloadExecutionEOLEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("NORMALIZATION WORKLOAD EXECUTION END OF LIFE RELATIONSHIP OK");
 
     // Output workload execution
     // Output workload execution entity
     ProfilingGuid outputWorkloadExecutionGuid = VerifyTimelineEntityBinaryPacketData(
-        EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION ENTITY OK");
+        arm::pipe::EmptyOptional(), readableData, offset);
 
     // Entity - Type relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::LabelLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::WORKLOAD_EXECUTION_GUID,
                                                LabelsAndEventClasses::TYPE_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION TYPE RELATIONSHIP OK");
 
     // Inference - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                outputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::CHILD_GUID,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE - OUTPUT WORKLOAD EXECUTION CHILD RELATIONSHIP OK");
 
     // Workload - Workload execution relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::RetentionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadGuid,
                                                outputWorkloadExecutionGuid,
                                                LabelsAndEventClasses::EXECUTION_OF_GUID,
                                                readableData,
                                                offset);
-     BOOST_TEST_MESSAGE("OUTPUT WORKLOAD - OUTPUT WORKLOAD EXECUTION EXECUTION_OF RELATIONSHIP OK");
 
     // Start Output workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid outputWorkloadExecutionSOLEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION START OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Output workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadExecutionGuid,
                                                outputWorkloadExecutionSOLEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_SOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION - START OF LIFE EVENT RELATIONSHIP OK");
 
     // End of Normalize workload execution life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid outputWorkloadExecutionEOLEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION END OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Output workload execution - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                outputWorkloadExecutionGuid,
                                                outputWorkloadExecutionEOLEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("OUTPUT WORKLOAD EXECUTION - END OF LIFE EVENT RELATIONSHIP OK");
 
     // End of Inference life
     // Event packet - timeline, threadId, eventGuid
     ProfilingGuid inferenceEOLEventGuid = VerifyTimelineEventBinaryPacket(
-        EmptyOptional(), EmptyOptional(), EmptyOptional(), readableData, offset);
-    BOOST_TEST_MESSAGE("INFERENCE END OF LIFE EVENT OK");
+        arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), arm::pipe::EmptyOptional(), readableData, offset);
 
     // Inference - event relationship
     VerifyTimelineRelationshipBinaryPacketData(ProfilingRelationshipType::ExecutionLink,
-                                               EmptyOptional(),
+                                               arm::pipe::EmptyOptional(),
                                                inferenceGuid,
                                                inferenceEOLEventGuid,
                                                LabelsAndEventClasses::ARMNN_PROFILING_EOL_EVENT_CLASS,
                                                readableData,
                                                offset);
-    BOOST_TEST_MESSAGE("INFERENCE - END OF LIFE EVENT RELATIONSHIP OK");
 
     bufferManager.MarkRead(inferenceReadableBuffer);
 }
 
-BOOST_AUTO_TEST_CASE(ProfilingPostOptimisationStructureCpuRef)
+TEST_CASE("ProfilingPostOptimisationStructureCpuRef")
 {
     VerifyPostOptimisationStructureTestImpl(armnn::Compute::CpuRef);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+TEST_CASE("RuntimeOptimizeImportOff_LoadNetworkImportOn")
+{
+    // In this test case we'll optimize a network with both import and export disabled. Then we'll attempt to load
+    // that network but specify that the import memory source is Malloc.
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{{4}, armnn::DataType::Signed32};
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
+
+    OptimizerOptionsOpaque optimizedOptions;
+    // Hard set import and export to off.
+    optimizedOptions.SetImportEnabled(false);
+    optimizedOptions.SetExportEnabled(false);
+    IOptimizedNetworkPtr optNet = Optimize(*testNetwork, backends, runtime->GetDeviceSpec(), optimizedOptions);
+    CHECK(optNet);
+
+    std::string er;
+    // Load the network passing an import memory source.
+    armnn::INetworkProperties networkProperties1(true, MemorySource::Malloc, MemorySource::Undefined);
+    // There should be an InvalidArgumentException.
+    runtime->LoadNetwork(networkId, std::move(optNet), er, networkProperties1);
+    CHECK(er.find("However, it was disabled when this network was optimized") != -1);
+}
+
+TEST_CASE("RuntimeOptimizeExportOff_LoadNetworkExportOn")
+{
+    // In this test case we'll optimize a network with both import and export disabled. Then we'll attempt to load
+    // that network but specify that the export memory source as Malloc.
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{{4}, armnn::DataType::Signed32};
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
+
+    OptimizerOptionsOpaque optimizedOptions;
+    // Hard set import and export to off.
+    optimizedOptions.SetImportEnabled(false);
+    optimizedOptions.SetExportEnabled(false);
+    IOptimizedNetworkPtr optNet = Optimize(*testNetwork, backends, runtime->GetDeviceSpec(), optimizedOptions);
+    CHECK(optNet);
+
+    std::string er;
+    // Load the network passing an import memory source.
+    armnn::INetworkProperties networkProperties1(true, MemorySource::Undefined, MemorySource::Malloc);
+    // There should be an InvalidArgumentException.
+    runtime->LoadNetwork(networkId, std::move(optNet), er, networkProperties1);
+    CHECK(er.find("However, it was disabled when this network was optimized") != -1);
+}
+
+TEST_CASE("RuntimeOptimizeImportOn_LoadNetworkImportOff")
+{
+    // In this test case we'll optimize a network with import enabled. Then we'll attempt to load
+    // that network but specify that the import memory source is Undefined.
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{{4}, armnn::DataType::Signed32};
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
+
+    OptimizerOptionsOpaque optimizedOptions;
+    // Hard set import and export to off.
+    optimizedOptions.SetImportEnabled(true);
+    optimizedOptions.SetExportEnabled(false);
+    IOptimizedNetworkPtr optNet = Optimize(*testNetwork, backends, runtime->GetDeviceSpec(), optimizedOptions);
+    CHECK(optNet);
+
+    std::string er;
+    // Load the network passing an import memory source.
+    armnn::INetworkProperties networkProperties1(true, MemorySource::Undefined, MemorySource::Undefined);
+    // There should be an InvalidArgumentException.
+    runtime->LoadNetwork(networkId, std::move(optNet), er, networkProperties1);
+    CHECK(er.find("However, it was enabled when this network was optimized") != -1);
+}
+
+TEST_CASE("RuntimeOptimizeExportOn_LoadNetworkExportOff")
+{
+    // In this test case we'll optimize a network with export enabled. Then we'll attempt to load
+    // that network but specify that the export memory source is Undefined.
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{{4}, armnn::DataType::Signed32};
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = {armnn::Compute::CpuRef};
+
+    OptimizerOptionsOpaque optimizedOptions;
+    // Hard set import and export to off.
+    optimizedOptions.SetImportEnabled(false);
+    optimizedOptions.SetExportEnabled(true);
+    IOptimizedNetworkPtr optNet = Optimize(*testNetwork, backends, runtime->GetDeviceSpec(), optimizedOptions);
+    CHECK(optNet);
+
+    std::string er;
+    // Load the network passing an import memory source.
+    armnn::INetworkProperties networkProperties1(true, MemorySource::Undefined, MemorySource::Undefined);
+    // There should be an InvalidArgumentException.
+    runtime->LoadNetwork(networkId, std::move(optNet), er, networkProperties1);
+    CHECK(er.find("However, it was enabled when this network was optimized") != -1);
+}
+
+TEST_CASE("SyncExecutePreImportInputsHappyPath")
+{
+    // In this test case we'll mix "Pre Import" and pass by reference tensors as input.
+    //
+    // * Create a small network that takes two inputs.
+    // * Optimize it specifying that the inputs and outputs will not be imported or exported.
+    // * Create some malloc input and output tensors.
+    // * Use ImportInputs to import only one of the two inputs.
+    // * Call EnqueueWorkload passing one input tensor and one reference to a pre-imported tensor.
+
+    armnn::IRuntime::CreationOptions options;
+    armnn::IRuntimePtr runtime(armnn::IRuntime::Create(options));
+    armnn::NetworkId networkId = 1;
+    armnn::INetworkPtr testNetwork(armnn::INetwork::Create());
+
+    auto inputLayer1 = testNetwork->AddInputLayer(0, "input 1 layer");
+    auto inputLayer2 = testNetwork->AddInputLayer(1, "input 2 layer");
+    ARMNN_NO_DEPRECATE_WARN_BEGIN
+    auto addLayer    = testNetwork->AddAdditionLayer("add layer");
+    ARMNN_NO_DEPRECATE_WARN_END
+    auto outputLayer = testNetwork->AddOutputLayer(2, "output layer");
+
+    TensorInfo tensorInfo{ { 4 }, armnn::DataType::Signed32 };
+
+    inputLayer1->GetOutputSlot(0).Connect(addLayer->GetInputSlot(0));
+    inputLayer1->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    inputLayer2->GetOutputSlot(0).Connect(addLayer->GetInputSlot(1));
+    inputLayer2->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    addLayer->GetOutputSlot(0).Connect(outputLayer->GetInputSlot(0));
+    addLayer->GetOutputSlot(0).SetTensorInfo(tensorInfo);
+
+    std::vector<armnn::BackendId> backends = { armnn::Compute::CpuRef };
+
+    std::string er;
+    armnn::INetworkProperties networkProperties(false, MemorySource::Undefined, MemorySource::Undefined);
+    runtime->LoadNetwork(networkId, Optimize(*testNetwork, backends, runtime->GetDeviceSpec()), er, networkProperties);
+
+    std::vector<int> inputData1(4, 10);
+    std::vector<int> inputData2(4, 20);
+    std::vector<int> output(4);
+
+    ConstTensor inputTensor1({ { 4 }, armnn::DataType::Signed32, 0.0f, 0, true }, inputData1.data());
+    ConstTensor inputTensor2({ { 4 }, armnn::DataType::Signed32, 0.0f, 0, true }, inputData2.data());
+    Tensor outputTensor({ { 4 }, armnn::DataType::Signed32 }, output.data());
+
+    // An extra check here: the number of inputs provided to ImportInputs should not exceed the number of inputs
+    // to the network.
+    CHECK_THROWS_AS(runtime->ImportInputs(networkId, { { 0, inputTensor1 }, { 0, inputTensor1 }, { 0, inputTensor1 } },
+                                          MemorySource::Malloc),
+                    armnn::MemoryImportException);
+
+    // Pre Import one of the two input tensors.
+    std::vector<ImportedOutputId> importedInputVec =
+        runtime->ImportInputs(networkId, { { 0, inputTensor1 } }, MemorySource::Malloc);
+    CHECK(importedInputVec.size() == 1);
+    CHECK(importedInputVec[0] == 0);
+
+    // We've pre-imported tensor 1 and we'll pass tensor 2 by reference.
+    InputTensors inputTensors{ { 1, inputTensor2 } };
+    OutputTensors outputTensors{ { 2, outputTensor } };
+
+    // Do the inference
+    auto ret = runtime->EnqueueWorkload(networkId, inputTensors, outputTensors, importedInputVec,
+                                        std::vector<ImportedOutputId>());
+    REQUIRE(ret == Status::Success);
+}
+}

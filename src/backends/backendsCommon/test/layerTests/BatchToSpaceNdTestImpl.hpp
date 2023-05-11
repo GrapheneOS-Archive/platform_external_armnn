@@ -5,19 +5,16 @@
 
 #pragma once
 
-#include "LayerTestResult.hpp"
-
 #include <ResolveType.hpp>
 
-
 #include <armnn/backends/IBackendInternal.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
-#include <backendsCommon/test/DataTypeUtils.hpp>
-#include <backendsCommon/test/TensorCopyUtils.hpp>
-#include <backendsCommon/test/WorkloadTestUtils.hpp>
-
-#include <test/TensorHelpers.hpp>
+#include <DataTypeUtils.hpp>
+#include <armnnTestUtils/LayerTestResult.hpp>
+#include <armnnTestUtils/TensorCopyUtils.hpp>
+#include <armnnTestUtils/TensorHelpers.hpp>
+#include <armnnTestUtils/WorkloadTestUtils.hpp>
 
 namespace
 {
@@ -51,11 +48,10 @@ LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
     outputTensorInfo.SetQuantizationScale(scale);
     outputTensorInfo.SetQuantizationOffset(offset);
 
-    auto input = MakeTensor<T, InputDim>(inputTensorInfo, ConvertToDataType<ArmnnType>(inputData, inputTensorInfo));
+    std::vector<T> input = ConvertToDataType<ArmnnType>(inputData, inputTensorInfo);
 
-    LayerTestResult<T, OutputDim> result(outputTensorInfo);
-    result.outputExpected = MakeTensor<T, OutputDim>(outputTensorInfo,
-                                                     ConvertToDataType<ArmnnType>(outputData, outputTensorInfo));
+    std::vector<T> actualOutput(outputTensorInfo.GetNumElements());
+    std::vector<T> expectedOutput = ConvertToDataType<ArmnnType>(outputData, outputTensorInfo);
 
     std::unique_ptr<armnn::ITensorHandle> inputHandle = tensorHandleFactory.CreateTensorHandle(inputTensorInfo);
     std::unique_ptr<armnn::ITensorHandle> outputHandle = tensorHandleFactory.CreateTensorHandle(outputTensorInfo);
@@ -68,19 +64,23 @@ LayerTestResult<T, OutputDim> BatchToSpaceNdHelper(
     AddInputToWorkload(data, info, inputTensorInfo, inputHandle.get());
     AddOutputToWorkload(data, info, outputTensorInfo, outputHandle.get());
 
-    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateBatchToSpaceNd(data, info);
+    std::unique_ptr<armnn::IWorkload> workload = workloadFactory.CreateWorkload(armnn::LayerType::BatchToSpaceNd,
+                                                                                data, info);
 
     inputHandle->Allocate();
     outputHandle->Allocate();
 
-    CopyDataToITensorHandle(inputHandle.get(), input.origin());
+    CopyDataToITensorHandle(inputHandle.get(), input.data());
 
     workload->PostAllocationConfigure();
     workload->Execute();
 
-    CopyDataFromITensorHandle(&result.output[0][0][0][0], outputHandle.get());
+    CopyDataFromITensorHandle(actualOutput.data(), outputHandle.get());
 
-    return result;
+    return LayerTestResult<T, OutputDim>(actualOutput,
+                                         expectedOutput,
+                                         outputHandle->GetShape(),
+                                         outputTensorInfo.GetShape());
 }
 
 } // anonymous namespace
