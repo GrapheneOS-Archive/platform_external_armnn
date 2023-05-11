@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2017,2019-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -39,12 +39,23 @@ enum DataType : byte {
     QAsymmU8 = 6,
     QSymmS16 = 7,
     QAsymmS8 = 8,
-    QSymmS8 = 9
+    QSymmS8 = 9,
+    Signed64 = 10
 }
 
 enum DataLayout : byte {
     NHWC = 0,
-    NCHW = 1
+    NCHW = 1,
+    NDHWC = 2,
+    NCDHW = 3
+}
+
+enum ReduceOperation: byte {
+    Sum  = 0,
+    Max  = 1,
+    Mean = 2,
+    Min  = 3,
+    Prod  = 4
 }
 
 enum ResizeMethod: byte {
@@ -60,6 +71,8 @@ table TensorInfo {
     quantizationScales:[float];
     quantizationDim:uint;
     dimensionality:uint = 1;
+    dimensionSpecificity:[bool];
+    isConstant:bool = false;
 }
 
 struct Connection {
@@ -160,7 +173,17 @@ enum LayerType : uint {
     QLstm = 56,
     Fill = 57,
     Rank = 58,
-    LogicalBinary = 59
+    LogicalBinary = 59,
+    Reduce = 60,
+    Cast = 61,
+    Shape = 62,
+    UnidirectionalSequenceLstm = 63,
+    ChannelShuffle = 64,
+    Convolution3d = 65,
+    Pooling3d = 66,
+    GatherNd = 67,
+    BatchMatMul = 68,
+    ElementwiseBinary = 69,
 }
 
 // Base layer table to be used as part of other layers
@@ -209,6 +232,20 @@ table ArgMinMaxDescriptor{
     axis:int;
 }
 
+table CastLayer {
+    base:LayerBase;
+}
+
+table ChannelShuffleLayer {
+    base:LayerBase;
+    descriptor:ChannelShuffleDescriptor;
+}
+
+table ChannelShuffleDescriptor {
+    axis:uint = 0;
+    numGroups:uint = 0;
+}
+
 enum ComparisonOperation : byte {
     Equal = 0,
     Greater = 1,
@@ -252,6 +289,28 @@ table Convolution2dDescriptor {
     dataLayout:DataLayout = NCHW;
 }
 
+table Convolution3dLayer {
+    base:LayerBase;
+    descriptor:Convolution3dDescriptor;
+}
+
+table Convolution3dDescriptor {
+    padLeft:uint;
+    padRight:uint;
+    padTop:uint;
+    padBottom:uint;
+    padFront:uint;
+    padBack:uint;
+    strideX:uint;
+    strideY:uint;
+    strideZ:uint;
+    dilationX:uint = 1;
+    dilationY:uint = 1;
+    dilationZ:uint = 1;
+    biasEnabled:bool = false;
+    dataLayout:DataLayout = NDHWC;
+}
+
 table DepthToSpaceLayer {
     base:LayerBase;
     descriptor:DepthToSpaceDescriptor;
@@ -266,13 +325,34 @@ table DivisionLayer {
     base:LayerBase;
 }
 
+enum BinaryOperation : byte {
+    Add     = 0,
+    Div     = 1,
+    Maximum = 2,
+    Minimum = 3,
+    Mul     = 4,
+    Sub     = 5
+}
+
+table ElementwiseBinaryDescriptor {
+    operation:BinaryOperation;
+}
+
+table ElementwiseBinaryLayer {
+    base:LayerBase;
+    descriptor:ElementwiseBinaryDescriptor;
+}
+
 enum UnaryOperation : byte {
     Abs = 0,
     Rsqrt = 1,
     Sqrt = 2,
     Exp = 3,
     Neg = 4,
-    LogicalNot = 5
+    LogicalNot = 5,
+    Log = 6,
+    Sin = 7,
+    Ceil = 8
 }
 
 table ElementwiseUnaryDescriptor {
@@ -305,13 +385,14 @@ table FloorLayer{
 table FullyConnectedLayer {
     base:LayerBase;
     descriptor:FullyConnectedDescriptor;
-    weights:ConstTensor;
+    weights:ConstTensor; // ConstTensors are now passed as inputs.
     biases:ConstTensor;
 }
 
 table FullyConnectedDescriptor {
     biasEnabled:bool = false;
     transposeWeightsMatrix:bool = false;
+    constantWeights:bool = true;
 }
 
 table GatherLayer {
@@ -321,6 +402,10 @@ table GatherLayer {
 
 table GatherDescriptor {
     axis:int = 0;
+}
+
+table GatherNdLayer {
+    base:LayerBase;
 }
 
 /// @deprecated Use ComparisonLayer instead
@@ -395,6 +480,11 @@ table Pooling2dLayer {
     descriptor:Pooling2dDescriptor;
 }
 
+table Pooling3dLayer {
+    base:LayerBase;
+    descriptor:Pooling3dDescriptor;
+}
+
 enum PoolingAlgorithm : byte {
     Max = 0,
     Average = 1,
@@ -426,6 +516,25 @@ table Pooling2dDescriptor {
     dataLayout:DataLayout;
 }
 
+table Pooling3dDescriptor {
+    poolType:PoolingAlgorithm;
+    padLeft:uint;
+    padRight:uint;
+    padTop:uint;
+    padBottom:uint;
+    padFront:uint;
+    padBack:uint;
+    poolWidth:uint;
+    poolHeight:uint;
+    poolDepth:uint;
+    strideX:uint;
+    strideY:uint;
+    strideZ:uint;
+    outputShapeRounding:OutputShapeRounding;
+    paddingMethod:PaddingMethod;
+    dataLayout:DataLayout;
+}
+
 table QuantizeLayer {
     base:LayerBase;
 }
@@ -437,6 +546,7 @@ table SoftmaxLayer {
 
 table SoftmaxDescriptor {
     beta:float;
+    axis:int = -1;
 }
 
 table DepthwiseConvolution2dLayer {
@@ -469,7 +579,7 @@ table ReshapeLayer {
 }
 
 table ReshapeDescriptor {
-  targetShape:[uint];
+    targetShape:[uint];
 }
 
 table PermuteLayer {
@@ -479,6 +589,10 @@ table PermuteLayer {
 
 table PermuteDescriptor {
     dimMappings:[uint];
+}
+
+table ShapeLayer {
+    base:LayerBase;
 }
 
 table SpaceToBatchNdLayer {
@@ -557,9 +671,16 @@ table PadLayer {
     descriptor:PadDescriptor;
 }
 
+enum PaddingMode : byte {
+    Constant  = 0,
+    Reflect   = 1,
+    Symmetric = 2
+}
+
 table PadDescriptor {
     padList:[uint];
     padValue:float = 0;
+    paddingMode:PaddingMode = Constant;
 }
 
 /// @deprecated Use ElementwiseUnaryLayer instead
@@ -881,6 +1002,48 @@ table RankLayer {
     base:LayerBase;
 }
 
+table ReduceLayer {
+    base:LayerBase;
+    descriptor:ReduceDescriptor;
+}
+
+table ReduceDescriptor {
+    keepDims:bool = false;
+    axis:[uint];
+    reduceOperation:ReduceOperation = Sum;
+}
+
+table UnidirectionalSequenceLstmDescriptor {
+    activationFunc:uint;
+    clippingThresCell:float;
+    clippingThresProj:float;
+    cifgEnabled:bool = true;
+    peepholeEnabled:bool = false;
+    projectionEnabled:bool = false;
+    layerNormEnabled:bool = false;
+    timeMajor:bool = false;
+}
+
+table UnidirectionalSequenceLstmLayer {
+    base:LayerBase;
+    descriptor:UnidirectionalSequenceLstmDescriptor;
+    inputParams:LstmInputParams;
+}
+
+table BatchMatMulDescriptor {
+    transposeX:bool = false;
+    transposeY:bool = false;
+    adjointX:bool = false;
+    adjointY:bool = false;
+    dataLayoutX:DataLayout = NCHW;
+    dataLayoutY:DataLayout = NCHW;
+}
+
+table BatchMatMulLayer {
+    base:LayerBase;
+    descriptor:BatchMatMulDescriptor;
+}
+
 union Layer {
     ActivationLayer,
     AdditionLayer,
@@ -941,7 +1104,17 @@ union Layer {
     QLstmLayer,
     FillLayer,
     RankLayer,
-    LogicalBinaryLayer
+    LogicalBinaryLayer,
+    ReduceLayer,
+    CastLayer,
+    ShapeLayer,
+    UnidirectionalSequenceLstmLayer,
+    ChannelShuffleLayer,
+    Convolution3dLayer,
+    Pooling3dLayer,
+    GatherNdLayer,
+    BatchMatMulLayer,
+    ElementwiseBinaryLayer,
 }
 
 table AnyLayer {
@@ -950,6 +1123,8 @@ table AnyLayer {
 
 table FeatureCompatibilityVersions {
   bindingIdsScheme:uint = 0;
+  weightsLayoutScheme:uint = 0;
+  constantTensorsAsInputs:uint = 0;
 }
 
 // Root type for serialized data is the graph of the network

@@ -28,7 +28,7 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validate.
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a FloorLayer.

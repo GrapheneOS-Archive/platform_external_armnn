@@ -6,14 +6,14 @@
 #pragma once
 
 #include <cl/ClContextControl.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 template<bool ProfilingEnabled>
 struct ClContextControlFixtureBase
 {
     // Initialising ClContextControl to ensure OpenCL is loaded correctly for each test case
     ClContextControlFixtureBase()
-        : m_ClContextControl(nullptr, ProfilingEnabled) {}
+        : m_ClContextControl(nullptr, nullptr, ProfilingEnabled) {}
 
     armnn::ClContextControl m_ClContextControl;
 };

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -8,13 +8,13 @@
 #include <armnn/INetwork.hpp>
 #include <armnn/utility/IgnoreUnused.hpp>
 
-#include <boost/test/unit_test.hpp>
+#include <doctest/doctest.h>
 
 #include <set>
 
-BOOST_AUTO_TEST_SUITE(EndToEnd)
-
-BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
+TEST_SUITE("EndToEnd")
+{
+TEST_CASE("ErrorOnLoadNetwork")
 {
     using namespace armnn;
 
@@ -46,14 +46,14 @@ BOOST_AUTO_TEST_CASE(ErrorOnLoadNetwork)
 
     try
     {
-        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptions(), errMessages);
-        BOOST_FAIL("Should have thrown an exception.");
+        Optimize(*net, backends, runtime->GetDeviceSpec(), OptimizerOptionsOpaque(), errMessages);
+        FAIL("Should have thrown an exception.");
     }
-    catch (const InvalidArgumentException& e)
+    catch (const InvalidArgumentException&)
     {
         // Different exceptions are thrown on different backends
     }
-    BOOST_CHECK(errMessages.size() > 0);
+    CHECK(errMessages.size() > 0);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

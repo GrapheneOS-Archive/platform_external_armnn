@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 %{
@@ -11,6 +11,11 @@
 %}
 
 %include <typemaps/network_optimize.i>
+%include <typemaps/model_options.i>
+
+namespace std {
+    %template() std::vector<armnn::BackendOptions>;
+}
 
 namespace armnn
 {
@@ -20,13 +25,24 @@ Struct for holding options relating to the Arm NN optimizer. See `Optimize`.
 
 Contains:
     m_debug (bool): Add debug data for easier troubleshooting.
-    m_ReduceFp32ToBf16 (bool): Reduces Fp32 network to BFloat16 (Bf16) for faster processing. Layers
-                               that can not be reduced will be left in Fp32.
+    m_ReduceFp32ToBf16 (bool): This feature has been replaced by enabling Fast Math in compute library backend options.
+                               This is currently a placeholder option.
     m_ReduceFp32ToFp16 (bool): Reduces Fp32 network to Fp16 for faster processing. Layers
                                that can not be reduced will be left in Fp32.
-    m_ImportEnabled (bool): Enable memory import.
+    m_ImportEnabled (bool):    Enable memory import of inport tensors.
+    m_shapeInferenceMethod:    The ShapeInferenceMethod modifies how the output shapes are treated.
+                               When ValidateOnly is selected, the output shapes are inferred from the input parameters
+                               of the layer and any mismatch is reported.
+                               When InferAndValidate is selected 2 actions are performed: (1)infer output shape from
+                               inputs and (2)validate the shapes as in ValidateOnly. This option has been added to work
+                               with tensors which rank or dimension sizes are not specified explicitly, however this
+                               information can be calculated from the inputs.
+    m_ModelOptions:            List of backends optimisation options.
+    m_ExportEnabled (bool):    Enable memory export of output tensors.
 
 ") OptimizerOptions;
+
+%model_options_typemap;
 struct OptimizerOptions
 {
     OptimizerOptions();
@@ -34,13 +50,20 @@ struct OptimizerOptions
     OptimizerOptions(bool reduceFp32ToFp16,
                      bool debug,
                      bool reduceFp32ToBf16 = false,
-                     bool importEnabled = false);
+                     ShapeInferenceMethod shapeInferenceMethod = armnn::ShapeInferenceMethod::ValidateOnly,
+                     bool importEnabled = false,
+                     std::vector<armnn::BackendOptions> modelOptions = {},
+                     bool exportEnabled = false);
 
     bool m_ReduceFp32ToBf16;
     bool m_ReduceFp32ToFp16;
     bool m_Debug;
+    ShapeInferenceMethod m_shapeInferenceMethod;
     bool m_ImportEnabled;
+    std::vector<armnn::BackendOptions> m_ModelOptions;
+    bool m_ExportEnabled;
 };
+%model_options_clear;
 
 %feature("docstring",
 "
@@ -405,7 +428,36 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddBatchToSpaceNdLayer;
     armnn::IConnectableLayer* AddBatchToSpaceNdLayer(const armnn::BatchToSpaceNdDescriptor& batchToSpaceNdDescriptor,
-                                                      const char* name = nullptr);
+                                                     const char* name = nullptr);
+
+    %feature("docstring",
+         "
+        Adds a ChannelShuffle layer to the network.
+
+        Args:
+            channelShuffleDescriptor (ChannelShuffleDescriptor): Configuration parameters for the layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddChannelShuffleLayer;
+    armnn::IConnectableLayer* AddChannelShuffleLayer(const armnn::ChannelShuffleDescriptor& channelShuffleDescriptor,
+                                                     const char* name = nullptr);
+
+
+
+    %feature("docstring",
+        "
+        Adds a Cast layer to the network.
+
+        Args:
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddCastLayer;
+    armnn::IConnectableLayer* AddCastLayer(const char* name = nullptr);
+
 
     %feature("docstring",
         "
@@ -433,7 +485,7 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddConcatLayer;
     armnn::IConnectableLayer* AddConcatLayer(const armnn::ConcatDescriptor& concatDescriptor,
-                                              const char* name = nullptr);
+                                             const char* name = nullptr);
 
 
     %feature("docstring",
@@ -450,7 +502,24 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddConstantLayer;
     armnn::IConnectableLayer* AddConstantLayer(const armnn::ConstTensor& input,
-                                                const char* name = nullptr);
+                                               const char* name = nullptr);
+
+
+    %feature("docstring",
+             "
+    Adds a 3D Convolution layer to the network.
+
+            Args:
+    convolution3dDescriptor (Convolution3dDescriptor): Description of the 3D convolution layer.
+            name (str): Optional name for the layer.
+
+            Returns:
+    IConnectableLayer: Interface for configuring the layer.
+    ") AddConvolution3dLayer;
+
+    armnn::IConnectableLayer* AddConvolution3dLayer(const armnn::Convolution3dDescriptor& convolution3dDescriptor,
+    const char* name = nullptr);
+
 
     %feature("docstring",
         "
@@ -464,7 +533,23 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddDepthToSpaceLayer;
     armnn::IConnectableLayer* AddDepthToSpaceLayer(const armnn::DepthToSpaceDescriptor& depthToSpaceDescriptor,
-                                                    const char* name = nullptr);
+                                                   const char* name = nullptr);
+
+    %feature("docstring",
+        "
+        Adds a 2D Depthwise Convolution layer to the network.
+
+        Args:
+            convolution2dDescriptor (DepthwiseConvolution2dDescriptor): Description of the 2D depthwise convolution layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddDepthwiseConvolution2dLayer;
+
+    armnn::IConnectableLayer* AddDepthwiseConvolution2dLayer(
+        const armnn::DepthwiseConvolution2dDescriptor& convolution2dDescriptor,
+        const char* name = nullptr);
 
     %feature("docstring",
         "
@@ -477,7 +562,6 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddDequantizeLayer;
     armnn::IConnectableLayer* AddDequantizeLayer(const char* name = nullptr);
-
 
     %feature("docstring",
         "
@@ -565,6 +649,18 @@ public:
 
     %feature("docstring",
         "
+        Add GatherNd layer to the network.
+
+        Args:
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddGatherNdLayer;
+    armnn::IConnectableLayer* AddGatherNdLayer(const char* name = nullptr);
+
+    %feature("docstring",
+        "
         Adds an Instance Normalization layer to the network.
 
         Args:
@@ -575,9 +671,9 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddInstanceNormalizationLayer;
     armnn::IConnectableLayer* AddInstanceNormalizationLayer(const armnn::InstanceNormalizationDescriptor& desc,
-                                                             const char* name = nullptr);
+                                                            const char* name = nullptr);
 
-   %feature("docstring",
+    %feature("docstring",
         "
         Adds a Log Softmax layer to the network.
 
@@ -591,7 +687,7 @@ public:
     armnn::IConnectableLayer* AddLogSoftmaxLayer(const armnn::LogSoftmaxDescriptor& logSoftmaxDescriptor,
                                                   const char* name = nullptr);
 
-   %feature("docstring",
+    %feature("docstring",
         "
         Adds an L2 Normalization layer to the network.
         Normalization is performed along dimension 1, but requires a 4d input.
@@ -622,7 +718,7 @@ public:
                                             const armnn::LstmInputParams& params,
                                             const char* name = nullptr);
 
-   %feature("docstring",
+    %feature("docstring",
         "
         Add a Maximum layer to the network.
 
@@ -737,7 +833,21 @@ public:
             IConnectableLayer: Interface for configuring the layer.
         ") AddPooling2dLayer;
     armnn::IConnectableLayer* AddPooling2dLayer(const armnn::Pooling2dDescriptor& pooling2dDescriptor,
-        const char* name = nullptr);
+                                                const char* name = nullptr);
+
+    %feature("docstring",
+        "
+        Adds a 3D Pooling layer to the network. Type of 3D pooling is decided by the configuration.
+
+        Args:
+            pooling3dDescriptor (Pooling3dDescriptor): Configuration for the 3D pooling layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddPooling3dLayer;
+    armnn::IConnectableLayer* AddPooling3dLayer(const armnn::Pooling3dDescriptor& pooling3dDescriptor,
+                                                const char* name = nullptr);
 
     %feature("docstring",
         "
@@ -777,7 +887,6 @@ public:
     armnn::IConnectableLayer* AddQuantizedLstmLayer(const armnn::QuantizedLstmInputParams& params,
                                                      const char* name = nullptr);
 
-
     %feature("docstring",
         "
         Adds a Rank layer to the network.
@@ -790,7 +899,20 @@ public:
         ") AddRankLayer;
     armnn::IConnectableLayer* AddRankLayer(const char* name = nullptr);
 
-    
+    %feature("docstring",
+        "
+        Adds a Reduce layer to the network.
+
+        Args:
+            reduceDescriptor (ReduceDescriptor): Parameters for the reduce operation.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddReduceLayer;
+    armnn::IConnectableLayer* AddReduceLayer(const armnn::ReduceDescriptor& reduceDescriptor,
+                                             const char* name = nullptr);
+
     %feature("docstring",
         "
         Adds a Reshape layer to the network.
@@ -819,6 +941,17 @@ public:
     armnn::IConnectableLayer* AddResizeLayer(const armnn::ResizeDescriptor& resizeDescriptor,
                                               const char* name = nullptr);
 
+    %feature("docstring",
+        "
+        Adds a Shape layer to the network.
+
+        Args:
+            name(str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer
+        ") AddShapeLayer;
+    armnn::IConnectableLayer* AddShapeLayer(const char* name = nullptr);
 
     %feature("docstring",
         "
@@ -959,6 +1092,47 @@ public:
         ") AddSwitchLayer;
     armnn::IConnectableLayer* AddSwitchLayer(const char* name = nullptr);
 
+    %feature("docstring",
+        "
+        Adds a Fully Connected layer to the network. Also known as a Linear or Dense layer.
+
+        Args:
+            fullyConnectedDescriptor (FullyConnectedDescriptor): Description of the fully connected layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddFullyConnectedLayer;
+    armnn::IConnectableLayer* AddFullyConnectedLayer(const armnn::FullyConnectedDescriptor& fullyConnectedDescriptor,
+                                                     const char* name = nullptr);
+
+    %feature("docstring",
+        "
+        Adds a LogicalBinary layer to the network.
+
+        Args:
+            logicalBinaryDescriptor (LogicalBinaryDescriptor): Description of the LogicalBinary layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddLogicalBinaryLayer;
+    armnn::IConnectableLayer* AddLogicalBinaryLayer(const armnn::LogicalBinaryDescriptor& logicalBinaryDescriptor,
+                                                    const char* name = nullptr);
+
+    %feature("docstring",
+        "
+        Adds a Transpose layer to the network.
+
+        Args:
+            transposeDescriptor (TransposeDescriptor): Description of the transpose layer.
+            name (str): Optional name for the layer.
+
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddTransposeLayer;
+    armnn::IConnectableLayer* AddTransposeLayer(const armnn::TransposeDescriptor& transposeDescriptor,
+                                                const char* name = nullptr);
 };
 
 %extend INetwork {
@@ -972,50 +1146,22 @@ public:
     }
 
     %feature("docstring",
-    "
-    Adds a Fully Connected layer to the network. Also known as a Linear or Dense layer.
+        "
+        Adds a 2D Transpose Convolution layer to the network.
 
-    Args:
-        fullyConnectedDescriptor (FullyConnectedDescriptor): Description of the fully connected layer.
-        weights (ConstTensor): Tensor for the weights data.
-        biases (ConstTensor): Optional tensor for the bias data.
-        name (str): Optional name for the layer.
+        Args:
+            descriptor (TransposeConvolution2dDescriptor): Descriptor containing all parameters to configure this layer.
+            weights (ConstTensor): Tensor for the weights data.
+            biases (ConstTensor): Optional tensor for the bias data.
+            name (str): Optional name for the layer.
 
-    Returns:
-        IConnectableLayer: Interface for configuring the layer.
-    ") AddFullyConnectedLayer;
-    armnn::IConnectableLayer* AddFullyConnectedLayer(const armnn::FullyConnectedDescriptor& fullyConnectedDescriptor,
-                                                     const armnn::ConstTensor& weights,
-                                                     armnn::ConstTensor* biases = nullptr,
-                                                     const char* name = nullptr) {
-
-        if (biases) {
-            return $self->AddFullyConnectedLayer(fullyConnectedDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(*biases), name);
-        } else {
-            return $self->AddFullyConnectedLayer(fullyConnectedDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(), name);
-        }
-
-    }
-
-    %feature("docstring",
-    "
-    Adds a 2D Transpose Convolution layer to the network.
-
-    Args:
-        descriptor (TransposeConvolution2dDescriptor): Descriptor containing all parameters to configure this layer.
-        weights (ConstTensor): Tensor for the weights data.
-        biases (ConstTensor): Optional tensor for the bias data.
-        name (str): Optional name for the layer.
-
-    Returns:
-        IConnectableLayer: Interface for configuring the layer.
-    ") AddTransposeConvolution2dLayer;
+        Returns:
+            IConnectableLayer: Interface for configuring the layer.
+        ") AddTransposeConvolution2dLayer;
     armnn::IConnectableLayer* AddTransposeConvolution2dLayer(const armnn::TransposeConvolution2dDescriptor& descriptor,
                                                              const armnn::ConstTensor& weights,
                                                              armnn::ConstTensor* biases = nullptr,
-                                                             const char* name = nullptr){
+                                                             const char* name = nullptr) {
 
         if (biases) {
             return $self->AddTransposeConvolution2dLayer(descriptor, weights,
@@ -1033,25 +1179,15 @@ public:
 
         Args:
             convolution2dDescriptor (Convolution2dDescriptor): Description of the 2D convolution layer.
-            weights (ConstTensor): Tensor for the weights data.
-            biases (ConstTensor): Optional tensor for the bias data. If specified, must match the output tensor shape.
             name (str): Optional name for the layer.
 
         Returns:
             IConnectableLayer: Interface for configuring the layer.
         ") AddConvolution2dLayer;
     armnn::IConnectableLayer* AddConvolution2dLayer(const armnn::Convolution2dDescriptor& convolution2dDescriptor,
-                                                     const armnn::ConstTensor& weights,
-                                                     armnn::ConstTensor* biases = nullptr,
-                                                     const char* name = nullptr) {
+                                                    const char* name = nullptr) {
 
-        if (biases) {
-            return $self->AddConvolution2dLayer(convolution2dDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(*biases), name);
-        } else {
-            return $self->AddConvolution2dLayer(convolution2dDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(), name);
-        }
+        return $self->AddConvolution2dLayer(convolution2dDescriptor, name);
     }
 
     %feature("docstring",
@@ -1060,8 +1196,6 @@ public:
 
         Args:
             convolution2dDescriptor (DepthwiseConvolution2dDescriptor): Description of the 2D depthwise convolution layer.
-            weights (ConstTensor): Tensor for the weights. Expected format: [channelMultiplier, inputChannels, height, width].
-            biases (ConstTensor): Optional tensor for the bias data. If specified, must match the output tensor shape.
             name (str): Optional name for the layer.
 
         Returns:
@@ -1070,18 +1204,11 @@ public:
 
     armnn::IConnectableLayer* AddDepthwiseConvolution2dLayer(
         const armnn::DepthwiseConvolution2dDescriptor& convolution2dDescriptor,
-        const armnn::ConstTensor& weights,
-        const armnn::ConstTensor* biases = nullptr,
         const char* name = nullptr) {
 
-        if (biases) {
-            return $self->AddDepthwiseConvolution2dLayer(convolution2dDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(*biases), name);
-        } else {
-            return $self->AddDepthwiseConvolution2dLayer(convolution2dDescriptor, weights,
-                                                 armnn::Optional<armnn::ConstTensor>(), name);
-        }
+        return $self->AddDepthwiseConvolution2dLayer(convolution2dDescriptor, name);
     }
+
 }
 
 %feature("docstring",

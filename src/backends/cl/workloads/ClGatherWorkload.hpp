@@ -1,11 +1,11 @@
 //
-// Copyright © 2020 Arm Ltd. All rights reserved.
+// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #pragma once
 
-#include <backendsCommon/Workload.hpp>
+#include "ClBaseWorkload.hpp"
 
 #include <arm_compute/runtime/CL/functions/CLGather.h>
 
@@ -16,10 +16,12 @@ arm_compute::Status ClGatherWorkloadValidate(const TensorInfo& input,
                                              const TensorInfo& output,
                                              const GatherDescriptor& descriptor);
 
-class ClGatherWorkload : public BaseWorkload<GatherQueueDescriptor>
+class ClGatherWorkload : public ClBaseWorkload<GatherQueueDescriptor>
 {
 public:
-    ClGatherWorkload(const GatherQueueDescriptor& descriptor, const WorkloadInfo& info);
+    ClGatherWorkload(const GatherQueueDescriptor& descriptor,
+                     const WorkloadInfo& info,
+                     const arm_compute::CLCompileContext& clCompileContext);
     void Execute() const override;
 
 private:

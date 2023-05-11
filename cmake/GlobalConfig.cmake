@@ -1,10 +1,9 @@
 #
-# Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+# Copyright © 2022-2023 Arm Ltd and Contributors. All rights reserved.
 # Copyright 2020 NXP
 # SPDX-License-Identifier: MIT
 #
-option(BUILD_CAFFE_PARSER "Build Caffe parser" OFF)
-option(BUILD_TF_PARSER "Build Tensorflow parser" OFF)
+
 option(BUILD_ONNX_PARSER "Build Onnx parser" OFF)
 option(BUILD_UNIT_TESTS "Build unit tests" ON)
 option(BUILD_TESTS "Build test applications" OFF)
@@ -12,6 +11,7 @@ option(BUILD_FOR_COVERAGE "Use no optimization and output .gcno and .gcda files"
 option(ARMCOMPUTENEON "Build with ARM Compute NEON support" OFF)
 option(ARMCOMPUTECL "Build with ARM Compute OpenCL support" OFF)
 option(ARMNNREF "Build with ArmNN reference support" ON)
+option(ARMNNTOSAREF "Build with TOSA reference support" OFF)
 option(PROFILING_BACKEND_STREAMLINE "Forward the armNN profiling events to DS-5/Streamline as annotations" OFF)
 # options used for heap profiling and leak checking
 option(HEAP_PROFILING "Build with heap profiling enabled" OFF)
@@ -20,22 +20,48 @@ option(GPERFTOOLS_ROOT "Location where the gperftools 'include' and 'lib' folder
 # options used for tensorflow lite support
 option(BUILD_TF_LITE_PARSER "Build Tensorflow Lite parser" OFF)
 option(BUILD_ARMNN_SERIALIZER "Build Armnn Serializer" OFF)
-option(BUILD_ARMNN_QUANTIZER "Build ArmNN quantizer" OFF)
 option(BUILD_ACCURACY_TOOL "Build Accuracy Tool" OFF)
 option(FLATC_DIR "Path to Flatbuffers compiler" OFF)
 option(TF_LITE_GENERATED_PATH "Tensorflow lite generated C++ schema location" OFF)
 option(FLATBUFFERS_ROOT "Location where the flatbuffers 'include' and 'lib' folders to be found" Off)
+option(TOSA_SERIALIZATION_LIB_ROOT "Location where the TOSA Serialization Library 'include' and 'lib' folders can be found" OFF)
+option(TOSA_REFERENCE_MODEL_ROOT "Location where the TOSA Reference Model 'include' and 'lib' folders can be found" OFF)
+option(TOSA_REFERENCE_MODEL_OUTPUT "TOSA Reference Model output is printed during layer support checks" ON)
 option(DYNAMIC_BACKEND_PATHS "Colon seperated list of paths where to load the dynamic backends from" "")
 option(SAMPLE_DYNAMIC_BACKEND "Include the sample dynamic backend and its tests in the build" OFF)
 option(BUILD_GATORD_MOCK "Build the Gatord simulator for external profiling testing." ON)
 option(BUILD_TIMELINE_DECODER "Build the Timeline Decoder for external profiling." ON)
-option(SHARED_BOOST "Use dynamic linking for boost libraries" OFF)
 option(BUILD_BASE_PIPE_SERVER "Build the server to handle external profiling pipe traffic" ON)
 option(BUILD_PYTHON_WHL "Build Python wheel package" OFF)
 option(BUILD_PYTHON_SRC "Build Python source package" OFF)
 option(BUILD_STATIC_PIPE_LIBS "Build Static PIPE libraries" OFF)
 option(BUILD_PIPE_ONLY "Build the PIPE libraries only" OFF)
-option(BUILD_ARMNN_TFLITE_DELEGATE "Build the Arm NN TfLite delegate" OFF)
+option(BUILD_CLASSIC_DELEGATE "Build the Arm NN TfLite delegate" OFF)
+option(BUILD_OPAQUE_DELEGATE "Build the Arm NN TfLite Opaque delegate" OFF)
+option(BUILD_MEMORY_STRATEGY_BENCHMARK "Build the MemoryBenchmark" OFF)
+option(BUILD_BARE_METAL "Disable features requiring operating system support" OFF)
+option(BUILD_SHARED_LIBS "Determines if Armnn will be built statically or dynamically.
+                          This is an experimental feature and not fully supported.
+                          Only the ArmNN core and the Delegate can be built statically." ON)
+option(EXECUTE_NETWORK_STATIC " This is a limited experimental build that is entirely static.
+                                It currently only supports being set by changing the current CMake default options like so:
+                                BUILD_TF_LITE_PARSER=1/0
+                                BUILD_ARMNN_SERIALIZER=1/0
+                                ARMCOMPUTENEON=1/0
+                                ARMNNREF=1/0
+                                ARMCOMPUTECL=0
+                                BUILD_ONNX_PARSER=0
+                                BUILD_CLASSIC_DELEGATE=0
+                                BUILD_OPAQUE_DELEGATE=0
+                                BUILD_TIMELINE_DECODER=0
+                                BUILD_BASE_PIPE_SERVER=0
+                                BUILD_UNIT_TESTS=0
+                                BUILD_GATORD_MOCK=0" OFF)
+
+if(BUILD_ARMNN_TFLITE_DELEGATE)
+    message(BUILD_ARMNN_TFLITE_DELEGATE option is deprecated, it will be removed in 24.02, please use BUILD_CLASSIC_DELEGATE instead)
+    set(BUILD_CLASSIC_DELEGATE 1)
+endif()
 
 include(SelectLibraryConfigurations)
 
@@ -70,15 +96,20 @@ endif()
 # Compiler flags that are always set
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if(COMPILER_IS_GNU_LIKE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wall -Wextra -Werror -Wold-style-cast -Wno-missing-braces -Wconversion -Wsign-conversion")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra -Werror -Wold-style-cast -Wno-missing-braces -Wconversion -Wsign-conversion")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wno-psabi")
+    endif()
 elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL MSVC)
-	# Disable C4996 (use of deprecated identifier) due to https://developercommunity.visualstudio.com/content/problem/252574/deprecated-compilation-warning-for-virtual-overrid.html
+    # Disable C4996 (use of deprecated identifier) due to
+    # https://developercommunity.visualstudio.com/content/problem/252574/deprecated-compilation-warning-for-virtual-overrid.html
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /MP /wd4996")
     add_definitions(-DNO_STRICT=1)
 endif()
 if("${CMAKE_SYSTEM_NAME}" STREQUAL Android)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -llog")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -llog")
+    # -lz is necessary for when building with ACL set with compressed kernels
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -llog -lz")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -llog -lz")
 endif()
 
 # Compiler flags for Release builds
@@ -126,21 +157,19 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules ${CMAKE_MODULE_P
 
 include(CMakeFindDependencyMacro)
 
-if (NOT BUILD_PIPE_ONLY)
-  # Boost
-  message(STATUS "Finding Boost")
-  if(SHARED_BOOST)
-    add_definitions(-DBOOST_ALL_DYN_LINK)
-    set(Boost_USE_STATIC_LIBS OFF)
-  else()
-    set(Boost_USE_STATIC_LIBS ON)
-  endif()
-  if (BUILD_UNIT_TESTS)
-    add_definitions("-DBOOST_ALL_NO_LIB") # Turn off auto-linking as we specify the libs manually
-    find_package(Boost 1.59 REQUIRED COMPONENTS unit_test_framework)
-    include_directories(SYSTEM "${Boost_INCLUDE_DIRS}")
-    link_directories(${Boost_LIBRARY_DIRS})
-  endif()
+
+if(EXECUTE_NETWORK_STATIC)
+    add_definitions(-DARMNN_DISABLE_SOCKETS
+                    -DBUILD_SHARED_LIBS=0
+                    -DARMNN_EXECUTE_NETWORK_STATIC)
+endif()
+
+if(BUILD_BARE_METAL)
+    add_definitions(-DARMNN_BUILD_BARE_METAL
+            -DARMNN_DISABLE_FILESYSTEM
+            -DARMNN_DISABLE_PROCESSES
+            -DARMNN_DISABLE_THREADS
+            -DARMNN_DISABLE_SOCKETS)
 endif()
 
 if (NOT BUILD_PIPE_ONLY)
@@ -155,11 +184,23 @@ if (NOT BUILD_PIPE_ONLY)
   include_directories(SYSTEM "${GHC_INCLUDE}")
 endif()
 
+# JNI_BUILD has DBUILD_SHARED_LIBS set to 0 and not finding libs while building
+# hence added NOT BUILD_CLASSIC_DELEGATE/BUILD_OPAQUE_DELEGATE condition
+if(NOT BUILD_SHARED_LIBS AND NOT BUILD_CLASSIC_DELEGATE AND NOT BUILD_OPAQUE_DELEGATE)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib)
+endif()
+
 # pthread
-find_dependency(Threads)
+if (NOT BUILD_BARE_METAL)
+find_package(Threads)
+endif()
+
+if (EXECUTE_NETWORK_STATIC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc -static -pthread")
+endif()
 
 # Favour the protobuf passed on command line
-if(BUILD_TF_PARSER OR BUILD_CAFFE_PARSER OR BUILD_ONNX_PARSER)
+if(BUILD_ONNX_PARSER)
     find_library(PROTOBUF_LIBRARY_DEBUG NAMES "protobufd"
         PATHS ${PROTOBUF_ROOT}/lib
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
@@ -179,30 +220,7 @@ if(BUILD_TF_PARSER OR BUILD_CAFFE_PARSER OR BUILD_ONNX_PARSER)
 
     include_directories(SYSTEM "${PROTOBUF_INCLUDE_DIRS}")
     add_definitions(-DPROTOBUF_USE_DLLS)
-endif()
 
-# Caffe and its dependencies
-if(BUILD_CAFFE_PARSER)
-    add_definitions(-DARMNN_CAFFE_PARSER)
-
-    find_path(CAFFE_GENERATED_SOURCES "caffe/proto/caffe.pb.h"
-        HINTS ${CAFFE_BUILD_ROOT}/include)
-    include_directories(SYSTEM "${CAFFE_GENERATED_SOURCES}")
-endif()
-
-if(BUILD_TF_PARSER)
-    add_definitions(-DARMNN_TF_PARSER)
-
-    find_path(TF_GENERATED_SOURCES "tensorflow/core/protobuf/saved_model.pb.cc")
-
-    # C++ sources generated for tf protobufs
-    file(GLOB_RECURSE TF_PROTOBUFS "${TF_GENERATED_SOURCES}/*.pb.cc")
-
-    # C++ headers generated for tf protobufs
-    include_directories(SYSTEM "${TF_GENERATED_SOURCES}")
-endif()
-
-if(BUILD_ONNX_PARSER)
     add_definitions(-DARMNN_ONNX_PARSER)
 
     find_path(ONNX_GENERATED_SOURCES "onnx/onnx.pb.cc")
@@ -211,11 +229,16 @@ if(BUILD_ONNX_PARSER)
     include_directories(SYSTEM "${ONNX_GENERATED_SOURCES}")
 endif()
 
-if(BUILD_ARMNN_TFLITE_DELEGATE)
+if(BUILD_CLASSIC_DELEGATE)
     add_definitions(-DARMNN_TFLITE_DELEGATE)
 endif()
-# Flatbuffers support for TF Lite and Armnn Serializer
-if(BUILD_TF_LITE_PARSER OR BUILD_ARMNN_SERIALIZER)
+
+if(BUILD_OPAQUE_DELEGATE)
+    add_definitions(-DARMNN_TFLITE_OPAQUE_DELEGATE)
+endif()
+
+# Flatbuffers support for TF Lite, Armnn Serializer or the TOSA backend.
+if(BUILD_TF_LITE_PARSER OR BUILD_ARMNN_SERIALIZER OR ARMNNTOSAREF)
     # verify we have a valid flatbuffers include path
     find_path(FLATBUFFERS_INCLUDE_PATH flatbuffers/flatbuffers.h
               HINTS ${FLATBUFFERS_ROOT}/include /usr/local/include /usr/include)
@@ -321,8 +344,20 @@ endif()
 
 # ARM Compute OpenCL backend
 if(ARMCOMPUTECL)
+    # verify we have a valid flatbuffers include path
+    find_path(FLATBUFFERS_INCLUDE_PATH flatbuffers/flatbuffers.h
+              HINTS ${FLATBUFFERS_ROOT}/include /usr/local/include /usr/include)
+
+    message(STATUS "Flatbuffers headers are located at: ${FLATBUFFERS_INCLUDE_PATH}")
+
+    find_library(FLATBUFFERS_LIBRARY
+                 NAMES libflatbuffers.a flatbuffers
+                 HINTS ${FLATBUFFERS_ROOT}/lib /usr/local/lib /usr/lib)
+
+    message(STATUS "Flatbuffers library located at: ${FLATBUFFERS_LIBRARY}")
+
     # Always use Arm compute library OpenCL headers
-    find_path(OPENCL_INCLUDE CL/cl2.hpp
+    find_path(OPENCL_INCLUDE CL/opencl.hpp
               PATHS ${ARMCOMPUTE_ROOT}/include
               NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
 
@@ -353,8 +388,49 @@ if(ARMNNREF)
     add_definitions(-DARMNNREF_ENABLED)
 endif()
 
-if(ETHOSN_SUPPORT)
-    add_definitions(-DETHOSN_SUPPORT_ENABLED)
+# If a backend requires TOSA common, add it here.
+if(ARMNNTOSAREF)
+    set(ARMNNTOSACOMMON ON)
+endif()
+
+if(ARMNNTOSACOMMON)
+    # Locate the includes for the TOSA serialization library as it is needed for TOSA common and TOSA backends.
+    message(STATUS "TOSA serialization library root set to ${TOSA_SERIALIZATION_LIB_ROOT}")
+
+    find_path(TOSA_SERIALIZATION_LIB_INCLUDE tosa_serialization_handler.h
+              HINTS ${TOSA_SERIALIZATION_LIB_ROOT}/include)
+    message(STATUS "TOSA serialization library include directory located at: ${TOSA_SERIALIZATION_LIB_INCLUDE}")
+
+    find_library(TOSA_SERIALIZATION_LIB
+                 NAMES tosa_serialization_lib.a tosa_serialization_lib
+                 HINTS ${TOSA_SERIALIZATION_LIB_ROOT}/lib /usr/local/lib /usr/lib)
+    message(STATUS "TOSA serialization library set to ${TOSA_SERIALIZATION_LIB}")
+
+    # Include required headers for TOSA Serialization Library
+    include_directories(SYSTEM ${FLATBUFFERS_INCLUDE_PATH})
+    include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/half)
+    include_directories(SYSTEM ${TOSA_SERIALIZATION_LIB_INCLUDE})
+endif()
+
+# ArmNN TOSA reference backend
+if(ARMNNTOSAREF)
+    # Locate the includes for the TOSA Reference Model, which is specific to the TOSA Reference Backend.
+    message(STATUS "TOSA Reference Model root set to ${TOSA_REFERENCE_MODEL_ROOT}")
+
+    find_path(TOSA_REFERENCE_MODEL_INCLUDE model_runner.h
+              HINTS ${TOSA_REFERENCE_MODEL_ROOT}/include)
+    message(STATUS "TOSA Reference Model include directory located at: ${TOSA_REFERENCE_MODEL_INCLUDE}")
+
+    include_directories(SYSTEM ${TOSA_REFERENCE_MODEL_INCLUDE})
+
+    find_library(TOSA_REFERENCE_MODEL_LIB
+                 NAMES tosa_reference_model_lib.a tosa_reference_model_lib
+                 HINTS ${TOSA_REFERENCE_MODEL_ROOT}/lib /usr/local/lib /usr/lib)
+    message(STATUS "TOSA Reference Model set to ${TOSA_REFERENCE_MODEL_LIB}")
+
+    if(TOSA_REFERENCE_MODEL_OUTPUT)
+        add_definitions("-DTOSA_REFERENCE_MODEL_OUTPUT=1")
+    endif()
 endif()
 
 # This is the root for the dynamic backend tests to search for dynamic
@@ -376,40 +452,28 @@ if(PROFILING_BACKEND_STREAMLINE)
     add_definitions(-DARMNN_STREAMLINE_ENABLED)
 endif()
 
+if(NOT BUILD_BARE_METAL AND NOT EXECUTE_NETWORK_STATIC)
 if(HEAP_PROFILING OR LEAK_CHECKING)
-    # enable heap profiling for everything except for referencetests
-    if(NOT ${PROJECT_NAME} STREQUAL "referencetests")
-        find_path(HEAP_PROFILER_INCLUDE gperftools/heap-profiler.h
-                PATHS ${GPERFTOOLS_ROOT}/include
-                NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-        include_directories(SYSTEM "${HEAP_PROFILER_INCLUDE}")
-        find_library(GPERF_TOOLS_LIBRARY
-                    NAMES tcmalloc_debug
-                    HINTS ${GPERFTOOLS_ROOT}/lib)
-        link_directories(${GPERFTOOLS_ROOT}/lib)
+    find_path(HEAP_PROFILER_INCLUDE gperftools/heap-profiler.h
+            PATHS ${GPERFTOOLS_ROOT}/include
+            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+    include_directories(SYSTEM "${HEAP_PROFILER_INCLUDE}")
+    find_library(GPERF_TOOLS_LIBRARY
+                NAMES tcmalloc_debug
+                HINTS ${GPERFTOOLS_ROOT}/lib)
+    link_directories(${GPERFTOOLS_ROOT}/lib)
 
-        link_libraries(${GPERF_TOOLS_LIBRARY})
-        if (HEAP_PROFILING)
-            add_definitions("-DARMNN_HEAP_PROFILING_ENABLED=1")
-        endif()
-        if (LEAK_CHECKING)
-            add_definitions("-DARMNN_LEAK_CHECKING_ENABLED=1")
-        endif()
-    else()
-        message(STATUS "Heap profiling and leak checking are disabled for referencetests")
+    link_libraries(${GPERF_TOOLS_LIBRARY})
+    if (HEAP_PROFILING)
+        add_definitions("-DARMNN_HEAP_PROFILING_ENABLED=1")
+    endif()
+    if (LEAK_CHECKING)
+        add_definitions("-DARMNN_LEAK_CHECKING_ENABLED=1")
     endif()
 else()
     # Valgrind only works with gperftools version number <= 2.4
     CHECK_INCLUDE_FILE(valgrind/memcheck.h VALGRIND_FOUND)
 endif()
-
-
-if(NOT BUILD_CAFFE_PARSER)
-    message(STATUS "Caffe parser support is disabled")
-endif()
-
-if(NOT BUILD_TF_PARSER)
-    message(STATUS "Tensorflow parser support is disabled")
 endif()
 
 if(NOT BUILD_TF_LITE_PARSER)
@@ -418,10 +482,6 @@ endif()
 
 if(NOT BUILD_ARMNN_SERIALIZER)
     message(STATUS "Armnn Serializer support is disabled")
-endif()
-
-if(NOT BUILD_ARMNN_QUANTIZER)
-    message(STATUS "ArmNN Quantizer support is disabled")
 endif()
 
 if(NOT BUILD_PYTHON_WHL)

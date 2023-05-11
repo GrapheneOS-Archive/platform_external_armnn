@@ -2,22 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 set(TEST_RESOURCES_DIR ${CMAKE_SOURCE_DIR}/test/resources)
+file(MAKE_DIRECTORY ${TEST_RESOURCES_DIR})
 add_definitions (-DTEST_RESOURCE_DIR="${TEST_RESOURCES_DIR}")
 set(TEST_TARGET_NAME "${CMAKE_PROJECT_NAME}-tests")
 
-file(GLOB TEST_SOURCES "test/*")
-
-include(cmake/find_catch.cmake)
-
-file(DOWNLOAD "https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip"
-        ${CMAKE_CURRENT_SOURCE_DIR}/test/resources/models.zip SHOW_PROGRESS)
-
-# Extract
-execute_process(
-        COMMAND ${CMAKE_COMMAND} -E tar xf models.zip
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test/resources/
-        RESULT_VARIABLE return_code
-)
+include(../common/cmake/find_catch.cmake)
 
 ExternalProject_Add(basketball-image
         URL https://raw.githubusercontent.com/opencv/opencv/4.0.0/samples/data/basketball1.png
@@ -43,7 +32,23 @@ ExternalProject_Add(vtest
         INSTALL_COMMAND ""
         )
 
-add_executable("${TEST_TARGET_NAME}" ${SOURCES} ${TEST_SOURCES})
+ExternalProject_Add(ssd_mobile
+        URL https://github.com/ARM-software/ML-zoo/raw/master/models/object_detection/ssd_mobilenet_v1/tflite_uint8/ssd_mobilenet_v1.tflite
+        DOWNLOAD_NO_EXTRACT 1
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND ${CMAKE_COMMAND} -E copy <DOWNLOAD_DIR>/ssd_mobilenet_v1.tflite ${CMAKE_CURRENT_SOURCE_DIR}/test/resources
+        INSTALL_COMMAND ""
+        )
+
+ExternalProject_Add(yolo_v3
+        URL https://github.com/ARM-software/ML-zoo/raw/master/models/object_detection/yolo_v3_tiny/tflite_fp32/yolo_v3_tiny_darknet_fp32.tflite
+        DOWNLOAD_NO_EXTRACT 1
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND ${CMAKE_COMMAND} -E copy <DOWNLOAD_DIR>/yolo_v3_tiny_darknet_fp32.tflite ${CMAKE_CURRENT_SOURCE_DIR}/test/resources
+        INSTALL_COMMAND ""
+        )
+
+add_executable("${TEST_TARGET_NAME}" ${SOURCES} ${TEST_SOURCES} ${CVUTILS_SOURCES} ${UTILS_SOURCES})
 
 add_dependencies(
     "${TEST_TARGET_NAME}"
@@ -60,6 +65,13 @@ endif()
 
 target_include_directories("${TEST_TARGET_NAME}" PUBLIC ${TEST_TPIP_INCLUDE}
     ${ARMNN_INCLUDE_DIR}
-    ${OPENCV_INCLUDE_DIR} ${DEPENDENCIES_DIR} ${TEST_RESOURCES_DIR})
+    ${OPENCV_INCLUDE_DIR} ${DEPENDENCIES_DIR} ${TEST_RESOURCES_DIR} ${COMMON_INCLUDE_DIR})
 
 target_link_libraries("${TEST_TARGET_NAME}" PUBLIC ${ARMNN_LIBS} ${OPENCV_LIBS} ${FFMPEG_LIBS})
+if( USE_ARMNN_DELEGATE )
+    set(CMAKE_CXX_FLAGS " -ldl -lrt -Wl,--copy-dt-needed-entries")
+    target_link_libraries("${TEST_TARGET_NAME}" PUBLIC ${TfLite_LIB})
+    target_link_libraries("${TEST_TARGET_NAME}" PUBLIC tflite_headers)
+    target_include_directories("${TEST_TARGET_NAME}" PUBLIC ${Flatbuffers_INCLUDE_DIR})
+    target_link_libraries("${TEST_TARGET_NAME}" PUBLIC ${Flatbuffers_LIB})
+endif()

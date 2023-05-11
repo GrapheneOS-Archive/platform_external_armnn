@@ -8,8 +8,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -24,7 +24,7 @@ std::unique_ptr<IWorkload> DivisionLayer::CreateWorkload(const IWorkloadFactory&
     DivisionQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateDivision(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Division, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 DivisionLayer* DivisionLayer::Clone(Graph& graph) const
@@ -32,9 +32,9 @@ DivisionLayer* DivisionLayer::Clone(Graph& graph) const
     return CloneBase<DivisionLayer>(graph, GetName());
 }
 
-void DivisionLayer::Accept(ILayerVisitor& visitor) const
+void DivisionLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitDivisionLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

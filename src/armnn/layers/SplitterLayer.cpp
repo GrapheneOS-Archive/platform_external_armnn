@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -31,7 +31,7 @@ std::unique_ptr<IWorkload> SplitterLayer::CreateWorkload(const IWorkloadFactory&
 
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSplitter(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Splitter, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 template<typename FactoryType>
@@ -241,9 +241,9 @@ void SplitterLayer::ValidateTensorShapesFromInputs()
     }
 }
 
-void SplitterLayer::Accept(ILayerVisitor& visitor) const
+void SplitterLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSplitterLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

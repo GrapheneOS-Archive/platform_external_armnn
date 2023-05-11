@@ -1,12 +1,12 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
 #include "ClQuantizedLstmWorkload.hpp"
 #include "ClWorkloadUtils.hpp"
 
-#include <backendsCommon/CpuTensorHandle.hpp>
+#include <armnn/backends/TensorHandle.hpp>
 #include <aclCommon/ArmComputeTensorUtils.hpp>
 #include <cl/ClTensorHandle.hpp>
 
@@ -62,8 +62,9 @@ arm_compute::Status ClQuantizedLstmWorkloadValidate(const TensorInfo& input, con
 }
 
 ClQuantizedLstmWorkload::ClQuantizedLstmWorkload(const QuantizedLstmQueueDescriptor &descriptor,
-                                                 const WorkloadInfo &info):
-                                                 BaseWorkload<QuantizedLstmQueueDescriptor>(descriptor, info)
+                                                 const WorkloadInfo &info,
+                                                 const arm_compute::CLCompileContext& clCompileContext)
+                                                 : ClBaseWorkload<QuantizedLstmQueueDescriptor>(descriptor, info)
 {
     m_InputToInputWeightsTensor = std::make_unique<arm_compute::CLTensor>();
     BuildArmComputeTensor(*m_InputToInputWeightsTensor, m_Data.m_InputToInputWeights->GetTensorInfo());
@@ -108,13 +109,18 @@ ClQuantizedLstmWorkload::ClQuantizedLstmWorkload(const QuantizedLstmQueueDescrip
     arm_compute::ICLTensor& cellStateOutTensor        = static_cast<IClTensorHandle*>(m_Data.m_Outputs[0])->GetTensor();
     arm_compute::ICLTensor& outputStateOutTensor      = static_cast<IClTensorHandle*>(m_Data.m_Outputs[1])->GetTensor();
 
-    m_QuantizedLstmLayer.configure(&inputTensor, m_InputToInputWeightsTensor.get(), m_InputToForgetWeightsTensor.get(),
-                                   m_InputToCellWeightsTensor.get(), m_InputToOutputWeightsTensor.get(),
-                                   m_RecurrentToInputWeightsTensor.get(), m_RecurrentToForgetWeightsTensor.get(),
-                                   m_RecurrentToCellWeightsTensor.get(), m_RecurrentToOutputWeightsTensor.get(),
-                                   m_InputGateBiasTensor.get(), m_ForgetGateBiasTensor.get(), m_CellBiasTensor.get(),
-                                   m_OutputGateBiasTensor.get(), &cellStateInTensor, &outputStateInTensor,
-                                   &cellStateOutTensor, &outputStateOutTensor);
+    {
+        ARMNN_SCOPED_PROFILING_EVENT(Compute::Undefined, "ClQuantizedLstmWorkload_configure");
+        m_QuantizedLstmLayer.configure(clCompileContext, &inputTensor, m_InputToInputWeightsTensor.get(),
+                                       m_InputToForgetWeightsTensor.get(),
+                                       m_InputToCellWeightsTensor.get(), m_InputToOutputWeightsTensor.get(),
+                                       m_RecurrentToInputWeightsTensor.get(), m_RecurrentToForgetWeightsTensor.get(),
+                                       m_RecurrentToCellWeightsTensor.get(), m_RecurrentToOutputWeightsTensor.get(),
+                                       m_InputGateBiasTensor.get(), m_ForgetGateBiasTensor.get(),
+                                       m_CellBiasTensor.get(),
+                                       m_OutputGateBiasTensor.get(), &cellStateInTensor, &outputStateInTensor,
+                                       &cellStateOutTensor, &outputStateOutTensor);
+    }
 
     InitializeArmComputeClTensorData(*m_InputToInputWeightsTensor,      m_Data.m_InputToInputWeights);
     InitializeArmComputeClTensorData(*m_InputToForgetWeightsTensor,     m_Data.m_InputToForgetWeights);
@@ -135,7 +141,7 @@ ClQuantizedLstmWorkload::ClQuantizedLstmWorkload(const QuantizedLstmQueueDescrip
 
 void ClQuantizedLstmWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_CL("ClQuantizedLstmWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_CL_GUID("ClQuantizedLstmWorkload_Execute", this->GetGuid());
     RunClFunction(m_QuantizedLstmLayer, CHECK_LOCATION());
 }
 
