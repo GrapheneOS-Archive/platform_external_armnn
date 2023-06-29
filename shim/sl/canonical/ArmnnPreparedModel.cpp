@@ -569,10 +569,13 @@ GeneralResult<std::pair<SyncFence, ExecuteFencedInfoCallback>> ArmnnPreparedMode
                 {
                     case ErrorStatus::OUTPUT_INSUFFICIENT_SIZE:
                         result.error().code = (ErrorStatus::OUTPUT_INSUFFICIENT_SIZE);
+                        [[fallthrough]];
                     case ErrorStatus::GENERAL_FAILURE:
                         result.error().code = (ErrorStatus::GENERAL_FAILURE);
+                        [[fallthrough]];
                     case ErrorStatus::INVALID_ARGUMENT:
                         result.error().code = (ErrorStatus::INVALID_ARGUMENT);
+                        [[fallthrough]];
                     default:
                     {
                         result.value() = std::make_pair(timingSinceLaunch, timingAfterFence);
