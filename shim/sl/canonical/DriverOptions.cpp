@@ -1,5 +1,5 @@
 //
-// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2022-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -254,13 +254,8 @@ DriverOptions::DriverOptions()
     // If no backends have been specified then the default value is GpuAcc.
     if (backends.empty())
     {
-        VLOG(DRIVER) << "No backends have been specified:";
-        std::cout << optionsDesc.help() << std::endl
-                  << "Unable to start:" << std::endl
-                  << "No backends have been specified" << std::endl;
-        m_ShouldExit = true;
-        m_ExitCode = EXIT_FAILURE;
-        return;
+        VLOG(DRIVER) << "No backends have been specified, defaulting to GpuAcc.";
+        m_Backends.emplace_back("GpuAcc");
     }
 
     if (!unsupportedOperationsAsString.empty())
