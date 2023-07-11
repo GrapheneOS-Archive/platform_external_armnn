@@ -31,7 +31,7 @@ int main()
     ANeuralNetworksShimDeviceInfo* deviceInfo;
     ANeuralNetworksShimDeviceInfo_create(&deviceInfo,
                                          /*deviceName=*/"arm-armnn-sl",
-                                         /*serviceName=*/"arm-armnn-shim");
+                                         /*serviceName=*/"google-armnn");
     const auto guardDeviceInfo = android::base::make_scope_guard(
             [deviceInfo] { ANeuralNetworksShimDeviceInfo_free(deviceInfo); });
 
