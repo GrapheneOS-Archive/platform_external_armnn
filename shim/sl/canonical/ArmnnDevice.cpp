@@ -76,6 +76,7 @@ ArmnnDevice::ArmnnDevice(DriverOptions options)
     }
     armnn::IRuntime::CreationOptions runtimeOptions;
 
+#if defined(ARMCOMPUTECL_ENABLED)
     if (std::find(m_Options.GetBackends().begin(),
                   m_Options.GetBackends().end(),
                   armnn::Compute::GpuAcc) != m_Options.GetBackends().end())
@@ -108,6 +109,7 @@ ArmnnDevice::ArmnnDevice(DriverOptions options)
             VLOG(DRIVER) <<  "ArmnnDevice: Unknown exception: %s. Device will be unavailable." << error.what();
         }
     }
+#endif
     runtimeOptions.m_EnableGpuProfiling = m_Options.IsGpuProfilingEnabled();
     m_Runtime = armnn::IRuntime::Create(runtimeOptions);
 
