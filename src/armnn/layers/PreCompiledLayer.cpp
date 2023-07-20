@@ -7,7 +7,7 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/Workload.hpp>
+#include <armnn/backends/Workload.hpp>
 
 #include <armnn/TypesUtils.hpp>
 
@@ -24,7 +24,7 @@ PreCompiledLayer::~PreCompiledLayer()
 PreCompiledLayer* PreCompiledLayer::Clone(Graph& graph) const
 {
     PreCompiledLayer* clone = CloneBase<PreCompiledLayer>(graph, m_Param, GetName());
-    clone->m_PreCompiledObject.reset(const_cast<PreCompiledLayer*>(this)->m_PreCompiledObject.release());
+    clone->m_PreCompiledObject = const_cast<PreCompiledLayer*>(this)->m_PreCompiledObject;
     return clone;
 }
 
@@ -34,7 +34,7 @@ std::unique_ptr<IWorkload> PreCompiledLayer::CreateWorkload(const armnn::IWorklo
     descriptor.m_PreCompiledObject = m_PreCompiledObject.get();
     SetAdditionalInfo(descriptor);
 
-    return factory.CreatePreCompiled(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::PreCompiled, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 void PreCompiledLayer::ValidateTensorShapesFromInputs()
@@ -49,10 +49,9 @@ void PreCompiledLayer::SetPreCompiledObject(PreCompiledObjectPtr preCompiledObje
     m_PreCompiledObject = std::move(preCompiledObject);
 }
 
-void PreCompiledLayer::Accept(ILayerVisitor& visitor) const
+void PreCompiledLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    IgnoreUnused(visitor);
-    throw armnn::Exception("PreCompiledLayer should not appear in an input graph");
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

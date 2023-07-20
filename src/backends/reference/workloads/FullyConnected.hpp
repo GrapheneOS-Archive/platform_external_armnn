@@ -9,7 +9,7 @@
 #include "Decoders.hpp"
 #include "Encoders.hpp"
 #include <armnn/Tensor.hpp>
-#include <backendsCommon/WorkloadData.hpp>
+#include <armnn/backends/WorkloadData.hpp>
 
 namespace armnn
 {
@@ -21,7 +21,7 @@ void FullyConnected(const TensorShape& rInputShape,
                     Encoder<float>& rOutputEncoder,
                     const TensorShape& rWeightsShape,
                     Decoder<float>& rWeightDecoder,
-                    Decoder<float>& rBiasDecoder,
+                    Decoder<float>* rBiasDecoder,
                     bool biasEnabled,
                     unsigned int K,
                     bool transposeWeights);

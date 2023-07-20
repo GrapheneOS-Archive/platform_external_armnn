@@ -7,8 +7,8 @@
 #include "LayerCloneBase.hpp"
 
 #include <armnn/TypesUtils.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -23,7 +23,7 @@ std::unique_ptr<IWorkload> ConvertFp32ToFp16Layer::CreateWorkload(const IWorkloa
     ConvertFp32ToFp16QueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateConvertFp32ToFp16(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::ConvertFp32ToFp16, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 ConvertFp32ToFp16Layer* ConvertFp32ToFp16Layer::Clone(Graph& graph) const
@@ -47,12 +47,9 @@ void ConvertFp32ToFp16Layer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "LayerName");
 }
 
-void ConvertFp32ToFp16Layer::Accept(ILayerVisitor& visitor) const
+void ConvertFp32ToFp16Layer::ExecuteStrategy(IStrategy& strategy) const
 {
-    // These conversion layers are only inserted by the
-    // optimizer and so will never be in an input graph.
-    IgnoreUnused(visitor);
-    throw armnn::Exception("ConvertFp32ToFp16Layer should never appear in an input graph");
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

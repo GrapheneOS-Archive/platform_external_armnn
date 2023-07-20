@@ -1,23 +1,32 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017,2019-2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
-
+#if defined(ARMCOMPUTECL_ENABLED)
 #include <cl/ClBackend.hpp>
+#endif
+#if defined(ARMCOMPUTENEON_ENABLED)
 #include <neon/NeonBackend.hpp>
+#endif
+#include <reference/RefBackend.hpp>
+#include <armnn/BackendHelper.hpp>
 
 #include <Network.hpp>
+
+#include <doctest/doctest.h>
 
 #include <vector>
 #include <string>
 
 using namespace armnn;
 
-BOOST_AUTO_TEST_SUITE(BackendsCompatibility, * boost::unit_test::disabled())
+#if defined(ARMCOMPUTENEON_ENABLED) && defined(ARMCOMPUTECL_ENABLED)
 
-BOOST_AUTO_TEST_CASE(Neon_Cl_DirectCompatibility_Test)
+TEST_SUITE("BackendsCompatibility")
+{
+// Partially disabled Test Suite
+TEST_CASE("Neon_Cl_DirectCompatibility_Test")
 {
     auto neonBackend = std::make_unique<NeonBackend>();
     auto clBackend = std::make_unique<ClBackend>();
@@ -64,30 +73,30 @@ BOOST_AUTO_TEST_CASE(Neon_Cl_DirectCompatibility_Test)
     graph.TopologicalSort();
 
     std::vector<std::string> errors;
-    auto result = SelectTensorHandleStrategy(graph, backends, registry, true, errors);
+    auto result = SelectTensorHandleStrategy(graph, backends, registry, true, true, errors);
 
-    BOOST_TEST(result.m_Error == false);
-    BOOST_TEST(result.m_Warning == false);
+    CHECK(result.m_Error == false);
+    CHECK(result.m_Warning == false);
 
-    OutputSlot& inputLayerOut = inputLayer->GetOutputSlot(0);
-    OutputSlot& softmaxLayer1Out = softmaxLayer1->GetOutputSlot(0);
-    OutputSlot& softmaxLayer2Out = softmaxLayer2->GetOutputSlot(0);
-    OutputSlot& softmaxLayer3Out = softmaxLayer3->GetOutputSlot(0);
-    OutputSlot& softmaxLayer4Out = softmaxLayer4->GetOutputSlot(0);
+    // OutputSlot& inputLayerOut = inputLayer->GetOutputSlot(0);
+    // OutputSlot& softmaxLayer1Out = softmaxLayer1->GetOutputSlot(0);
+    // OutputSlot& softmaxLayer2Out = softmaxLayer2->GetOutputSlot(0);
+    // OutputSlot& softmaxLayer3Out = softmaxLayer3->GetOutputSlot(0);
+    // OutputSlot& softmaxLayer4Out = softmaxLayer4->GetOutputSlot(0);
 
-    // Check that the correct factory was selected
-    BOOST_TEST(inputLayerOut.GetTensorHandleFactoryId()    == "Arm/Cl/TensorHandleFactory");
-    BOOST_TEST(softmaxLayer1Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
-    BOOST_TEST(softmaxLayer2Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
-    BOOST_TEST(softmaxLayer3Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
-    BOOST_TEST(softmaxLayer4Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
+    // // Check that the correct factory was selected
+    // CHECK(inputLayerOut.GetTensorHandleFactoryId()    == "Arm/Cl/TensorHandleFactory");
+    // CHECK(softmaxLayer1Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
+    // CHECK(softmaxLayer2Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
+    // CHECK(softmaxLayer3Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
+    // CHECK(softmaxLayer4Out.GetTensorHandleFactoryId() == "Arm/Cl/TensorHandleFactory");
 
-    // Check that the correct strategy was selected
-    BOOST_TEST((inputLayerOut.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    BOOST_TEST((softmaxLayer1Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    BOOST_TEST((softmaxLayer2Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    BOOST_TEST((softmaxLayer3Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
-    BOOST_TEST((softmaxLayer4Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    // // Check that the correct strategy was selected
+    // CHECK((inputLayerOut.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    // CHECK((softmaxLayer1Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    // CHECK((softmaxLayer2Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    // CHECK((softmaxLayer3Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
+    // CHECK((softmaxLayer4Out.GetEdgeStrategyForConnection(0) == EdgeStrategy::DirectCompatibility));
 
     graph.AddCompatibilityLayers(backends, registry);
 
@@ -100,7 +109,7 @@ BOOST_AUTO_TEST_CASE(Neon_Cl_DirectCompatibility_Test)
             copyCount++;
         }
     });
-    BOOST_TEST(copyCount == 0);
+    // CHECK(copyCount == 0);
 
     // Test for import layers
     int importCount= 0;
@@ -111,7 +120,108 @@ BOOST_AUTO_TEST_CASE(Neon_Cl_DirectCompatibility_Test)
             importCount++;
         }
     });
-    BOOST_TEST(importCount == 0);
+    // CHECK(importCount == 0);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}
+#endif
+
+TEST_SUITE("BackendCapability")
+{
+
+namespace
+{
+#if defined(ARMNNREF_ENABLED) || defined(ARMCOMPUTENEON_ENABLED) || defined(ARMCOMPUTECL_ENABLED)
+void CapabilityTestHelper(BackendCapabilities &capabilities,
+                          std::vector<std::pair<std::string, bool>> capabilityVector)
+{
+    for (auto pair : capabilityVector)
+    {
+        CHECK_MESSAGE(armnn::HasCapability(pair.first, capabilities),
+                        pair.first << " capability was not been found");
+        CHECK_MESSAGE(armnn::HasCapability(BackendOptions::BackendOption{pair.first, pair.second}, capabilities),
+                        pair.first << " capability set incorrectly");
+    }
+}
+#endif
+
+#if defined(ARMNNREF_ENABLED)
+
+TEST_CASE("Ref_Backends_Unknown_Capability_Test")
+{
+    auto refBackend = std::make_unique<RefBackend>();
+    auto refCapabilities = refBackend->GetCapabilities();
+
+    armnn::BackendOptions::BackendOption AsyncExecutionFalse{"AsyncExecution", false};
+    CHECK(!armnn::HasCapability(AsyncExecutionFalse, refCapabilities));
+
+    armnn::BackendOptions::BackendOption AsyncExecutionInt{"AsyncExecution", 50};
+    CHECK(!armnn::HasCapability(AsyncExecutionFalse, refCapabilities));
+
+    armnn::BackendOptions::BackendOption AsyncExecutionFloat{"AsyncExecution", 0.0f};
+    CHECK(!armnn::HasCapability(AsyncExecutionFloat, refCapabilities));
+
+    armnn::BackendOptions::BackendOption AsyncExecutionString{"AsyncExecution", "true"};
+    CHECK(!armnn::HasCapability(AsyncExecutionString, refCapabilities));
+
+    CHECK(!armnn::HasCapability("Telekinesis", refCapabilities));
+    armnn::BackendOptions::BackendOption unknownCapability{"Telekinesis", true};
+    CHECK(!armnn::HasCapability(unknownCapability, refCapabilities));
+}
+
+TEST_CASE ("Ref_Backends_Capability_Test")
+{
+    auto refBackend = std::make_unique<RefBackend>();
+    auto refCapabilities = refBackend->GetCapabilities();
+
+    CapabilityTestHelper(refCapabilities,
+                         {{"NonConstWeights", true},
+                          {"AsyncExecution", true},
+                          {"ProtectedContentAllocation", false},
+                          {"ConstantTensorsAsInputs", true},
+                          {"PreImportIOTensors", true},
+                          {"ExternallyManagedMemory", true},
+                          {"MultiAxisPacking", false}});
+}
+
+#endif
+
+#if defined(ARMCOMPUTENEON_ENABLED)
+
+TEST_CASE ("Neon_Backends_Capability_Test")
+{
+    auto neonBackend = std::make_unique<NeonBackend>();
+    auto neonCapabilities = neonBackend->GetCapabilities();
+
+    CapabilityTestHelper(neonCapabilities,
+                         {{"NonConstWeights", true},
+                          {"AsyncExecution", false},
+                          {"ProtectedContentAllocation", false},
+                          {"ConstantTensorsAsInputs", true},
+                          {"PreImportIOTensors", false},
+                          {"ExternallyManagedMemory", true},
+                          {"MultiAxisPacking", false}});
+}
+
+#endif
+
+#if defined(ARMCOMPUTECL_ENABLED)
+
+TEST_CASE ("Cl_Backends_Capability_Test")
+{
+    auto clBackend = std::make_unique<ClBackend>();
+    auto clCapabilities = clBackend->GetCapabilities();
+
+    CapabilityTestHelper(clCapabilities,
+                         {{"NonConstWeights", false},
+                          {"AsyncExecution", false},
+                          {"ProtectedContentAllocation", true},
+                          {"ConstantTensorsAsInputs", true},
+                          {"PreImportIOTensors", false},
+                          {"ExternallyManagedMemory", true},
+                          {"MultiAxisPacking", false}});
+}
+
+#endif
+}
+}

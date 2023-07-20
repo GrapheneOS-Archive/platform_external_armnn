@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -28,8 +28,10 @@ namespace armnn
 {
 
 ClContextControl::ClContextControl(arm_compute::CLTuner *tuner,
+                                   arm_compute::CLGEMMHeuristicsHandle* heuristicsHandle,
                                    bool profilingEnabled)
     : m_Tuner(tuner)
+    , m_HeuristicsHandle(heuristicsHandle)
     , m_ProfilingEnabled(profilingEnabled)
 {
     // Ignore m_ProfilingEnabled if unused to avoid compiling problems when ArmCompute is disabled.
@@ -156,63 +158,12 @@ void ClContextControl::DoLoadOpenClRuntime(bool updateTunedParameters)
 
     // Note the first argument (path to cl source code) will be ignored as they should be embedded in the armcompute.
     arm_compute::CLKernelLibrary::get().init(".", context, device);
-    arm_compute::CLScheduler::get().init(context, commandQueue, device, m_Tuner);
+    arm_compute::CLScheduler::get().init(context, commandQueue, device, m_Tuner, m_HeuristicsHandle);
 }
 
 void ClContextControl::ClearClCache()
 {
     DoLoadOpenClRuntime(true);
-}
-
-armnn::IGpuAccTunedParameters* IGpuAccTunedParameters::CreateRaw(armnn::IGpuAccTunedParameters::Mode mode,
-                                                                 armnn::IGpuAccTunedParameters::TuningLevel tuningLevel)
-{
-    return new ClTunedParameters(mode, tuningLevel);
-}
-
-armnn::IGpuAccTunedParametersPtr IGpuAccTunedParameters::Create(armnn::IGpuAccTunedParameters::Mode mode,
-                                                                armnn::IGpuAccTunedParameters::TuningLevel tuningLevel)
-{
-    return IGpuAccTunedParametersPtr(CreateRaw(mode, tuningLevel), &IGpuAccTunedParameters::Destroy);
-}
-
-void IGpuAccTunedParameters::Destroy(IGpuAccTunedParameters* params)
-{
-    delete params;
-}
-
-ClTunedParameters::ClTunedParameters(armnn::IGpuAccTunedParameters::Mode mode,
-                                     armnn::IGpuAccTunedParameters::TuningLevel tuningLevel)
-    : m_Mode(mode)
-    , m_TuningLevel(tuningLevel)
-    , m_Tuner(mode == ClTunedParameters::Mode::UpdateTunedParameters)
-{
-}
-
-void ClTunedParameters::Load(const char* filename)
-{
-    try
-    {
-        m_Tuner.load_from_file(filename);
-    }
-    catch (const std::exception& e)
-    {
-        throw armnn::Exception(std::string("Failed to load tuned parameters file '") + filename + "': " +
-                               e.what());
-    }
-}
-
-void ClTunedParameters::Save(const char* filename) const
-{
-    try
-    {
-        m_Tuner.save_to_file(filename);
-    }
-    catch (const std::exception& e)
-    {
-        throw armnn::Exception(std::string("Failed to save tuned parameters file to '") + filename + "': " +
-                               e.what());
-    }
 }
 
 } // namespace armnn

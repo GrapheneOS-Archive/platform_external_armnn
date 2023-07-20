@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -25,7 +25,7 @@ arm_compute::Status NeonReshapeWorkloadValidate(const TensorInfo& input,
 
 NeonReshapeWorkload::NeonReshapeWorkload(const ReshapeQueueDescriptor& descriptor,
                                          const WorkloadInfo& info)
-    : BaseWorkload<ReshapeQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<ReshapeQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonReshapeWorkload", 1, 1);
 
@@ -39,7 +39,7 @@ NeonReshapeWorkload::NeonReshapeWorkload(const ReshapeQueueDescriptor& descripto
 
 void NeonReshapeWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonReshapeWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonReshapeWorkload_Execute", this->GetGuid());
     m_Layer->run();
 }
 

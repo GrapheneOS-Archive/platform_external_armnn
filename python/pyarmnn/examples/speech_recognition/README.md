@@ -18,7 +18,7 @@ You can also verify it by running the following and getting output similar to be
 
 ```bash
 $ python -c "import pyarmnn as ann;print(ann.GetVersion())"
-'22.0.0'
+'32.0.0'
 ```
 
 ### Dependencies
@@ -29,20 +29,30 @@ Install the PortAudio package:
 $ sudo apt-get install libsndfile1 libportaudio2
 ```
 
-Install the required Python modules:
+Install the required Python modules: 
 
 ```bash
 $ pip install -r requirements.txt
 ```
 
+### Model
+The model we are using is the [Wav2Letter](https://github.com/ARM-software/ML-zoo/tree/master/models/speech_recognition/wav2letter/tflite_int8 ) which can be found in the [Arm Model Zoo repository](
+https://github.com/ARM-software/ML-zoo/tree/master/models).
+
+A small selection of suitable wav files containing human speech can be found [here](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/sampledata/audiofiles).
+
+Labels for this model are defined within run_audio_file.py.
+
 ## Performing Automatic Speech Recognition
 
 ### Processing Audio Files
 
+Please ensure that your audio file has a sampling rate of 16000Hz.
+
 To run ASR on an audio file, use the following command:
 
 ```bash
-$ python run_audio_file.py --audio_file_path <path/to/your_audio> --model_file_path <path/to/your_model> --labels_file_path <path/to/your_labels>
+$ python run_audio_file.py --audio_file_path <path/to/your_audio> --model_file_path <path/to/your_model>
 ```
 
 You may also add the optional flags:
@@ -69,15 +79,18 @@ You may also add the optional flags:
 
 ### Initialization
 
-The application parses the supplied user arguments and loads the audio file into the `AudioCapture` class, which initialises the audio source and sets sampling parameters required by the model with `ModelParams` class.
+The application parses the supplied user arguments and loads the audio file in chunks through the `capture_audio()` method which accepts sampling criteria as an `AudioCaptureParams` tuple.
 
-`AudioCapture` helps us to capture chunks of audio data from the source. With ASR from an audio file, the application will create a generator object to yield blocks of audio data from the file with a minimum sample size.
+With ASR from an audio file, the application will create a generator object to yield blocks of audio data from the file with a minimum sample size defined in AudioCaptureParams. 
 
-To interpret the inference result of the loaded network, the application must load the labels that are associated with the model. The `dict_labels()` function creates a dictionary that is keyed on the classification index at the output node of the model. The values of the dictionary are the corresponding characters.
+MFCC features are extracted from each block based on criteria defined in the `MFCCParams` tuple.  
+these extracted features constitute the input tensors for the model.
+
+To interpret the inference result of the loaded network; the application passes the label dictionary defined in run_audio_file.py to a decoder and displays the result.
 
 ### Creating a network
 
-A PyArmNN application must import a graph from file using an appropriate parser. Arm NN provides parsers for various model file types, including TFLite, TF, and ONNX. These parsers are libraries for loading neural networks of various formats into the Arm NN runtime.
+A PyArmNN application must import a graph from file using an appropriate parser. Arm NN provides parsers for various model file types, including TFLite and ONNX. These parsers are libraries for loading neural networks of various formats into the Arm NN runtime.
 
 Arm NN supports optimized execution on multiple CPU, GPU, and Ethos-N devices. Before executing a graph, the application must select the appropriate device context by using `IRuntime()` to create a runtime context with default options. We can optimize the imported graph by specifying a list of backends in order of preference and implementing backend-specific optimizations, identified by a unique string, for example CpuAcc, GpuAcc, CpuRef represent the accelerated CPU and GPU backends and the CPU reference kernels respectively.
 
@@ -110,13 +123,17 @@ self.output_binding_info = parser.GetNetworkOutputBindingInfo(graph_id, output_n
 ```
 
 ### Automatic speech recognition pipeline
+Mel-frequency Cepstral Coefficients (MFCCs, [see Wikipedia](https://en.wikipedia.org/wiki/Mel-frequency_cepstrum)) are extracted based on criteria defined in the MFCCParams tuple and associated`MFCC Class`.
+MFCCs are the result of computing the dot product of the Discrete Cosine Transform (DCT) Matrix and the log of the Mel energy.
 
-The `MFCC` class is used to extract the Mel-frequency Cepstral Coefficients (MFCCs, [see Wikipedia](https://en.wikipedia.org/wiki/Mel-frequency_cepstrum)) from a given audio frame to be used as features for the network. MFCCs are the result of computing the dot product of the Discrete Cosine Transform (DCT) Matrix and the log of the Mel energy.
+The `MFCC` class is used in conjunction with the `AudioPreProcessor` class to extract and process MFCC features from a given audio frame. 
 
-After all the MFCCs needed for an inference have been extracted from the audio data, we convolve them with 1-dimensional Savitzky-Golay filters to compute the first and second MFCC derivatives with respect to time. The MFCCs and the derivatives are concatenated to make the input tensor for the model.
+
+After all the MFCCs needed for an inference have been extracted from the audio data we convolve them with 1-dimensional Savitzky-Golay filters to compute the first and second MFCC derivatives with respect to time. The MFCCs and the derivatives constitute the input tensors that will be classified by an `ArmnnNetworkExecutor`object.
+
 
 ```python
-# preprocess.py
+# mfcc.py & wav2lettermfcc.py
 # Extract MFCC features
 log_mel_energy = np.maximum(log_mel_energy, log_mel_energy.max() - top_db)
 mfcc_feats = np.dot(self.__dct_matrix, log_mel_energy)
@@ -134,7 +151,7 @@ for i in range(features.shape[1]):
 # audio_utils.py
 # Quantize the input data and create input tensors with PyArmNN
 input_tensor = quantize_input(input_tensor, input_binding_info)
-input_tensors = ann.make_input_tensors([input_binding_info], [input_tensor])
+input_tensors = ann.make_input_tensors([input_binding_info], [input_data])
 ```
 
 Note: `ArmnnNetworkExecutor` has already created the output tensors for you.

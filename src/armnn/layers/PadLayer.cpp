@@ -6,9 +6,9 @@
 #include "PadLayer.hpp"
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/CpuTensorHandle.hpp>
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/TensorHandle.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 #include <cstring>
 
@@ -23,9 +23,10 @@ std::unique_ptr<IWorkload> PadLayer::CreateWorkload(const armnn::IWorkloadFactor
 {
     PadQueueDescriptor descriptor;
     descriptor.m_Parameters.m_PadList = m_Param.m_PadList;
+    descriptor.m_Parameters.m_PaddingMode = m_Param.m_PaddingMode;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreatePad(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Pad, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 PadLayer* PadLayer::Clone(Graph& graph) const
@@ -33,6 +34,7 @@ PadLayer* PadLayer::Clone(Graph& graph) const
     auto layer = CloneBase<PadLayer>(graph, m_Param, GetName());
 
     layer->m_Param.m_PadList = m_Param.m_PadList;
+    layer->m_Param.m_PaddingMode = m_Param.m_PaddingMode;
 
     return std::move(layer);
 }
@@ -46,8 +48,7 @@ std::vector<TensorShape> PadLayer::InferOutputShapes(const std::vector<TensorSha
     ARMNN_ASSERT(m_Param.m_PadList.size() == rank);
     ARMNN_ASSERT(rank != 0);
 
-    std::vector<unsigned int> outputDimensionSizes;
-    outputDimensionSizes.reserve(rank);
+    std::vector<unsigned int> outputDimensionSizes(rank);
     for (unsigned int i = 0; i < rank; ++i)
     {
         outputDimensionSizes[i] = inputShape[i] + m_Param.m_PadList[i].first + m_Param.m_PadList[i].second;
@@ -72,9 +73,9 @@ void PadLayer::ValidateTensorShapesFromInputs()
     ValidateAndCopyShape(outputShape, inferredShapes[0], m_ShapeInferenceMethod, "PadLayer");
 }
 
-void PadLayer::Accept(ILayerVisitor& visitor) const
+void PadLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitPadLayer(this, GetParameters(), GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

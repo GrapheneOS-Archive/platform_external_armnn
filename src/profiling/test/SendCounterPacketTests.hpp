@@ -5,34 +5,35 @@
 
 #pragma once
 
-#include <SendCounterPacket.hpp>
-#include <SendThread.hpp>
-#include <ProfilingUtils.hpp>
-#include <IProfilingConnectionFactory.hpp>
+#include <client/src/SendCounterPacket.hpp>
+#include <client/src/SendThread.hpp>
+#include <client/src/ProfilingUtils.hpp>
+#include <client/src/IProfilingConnectionFactory.hpp>
 
-#include <armnn/Exceptions.hpp>
-#include <armnn/Optional.hpp>
-#include <armnn/Conversion.hpp>
-#include <armnn/utility/Assert.hpp>
-#include <armnn/utility/IgnoreUnused.hpp>
-#include <armnn/utility/NumericCast.hpp>
+#include <armnn/profiling/ArmNNProfiling.hpp>
+
+#include <common/include/IgnoreUnused.hpp>
+#include <common/include/NumericCast.hpp>
 
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 
-namespace armnn
+namespace arm
 {
 
-namespace profiling
+namespace pipe
 {
 
 class SendCounterPacketTest : public SendCounterPacket
 {
 public:
     SendCounterPacketTest(IBufferManager& buffer)
-        : SendCounterPacket(buffer)
+        : SendCounterPacket(buffer,
+                            arm::pipe::ARMNN_SOFTWARE_INFO,
+                            arm::pipe::ARMNN_SOFTWARE_VERSION,
+                            arm::pipe::ARMNN_HARDWARE_VERSION)
     {}
 
     bool CreateDeviceRecordTest(const DevicePtr& device,
@@ -65,6 +66,6 @@ public:
     }
 };
 
-} // namespace profiling
+} // namespace pipe
 
-} // namespace armnn
+} // namespace arm

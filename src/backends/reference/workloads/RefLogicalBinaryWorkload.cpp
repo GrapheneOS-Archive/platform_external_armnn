@@ -1,5 +1,5 @@
 //
-// Copyright © 2020 Arm Ltd and Contributors. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -19,35 +19,35 @@ namespace armnn
 
 RefLogicalBinaryWorkload::RefLogicalBinaryWorkload(const LogicalBinaryQueueDescriptor& desc,
                                                    const WorkloadInfo& info)
-    : BaseWorkload<LogicalBinaryQueueDescriptor>(desc, info)
+    : RefBaseWorkload<LogicalBinaryQueueDescriptor>(desc, info)
 {}
-
-void RefLogicalBinaryWorkload::PostAllocationConfigure()
-{
-    const TensorInfo& inputInfo0 = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& inputInfo1 = GetTensorInfo(m_Data.m_Inputs[1]);
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
-
-    m_Input0 = MakeDecoder<InType>(inputInfo0);
-    m_Input1 = MakeDecoder<InType>(inputInfo1);
-    m_Output = MakeEncoder<OutType>(outputInfo);
-}
 
 void RefLogicalBinaryWorkload::Execute() const
 {
+    Execute(m_Data.m_Inputs, m_Data.m_Outputs);
+}
+
+void RefLogicalBinaryWorkload::ExecuteAsync(ExecutionData& executionData)
+{
+    WorkingMemDescriptor* workingMemDescriptor = static_cast<WorkingMemDescriptor*>(executionData.m_Data);
+    Execute(workingMemDescriptor->m_Inputs, workingMemDescriptor->m_Outputs);
+}
+
+void RefLogicalBinaryWorkload::Execute(std::vector<ITensorHandle*> inputs, std::vector<ITensorHandle*> outputs) const
+{
     ARMNN_SCOPED_PROFILING_EVENT(Compute::CpuRef, "RefLogicalBinaryWorkload_Execute");
 
-    const TensorInfo& inputInfo0 = GetTensorInfo(m_Data.m_Inputs[0]);
-    const TensorInfo& inputInfo1 = GetTensorInfo(m_Data.m_Inputs[1]);
-    const TensorInfo& outputInfo = GetTensorInfo(m_Data.m_Outputs[0]);
+    const TensorInfo& inputInfo0 = GetTensorInfo(inputs[0]);
+    const TensorInfo& inputInfo1 = GetTensorInfo(inputs[1]);
+    const TensorInfo& outputInfo = GetTensorInfo(outputs[0]);
 
     const TensorShape& inShape0 = inputInfo0.GetShape();
     const TensorShape& inShape1 = inputInfo1.GetShape();
     const TensorShape& outShape = outputInfo.GetShape();
 
-    m_Input0->Reset(m_Data.m_Inputs[0]->Map());
-    m_Input1->Reset(m_Data.m_Inputs[1]->Map());
-    m_Output->Reset(m_Data.m_Outputs[0]->Map());
+    std::unique_ptr<Decoder<InType>>  input0 = MakeDecoder<InType>(inputInfo0, inputs[0]->Map());
+    std::unique_ptr<Decoder<InType>>  input1 = MakeDecoder<InType>(inputInfo1, inputs[1]->Map());
+    std::unique_ptr<Encoder<OutType>> output = MakeEncoder<OutType>(outputInfo, outputs[0]->Map());
 
     using AndFunction = LogicalBinaryFunction<std::logical_and<bool>>;
     using OrFunction  = LogicalBinaryFunction<std::logical_or<bool>>;
@@ -56,12 +56,12 @@ void RefLogicalBinaryWorkload::Execute() const
     {
         case LogicalBinaryOperation::LogicalAnd:
         {
-            AndFunction(inShape0, inShape1, outShape, *m_Input0, *m_Input1, *m_Output);
+            AndFunction(inShape0, inShape1, outShape, *input0, *input1, *output);
             break;
         }
         case LogicalBinaryOperation::LogicalOr:
         {
-            OrFunction(inShape0, inShape1, outShape, *m_Input0, *m_Input1, *m_Output);
+            OrFunction(inShape0, inShape1, outShape, *input0, *input1, *output);
             break;
         }
         default:

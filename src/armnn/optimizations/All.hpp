@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2022 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 #pragma once
@@ -7,9 +7,10 @@
 #include "AddBroadcastReshapeLayer.hpp"
 #include "AddDebug.hpp"
 #include "ConvertConstants.hpp"
-#include "ConvertFp32NetworkToBf16.hpp"
+#include "ConvertConstDequantisationLayersToConstLayers.hpp"
+#include "ConvertConstPermuteLayersToConstLayers.hpp"
 #include "ConvertFp32NetworkToFp16.hpp"
-#include "FoldPadIntoConvolution2d.hpp"
+#include "FoldPadIntoLayer2d.hpp"
 #include "FuseBatchNorm.hpp"
 #include "MovePermuteUp.hpp"
 #include "MoveTransposeUp.hpp"
@@ -18,5 +19,6 @@
 #include "OptimizeInversePermutes.hpp"
 #include "PermuteAsReshape.hpp"
 #include "PermuteAndBatchToSpaceAsDepthToSpace.hpp"
+#include "PermuteDepthwiseConv2dWeights.hpp"
 #include "SquashEqualSiblings.hpp"
 #include "TransposeAsReshape.hpp"

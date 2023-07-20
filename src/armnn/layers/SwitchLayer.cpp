@@ -6,8 +6,8 @@
 
 #include "LayerCloneBase.hpp"
 
-#include <backendsCommon/WorkloadData.hpp>
-#include <backendsCommon/WorkloadFactory.hpp>
+#include <armnn/backends/WorkloadData.hpp>
+#include <armnn/backends/WorkloadFactory.hpp>
 
 namespace armnn
 {
@@ -21,7 +21,7 @@ std::unique_ptr<IWorkload> SwitchLayer::CreateWorkload(const IWorkloadFactory& f
     SwitchQueueDescriptor descriptor;
     SetAdditionalInfo(descriptor);
 
-    return factory.CreateSwitch(descriptor, PrepInfoAndDesc(descriptor));
+    return factory.CreateWorkload(LayerType::Switch, descriptor, PrepInfoAndDesc(descriptor));
 }
 
 SwitchLayer* SwitchLayer::Clone(Graph& graph) const
@@ -52,9 +52,9 @@ void SwitchLayer::ValidateTensorShapesFromInputs()
             GetOutputSlot(1).GetTensorInfo().GetShape(), inferredShapes[1], m_ShapeInferenceMethod, "SwitchLayer", 1);
 }
 
-void SwitchLayer::Accept(ILayerVisitor& visitor) const
+void SwitchLayer::ExecuteStrategy(IStrategy& strategy) const
 {
-    visitor.VisitSwitchLayer(this, GetName());
+    strategy.ExecuteStrategy(this, GetParameters(), {}, GetName());
 }
 
 } // namespace armnn

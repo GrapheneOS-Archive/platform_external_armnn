@@ -1,19 +1,13 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
-#include <boost/test/unit_test.hpp>
 #include "ParserFlatbuffersFixture.hpp"
-#include "../TfLiteParser.hpp"
 
-#include <string>
-#include <iostream>
 
-using armnnTfLiteParser::TfLiteParser;
-
-BOOST_AUTO_TEST_SUITE(TensorflowLiteParser)
-
+TEST_SUITE("TensorflowLiteParser_ResizeBilinear")
+{
 struct ResizeBilinearFixture : public ParserFlatbuffersFixture
 {
     explicit ResizeBilinearFixture(const std::string & inputShape,
@@ -100,7 +94,7 @@ struct SimpleResizeBilinearFixture : ResizeBilinearFixture
     {}
 };
 
-BOOST_FIXTURE_TEST_CASE(ParseResizeBilinear, SimpleResizeBilinearFixture)
+TEST_CASE_FIXTURE(SimpleResizeBilinearFixture, "ParseResizeBilinear")
 {
     RunTest<4, armnn::DataType::Float32>(
                 0,
@@ -115,4 +109,4 @@ BOOST_FIXTURE_TEST_CASE(ParseResizeBilinear, SimpleResizeBilinearFixture)
                 );
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+}

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017, 2023 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -21,8 +21,9 @@ namespace armnn
 struct ClBackendContext::ClContextControlWrapper
 {
     ClContextControlWrapper(arm_compute::CLTuner* tuner,
+                            arm_compute::CLGEMMHeuristicsHandle* heuristicsHandle,
                             bool profilingEnabled)
-        : m_ClContextControl(tuner, profilingEnabled)
+        : m_ClContextControl(tuner, heuristicsHandle, profilingEnabled)
     {}
 
     bool Sync()
@@ -58,81 +59,6 @@ struct ClBackendContext::ClContextControlWrapper
     ClContextControl m_ClContextControl;
 };
 
-std::string LowerString(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c){ return std::tolower(c); });
-
-    return value;
-}
-
-enum class TuningLevel
-{
-    None,
-    Rapid,
-    Normal,
-    Exhaustive
-};
-
-
-TuningLevel ParseTuningLevel(const BackendOptions::Var& value, TuningLevel defaultValue)
-{
-    if (value.IsInt())
-    {
-        int v = value.AsInt();
-        if (v > static_cast<int>(TuningLevel::Exhaustive) ||
-            v < static_cast<int>(TuningLevel::None))
-        {
-            ARMNN_LOG(warning) << "Invalid GpuAcc tuning level ("<< v << ") selected. "
-                                  "Using default(" << static_cast<int>(defaultValue) << ")";
-        } else
-        {
-            return static_cast<TuningLevel>(v);
-        }
-    }
-    return defaultValue;
-}
-
-bool ParseBoolean(const BackendOptions::Var& value, bool defaultValue)
-{
-    if (value.IsBool())
-    {
-        return value.AsBool();
-    }
-    return defaultValue;
-}
-
-std::string ParseFile(const BackendOptions::Var& value, std::string defaultValue)
-{
-    if (value.IsString())
-    {
-        return value.AsString();
-    }
-    return defaultValue;
-}
-
-void ConfigureTuner(arm_compute::CLTuner &tuner, TuningLevel level)
-{
-    tuner.set_tune_new_kernels(true); // Turn on tuning initially.
-
-    switch (level)
-    {
-        case TuningLevel::Rapid:
-            tuner.set_tuner_mode(arm_compute::CLTunerMode::RAPID);
-            break;
-        case TuningLevel::Normal:
-            tuner.set_tuner_mode(arm_compute::CLTunerMode::NORMAL);
-            break;
-        case TuningLevel::Exhaustive:
-            tuner.set_tuner_mode(arm_compute::CLTunerMode::EXHAUSTIVE);
-            break;
-        case TuningLevel::None:
-        default:
-            tuner.set_tune_new_kernels(false); // Turn off tuning. Set to "use" only mode.
-            break;
-    }
-}
-
 ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
     : IBackendContext(options)
     , m_TuningFile()
@@ -140,6 +66,7 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
     bool kernelProfiling = options.m_EnableGpuProfiling;
 
     arm_compute::CLTuner* tuner = nullptr;
+    arm_compute::CLGEMMHeuristicsHandle* mlgoTuner = nullptr;
     bool useLegacyTunerAPI = options.m_GpuAccTunedParameters.get() != nullptr;
     if (useLegacyTunerAPI)
     {
@@ -186,13 +113,17 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
             {
                 if (name == "KernelProfilingEnabled")
                 {
-                    kernelProfiling |= ParseBoolean(value, false);
+                    kernelProfiling |= ParseBooleanBackendOption(value, false);
                 } else if (name == "TuningFile")
                 {
-                    m_TuningFile = ParseFile(value, "");
+                    m_TuningFile = ParseStringBackendOption(value, "");
                 } else if (name == "TuningLevel")
                 {
                     tuningLevel = ParseTuningLevel(value, defaultTuningLevel);
+                }
+                else if (name == "MLGOTuningFilePath")
+                {
+                    m_MLGOTuningFile = ParseStringBackendOption(value, "");
                 }
             });
 
@@ -201,24 +132,47 @@ ClBackendContext::ClBackendContext(const IRuntime::CreationOptions& options)
 
         ConfigureTuner(*(m_Tuner.get()), tuningLevel);
 
-        if (!m_TuningFile.empty() && tuningLevel == TuningLevel::None)
+        if (!m_TuningFile.empty())
         {
             try
             {
+                ARMNN_LOG(info) << "Loading Gpu tuning data from file: " << m_TuningFile;
                 m_Tuner->load_from_file(m_TuningFile.c_str());
             }
             catch (const std::exception& e)
             {
-                ARMNN_LOG(warning) << "Could not load GpuAcc tuner data file.";
+                // Warn if not tuning, otherwise tuning will generate new params
+                if (tuningLevel == TuningLevel::None)
+                {
+                    ARMNN_LOG(warning) << "Could not load GpuAcc tuner data file.";
+                }
             }
         }
+
+        if (!m_MLGOTuningFile.empty())
+        {
+            try
+            {
+                ARMNN_LOG(info) << "Loading Gpu MLGO tuning data from file: " << m_TuningFile;
+                if(m_MLGOTuner.reload_from_file(m_MLGOTuningFile.c_str()))
+                {
+                    mlgoTuner = &m_MLGOTuner;
+                }
+            }
+            catch (const std::exception& e)
+            {
+                ARMNN_LOG(warning) << "Could not load GpuAcc MLGO tuner data file.";
+            }
+        }
+
         tuner = m_Tuner.get();
     }
 
     m_ClContextControlWrapper = std::make_unique<ClContextControlWrapper>(
             tuner,
+            mlgoTuner,
             kernelProfiling
-        );
+    );
 }
 
 bool ClBackendContext::BeforeLoadNetwork(NetworkId)
@@ -255,6 +209,11 @@ bool ClBackendContext::AfterUnloadNetwork(NetworkId networkId)
     }
 
     return true;
+}
+
+bool ClBackendContext::AfterEnqueueWorkload(NetworkId)
+{
+    return m_ClContextControlWrapper->Sync();
 }
 
 ClBackendContext::~ClBackendContext()

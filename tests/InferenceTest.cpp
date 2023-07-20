@@ -5,7 +5,7 @@
 #include "InferenceTest.hpp"
 
 #include <armnn/utility/Assert.hpp>
-#include <Filesystem.hpp>
+#include <armnnUtils/Filesystem.hpp>
 
 #include "../src/armnn/Profiling.hpp"
 #include <cxxopts/cxxopts.hpp>
@@ -23,7 +23,7 @@ namespace armnn
 {
 namespace test
 {
-/// Parse the command line of an ArmNN (or referencetests) inference test program.
+/// Parse the command line of an ArmNN inference test program.
 /// \return false if any error occurred during options processing, otherwise true
 bool ParseCommandLine(int argc, char** argv, IInferenceTestCaseProvider& testCaseProvider,
     InferenceTestOptions& outParams)
@@ -68,9 +68,6 @@ bool ParseCommandLine(int argc, char** argv, IInferenceTestCaseProvider& testCas
     }
     catch (const std::exception& e)
     {
-        // Coverity points out that default_value(...) can throw a bad_lexical_cast,
-        // and that desc.add_options() can throw boost::io::too_few_args.
-        // They really won't in any of these cases.
         ARMNN_ASSERT_MSG(false, "Caught unexpected exception");
         std::cerr << "Fatal internal error: " << e.what() << std::endl;
         return false;
@@ -142,7 +139,7 @@ bool InferenceTest(const InferenceTestOptions& params,
     }
 
     // Create a profiler and register it for the current thread.
-    std::unique_ptr<Profiler> profiler = std::make_unique<Profiler>();
+    std::unique_ptr<IProfiler> profiler = std::make_unique<IProfiler>();
     ProfilerManager::GetInstance().RegisterProfiler(profiler.get());
 
     // Enable profiling if requested.

@@ -1,5 +1,5 @@
 //
-// Copyright © 2017 Arm Ltd. All rights reserved.
+// Copyright © 2017 Arm Ltd and Contributors. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
 
@@ -23,7 +23,7 @@ arm_compute::Status NeonAbsWorkloadValidate(const TensorInfo& input, const Tenso
 }
 
 NeonAbsWorkload::NeonAbsWorkload(const AbsQueueDescriptor& descriptor, const WorkloadInfo& info)
-    : BaseWorkload<AbsQueueDescriptor>(descriptor, info)
+    : NeonBaseWorkload<AbsQueueDescriptor>(descriptor, info)
 {
     m_Data.ValidateInputsOutputs("NeonAbsWorkload", 1, 1);
 
@@ -35,7 +35,7 @@ NeonAbsWorkload::NeonAbsWorkload(const AbsQueueDescriptor& descriptor, const Wor
 
 void NeonAbsWorkload::Execute() const
 {
-    ARMNN_SCOPED_PROFILING_EVENT_NEON("NeonAbsWorkload_Execute");
+    ARMNN_SCOPED_PROFILING_EVENT_NEON_GUID("NeonAbsWorkload_Execute", this->GetGuid());
     m_AbsLayer.run();
 }
 

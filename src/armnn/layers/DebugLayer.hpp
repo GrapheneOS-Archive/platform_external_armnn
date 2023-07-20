@@ -28,15 +28,19 @@ public:
     /// @param [in] shapeInferenceMethod Indicates if output shape shall be overwritten or just validated.
     void ValidateTensorShapesFromInputs() override;
 
-    void Accept(ILayerVisitor& visitor) const override;
+    void ExecuteStrategy(IStrategy& strategy) const override;
 
 protected:
     /// Constructor to create a DebugLayer.
     /// @param [in] name Optional name for the layer.
     DebugLayer(const char* name);
+    DebugLayer(const char* name, bool toFile);
 
     /// Default destructor
     ~DebugLayer() = default;
+
+private:
+    bool m_ToFile;
 };
 
 } // namespace armnn
