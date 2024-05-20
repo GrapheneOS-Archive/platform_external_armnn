@@ -1,2 +1,2 @@
-requests==2.23.0
+requests==2.32.0
 pdoc3==0.6.3
